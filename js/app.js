@@ -22,7 +22,9 @@ function useRoute() {
 
 function TabBar({ current }) {
   const tab = (href, key, label, icon) => html`<a href=${href} aria-current=${current === key ? 'page' : undefined}><${Icon} name=${icon} /><span>${label}</span></a>`;
-  return html`<nav class="tabbar" aria-label="Menu">
+  const i = ['wedstrijd', 'seizoen', 'team'].indexOf(current);
+  return html`<nav class="tabbar" aria-label="Menu" style=${'--i:' + i}>
+    <span class="tab-ind" aria-hidden="true"></span>
     ${tab('#/', 'wedstrijd', 'Wedstrijd', 'field')}
     ${tab('#/seizoen', 'seizoen', 'Seizoen', 'chart')}
     ${tab('#/team', 'team', 'Team', 'team')}

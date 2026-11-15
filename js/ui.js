@@ -125,8 +125,10 @@ export function Setting({ title, sub, children }) {
   </div>`;
 }
 
-export function Seg({ value, options, onChange, label }) {
-  return html`<div class="seg" role="group" aria-label=${label}>
+export function Seg({ value, options, onChange, label, small }) {
+  const i = options.findIndex(([v]) => v === value);
+  return html`<div class=${'seg' + (small || options.length > 3 ? ' small' : '')} role="group" aria-label=${label} style=${`--n:${options.length};--i:${Math.max(0, i)}`}>
+    ${i !== -1 && html`<span class="seg-ind" aria-hidden="true"></span>`}
     ${options.map(([v, l]) => html`<button type="button" aria-pressed=${value === v ? 'true' : 'false'} onClick=${() => onChange(v)}>${l}</button>`)}
   </div>`;
 }
@@ -140,12 +142,14 @@ export function Stepper({ value, min = 0, max = 99, step = 1, onChange, suffix =
 }
 
 export function Sheet({ onClose, children, label }) {
+  const [closing, setClosing] = useState(false);
+  const close = () => { if (closing) return; setClosing(true); setTimeout(onClose, 220); };
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, []);
-  return html`<div class="sheet-backdrop" onClick=${(e) => { if (e.target === e.currentTarget) onClose(); }}>
+  return html`<div class=${'sheet-backdrop' + (closing ? ' closing' : '')} onClick=${(e) => { if (e.target === e.currentTarget) close(); }}>
     <div class="sheet" role="dialog" aria-modal="true" aria-label=${label}>
       <span class="handle"></span>
       ${children}
@@ -194,7 +198,7 @@ export function Field({ slots, lines, keeperId, nick, onTap, neon = [], dashed =
     const name = id ? nick(id) : '—';
     const isNeon = id && neon.indexOf(id) !== -1;
     const pill = html`<span class=${'pill ' + pillKind(id)} style=${pillStyle}>${name}</span>`;
-    return html`<button type="button" class="spot" key=${key} style=${`left:${left};top:${top}`} disabled=${!onTap || !id} onClick=${() => onTap && id && onTap(id)} aria-label=${name}>
+    return html`<button type="button" class="spot" key=${id || key} data-pid=${id || ''} style=${`left:${left};top:${top}`} disabled=${!onTap || !id} onClick=${() => onTap && id && onTap(id)} aria-label=${name}>
       ${isNeon ? html`<${Neon}>${pill}</${Neon}>` : pill}
       ${sub && id && sub(id) ? html`<span class="time">${sub(id)}</span>` : null}
       ${below && id ? below(id) : null}
@@ -204,7 +208,7 @@ export function Field({ slots, lines, keeperId, nick, onTap, neon = [], dashed =
     <span class="lines"></span>
     <span class="arc top"></span>
     <span class="arc bottom"></span>
-    ${rows.map((l, r) => {
+    ${rows.flatMap((l, r) => {
       const n = lines[l];
       return Array.from({ length: n }, (_, i) => spot(slots[l + i], `${((i + 1) / (n + 1)) * 100}%`, tops[r], l + i));
     })}

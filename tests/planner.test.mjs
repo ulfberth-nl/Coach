@@ -61,3 +61,18 @@ assert.ok(rNoBreak.fair.spread <= 300);
 
 console.log('\nlijnstatus', JSON.stringify(lineStatus(r6.steps[0].pos || {}, players)));
 console.log('\nAlle tests geslaagd');
+
+// dominante rol: vast = altijd op die linie, flexibel = voorrang
+{
+  const pl = JSON.parse(JSON.stringify(players));
+  pl['2'].main = 'V'; pl['2'].flex = false;   // sterkste speler vast voorin
+  pl['1'].main = 'A'; pl['1'].flex = true;
+  const ctx = { players: pl, lines: { V: 2, M: 1, A: 2 }, periodLen: 1500, periods: 2, rules, stand: 'balans' };
+  const start = initialState(['1', '2', '3', '4', '5', '7', '8', '9'], ctx);
+  const r = planRest(start, ctx, 0);
+  const all = [start.pos].concat(r.steps.map((s) => s.pos));
+  for (const pos of all) if ('2' in pos) assert.equal(pos['2'], 'V', 'vaste rol wordt altijd gevolgd');
+  const onA = all.filter((pos) => '1' in pos).map((pos) => pos['1']);
+  console.log('dominant: speler 2 altijd voor; speler 1 achter in', onA.filter((l) => l === 'A').length, 'van', onA.length, 'momenten; ok =', r.ok);
+}
+console.log('Dominante-roltest geslaagd');

@@ -33,7 +33,15 @@ function lineAverages(pos, players) {
 }
 
 const fieldPrefs = (p) => p.fp || (p.prefs || []).filter((x) => x !== 'K');
-const misses = (p, line) => { const fp = fieldPrefs(p); return fp.length && fp.indexOf(line) === -1 ? 1 : 0; };
+// Strafpunten voor een speler op een linie: dominante rol gaat voor (vast = harde regel), daarna voorkeursposities.
+export const FIXED_PENALTY = 250;
+function linePenalty(p, line) {
+  let pen = 0;
+  if (p.main && p.main !== 'K' && p.main !== line) pen += p.flex === false ? FIXED_PENALTY : 8;
+  const fp = fieldPrefs(p);
+  if (fp.length && fp.indexOf(line) === -1) pen += 4;
+  return pen;
+}
 
 function aggregate(pos, players) {
   const ag = { sum: { A: 0, M: 0, V: 0 }, cnt: { A: 0, M: 0, V: 0 }, total: 0, n: 0, miss: 0 };
@@ -41,7 +49,7 @@ function aggregate(pos, players) {
   return ag;
 }
 function addTo(ag, p, line, sign) {
-  ag.sum[line] += sign * p.kracht; ag.cnt[line] += sign; ag.total += sign * p.kracht; ag.n += sign; ag.miss += sign * misses(p, line);
+  ag.sum[line] += sign * p.kracht; ag.cnt[line] += sign; ag.total += sign * p.kracht; ag.n += sign; ag.miss += sign * linePenalty(p, line);
 }
 function scoreAgg(ag, tg) {
   const overall = ag.n ? ag.total / ag.n : 0;
@@ -52,7 +60,7 @@ function scoreAgg(ag, tg) {
     const diff = ag.sum[line] / ag.cnt[line] - (overall + tg[line]);
     score += line === 'M' ? (diff < 0 ? -diff * 1.5 : diff * 0.25) : Math.abs(diff);
   }
-  return score + ag.miss * 4;
+  return score + ag.miss;
 }
 
 // Hoe goed is een opstelling? Lager is beter. Eerst kracht (balans per linie), dan voorkeurspositie.
@@ -65,8 +73,11 @@ export function assignLines(ids, lines, players, stand = 'balans') {
   const free = { ...lines };
   const pos = {};
   const sorted = ids.slice().sort((a, b) => players[b].kracht - players[a].kracht);
+  // eerst wie een vaste rol heeft, dan de sterksten
+  sorted.sort((a, b) => (players[b].main && players[b].flex === false ? 1 : 0) - (players[a].main && players[a].flex === false ? 1 : 0));
   for (const id of sorted) {
-    const prefs = (players[id].prefs || []).filter((p) => p !== 'K');
+    const p = players[id];
+    const prefs = (p.main && p.main !== 'K' ? [p.main] : []).concat(fieldPrefs(p));
     const choice = prefs.find((l) => free[l] > 0) || ['M', 'A', 'V'].find((l) => free[l] > 0);
     if (!choice) break;
     free[choice] -= 1;
@@ -145,14 +156,17 @@ export function chooseSwap(state, ctx, t, interval, inMode = 'played', outMode =
   let cands = fieldIds.filter((id) => t - state.since[id] >= minStint);
   if (!cands.length) cands = fieldIds;
   const kDiff = (id) => Math.abs(players[id].kracht - players[kin].kracht);
+  const main = players[kin].main && players[kin].main !== 'K' ? players[kin].main : null;
+  const lineOk = (id) => (main && state.pos[id] !== main ? 1 : 0);
   const fair = rules.priority !== 'bezetting';
   cands.sort((a, b) => {
     if (fair) {
       if (rules.evenOften && state.turns[a] !== state.turns[b]) return state.turns[a] - state.turns[b];
       const pd = outMode === 'since' ? state.since[a] - state.since[b] : state.played[b] - state.played[a];
       if (Math.abs(pd) > 30) return pd;
-      return kDiff(a) - kDiff(b);
+      return (lineOk(a) - lineOk(b)) || (kDiff(a) - kDiff(b));
     }
+    if (lineOk(a) !== lineOk(b)) return lineOk(a) - lineOk(b);
     const kd = kDiff(a) - kDiff(b);
     if (Math.abs(kd) > 5) return kd;
     return state.played[b] - state.played[a];
@@ -310,7 +324,7 @@ export function planRest(start, ctx, T) {
   const maxBench = ctx.rules.maxBenchOn ? (ctx.rules.maxBench || 10) * 60 : 0;
   // genormaliseerde spelers (voorkeurslinies vooraf berekend) voor snelheid
   const fast = {};
-  for (const id in ctx.players) fast[id] = { kracht: ctx.players[id].kracht, fp: fieldPrefs(ctx.players[id]) };
+  for (const id in ctx.players) { const p = ctx.players[id]; fast[id] = { kracht: p.kracht, fp: fieldPrefs(p), main: p.main || null, flex: p.flex !== false }; }
   ctx = { ...ctx, players: fast };
   let best = null;
   const multi = Math.min(ctx.periods, ctx.periods - Math.floor(T / ctx.periodLen)) > 1;
