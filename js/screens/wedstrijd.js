@@ -24,7 +24,7 @@ export function newConcept(d) {
 
 // gegevens uit het programma overnemen
 export function applySchedule(m, e) {
-  Object.assign(m, { scheduleId: e.id, opponent: e.opponent || '', date: e.date, time: e.time || '', meet: e.meet || '', field: e.field || '', home: e.home !== false });
+  Object.assign(m, { scheduleId: e.id, opponent: e.opponent || '', date: e.date, time: e.time || '', meet: e.meet || '', field: e.field || '', home: e.home !== false, season: e.season || null });
 }
 
 export function rebuildConcept(d, changes = {}) {
@@ -39,7 +39,7 @@ export function rebuildConcept(d, changes = {}) {
   const n = M.createMatch(t, { present, keeperId, priority: changes.priority || m.priority, opponent: m.opponent, date: m.date });
   n.id = m.id;
   n.setup = m.setup || { present: false, keeper: false, opponent: false };
-  for (const k of ['scheduleId', 'time', 'meet', 'field', 'home']) if (m[k] !== undefined) n[k] = m[k];
+  for (const k of ['scheduleId', 'time', 'meet', 'field', 'home', 'season']) if (m[k] !== undefined) n[k] = m[k];
   d.matches[i] = n;
 }
 

@@ -4,6 +4,13 @@ import * as M from '../match.js';
 import { Icon, Sheet, Seg, Confirm, toast, POS_COLORS } from '../ui.js';
 
 export const todayISO = () => new Date().toLocaleDateString('sv-SE');
+// seizoen loopt van augustus t/m juli, bijv. '2026-2027'
+export function seasonOf(iso) {
+  const [y, m] = (iso || todayISO()).split('-').map(Number);
+  return m >= 8 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+}
+const shiftSeason = (s, n) => { const y = Number(s.split('-')[0]) + n; return `${y}-${y + 1}`; };
+const seasonLabel = (s) => 'Seizoen ' + s.replace('-', '/').replace(/\/20(\d\d)$/, '/$1');
 const TASKS = [
   { key: 'fluiten', label: 'Fluiten', emoji: '🟨', max: 2 },
   { key: 'fruit', label: 'Fruit', emoji: '🍎', max: 1 },
@@ -50,7 +57,14 @@ export async function copyText(text) {
 export function Seizoen({ state }) {
   const team = activeTeam(state);
   const [edit, setEdit] = useState(null);
-  const finished = state.matches.filter((m) => m.teamId === team.id && m.finished);
+  const schedAll = team.schedule || [];
+  const seasonOfMatch = (m) => m.season || (schedAll.find((e) => e.id === m.scheduleId) || {}).season || seasonOf(m.date);
+  const seasonOfEntry = (e) => e.season || seasonOf(e.date);
+  const allFinished = state.matches.filter((m) => m.teamId === team.id && m.finished);
+  const current = seasonOf(todayISO());
+  const seasons = Array.from(new Set([current].concat(schedAll.map(seasonOfEntry), allFinished.map(seasonOfMatch)))).sort().reverse();
+  const [season, setSeason] = useState(current);
+  const finished = allFinished.filter((m) => seasonOfMatch(m) === season);
   const data = useMemo(() => {
     const per = {};
     let w = 0, g = 0, l = 0, gf = 0, ga = 0;
@@ -71,17 +85,18 @@ export function Seizoen({ state }) {
       }
     }
     return { per, res, w, g, l, gf, ga };
-  }, [state.matches, team]);
+  }, [state.matches, team, season]);
 
   // programma + gespeelde wedstrijden in één lijst
   const today = todayISO();
-  const schedule = (team.schedule || []).slice();
+  const schedule = schedAll.filter((e) => seasonOfEntry(e) === season);
   const linked = new Set(finished.map((m) => m.scheduleId).filter(Boolean));
   const rows = schedule.map((e) => ({ kind: 'plan', e, m: finished.find((x) => x.scheduleId === e.id) || null, date: e.date, time: e.time || '' }))
     .concat(finished.filter((m) => !m.scheduleId || !schedule.some((e) => e.id === m.scheduleId)).map((m) => ({ kind: 'played', m, date: m.date, time: m.time || '' })));
-  const upcoming = rows.filter((r) => !r.m && r.date >= today).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-  const past = rows.filter((r) => r.m || r.date < today).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
-  void linked;
+  // nieuwste bovenaan
+  const list = rows.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+  void linked; void today;
+  const newEntry = () => setEdit({ id: null, opponent: '', home: true, date: todayISO(), time: '', meet: '', field: '', season, tasks: { fluiten: [], fruit: [], bar: [] } });
 
   const players = team.players.filter((p) => data.per[p.id] || p.active !== false);
   const avgs = players.map((p) => (data.per[p.id] && data.per[p.id].matches ? data.per[p.id].sec / data.per[p.id].matches : 0));
@@ -106,7 +121,9 @@ export function Seizoen({ state }) {
 
   return html`<main class="screen with-tabs">
     <div class="topbar"><span class="badge">${team.name}</span>
-      <button type="button" class="btn soft" style="min-height:40px" onClick=${() => setEdit({ id: null, opponent: '', home: true, date: today, time: '', meet: '', field: '', tasks: { fluiten: [], fruit: [], bar: [] } })}><${Icon} name="plus" size=${18} /> Wedstrijd</button>
+      <select class="input" style="width:auto;height:40px;font-size:15px" aria-label="Seizoen kiezen" value=${season} onChange=${(e) => setSeason(e.target.value)}>
+        ${seasons.map((s) => html`<option value=${s}>${seasonLabel(s)}${s === current ? '' : ' (archief)'}</option>`)}
+      </select>
     </div>
     <h1 class="h1">Seizoen</h1>
 
@@ -117,11 +134,9 @@ export function Seizoen({ state }) {
     </section>
 
     <section class="card" style="gap:4px">
-      <span class="h2">Programma</span>
-      ${!upcoming.length && html`<span class="sub">Nog geen komende wedstrijden. Voeg ze toe met + Wedstrijd.</span>`}
-      ${upcoming.map(row)}
-      ${past.length > 0 && html`<span class="label" style="margin-top:8px">Gespeeld</span>`}
-      ${past.map(row)}
+      <div class="between"><span class="h2">Wedstrijden</span><span class="small">${seasonLabel(season)}</span></div>
+      ${list.map(row)}
+      <button type="button" class="addtile" onClick=${newEntry}><${Icon} name="plus" size=${20} /> Wedstrijd toevoegen</button>
     </section>
 
     <section class="card" style="gap:2px">
@@ -186,7 +201,7 @@ function ScheduleSheet({ team, entry, onClose }) {
     setE({ ...e, tasks });
   };
   const save = (close = true) => {
-    const clean = { ...e, opponent: (e.opponent || '').trim(), field: (e.field || '').trim() };
+    const clean = { ...e, opponent: (e.opponent || '').trim(), field: (e.field || '').trim(), season: e.season || seasonOf(e.date) };
     delete clean.showText;
     update((d) => {
       const t = activeTeam(d);
@@ -211,12 +226,16 @@ function ScheduleSheet({ team, entry, onClose }) {
     <span class="h2" style="font-size:22px">${e.id ? 'Wedstrijd' : 'Nieuwe wedstrijd'}</span>
     <div class="col"><label class="label" for="s-opp">Tegenstander</label><input id="s-opp" class="input" value=${e.opponent} placeholder="Bijv. Hurley JO9-3" onInput=${(ev) => set('opponent', ev.target.value)} /></div>
     <${Seg} label="Thuis of uit" value=${e.home === false ? 'uit' : 'thuis'} onChange=${(v) => set('home', v === 'thuis')} options=${[['thuis', 'Thuis'], ['uit', 'Uit']]} />
+    <div class="col"><label class="label" for="s-season">Seizoen</label>
+      <select id="s-season" class="input" value=${e.season || seasonOf(e.date)} onChange=${(ev) => set('season', ev.target.value)}>
+        ${[-1, 0, 1].map((n) => shiftSeason(seasonOf(todayISO()), n)).concat(e.season ? [e.season] : []).filter((v, i, a) => a.indexOf(v) === i).sort().map((s) => html`<option value=${s}>${seasonLabel(s)}</option>`)}
+      </select></div>
     <div class="row">
-      <div class="col grow"><label class="label" for="s-date">Datum</label><input id="s-date" type="date" class="input" value=${e.date} onInput=${(ev) => set('date', ev.target.value)} /></div>
-      <div class="col" style="width:104px"><label class="label" for="s-time">Aanvang</label><input id="s-time" type="time" class="input" value=${e.time} onInput=${(ev) => set('time', ev.target.value)} /></div>
+      <div class="col grow"><label class="label" for="s-date">Datum</label><input id="s-date" type="date" class="input" value=${e.date} onInput=${(ev) => { const v = ev.target.value; setE((x) => ({ ...x, date: v, season: !x.season || x.season === seasonOf(x.date) ? seasonOf(v) : x.season })); }} /></div>
+      <div class="col" style="width:118px"><label class="label" for="s-time">Aanvang</label><input id="s-time" type="time" class="input" value=${e.time} onInput=${(ev) => set('time', ev.target.value)} /></div>
     </div>
     <div class="row">
-      <div class="col" style="width:104px"><label class="label" for="s-meet">Verzamelen</label><input id="s-meet" type="time" class="input" value=${e.meet} onInput=${(ev) => set('meet', ev.target.value)} /></div>
+      <div class="col" style="width:118px"><label class="label" for="s-meet">Verzamelen</label><input id="s-meet" type="time" class="input" value=${e.meet} onInput=${(ev) => set('meet', ev.target.value)} /></div>
       <div class="col grow"><label class="label" for="s-field">Veld / locatie</label><input id="s-field" class="input" value=${e.field} placeholder="Bijv. veld 3" onInput=${(ev) => set('field', ev.target.value)} /></div>
     </div>
 

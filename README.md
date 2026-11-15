@@ -31,6 +31,7 @@ Klaarzetten en spelen gebeuren op hetzelfde scherm, dat altijd in één beeld pa
 - **+ Wedstrijd:** tegenstander, thuis/uit, datum, aanvang, verzameltijd, veld en taken voor ouders (fluiten 0–2, fruit 0–1, bar/wedstrijdtafel 0–2). *Eerlijk verdelen* kiest wie het minst aan de beurt was.
 - **Bericht kopiëren:** een overzicht met emoji's om in de teamapp te plakken.
 - Het Wedstrijd-scherm zet automatisch de eerstvolgende wedstrijd uit het programma klaar; via het affiche kies je een andere.
+- **Seizoenen:** elke wedstrijd hoort bij een seizoen (aug–jul). Bovenin Seizoen kies je een eerder seizoen als archief, met uitslagen, minuten, posities en doelpunten.
 
 ## Tijdens de wedstrijd
 
@@ -63,6 +64,9 @@ De pincode houdt meekijkers buiten, maar is geen echte beveiliging: de gegevens 
 
 ## Gegevens en back-up
 
+De app maakt geen verbinding met andere diensten: geen koppelingen, geen analytics, geen lettertypes of scripts van buitenaf. Alleen de bestanden van de app zelf worden (één keer) geladen en daarna bewaard voor gebruik zonder bereik.
+
+
 Alles staat in de browser van de telefoon. Maak af en toe een back-up via **Team → Back-up maken** (een JSON-bestand) en zet hem terug via **Back-up terugzetten**. In stap 2 komt opslag in een eigen database, zodat twee coaches tegelijk kunnen werken.
 
 ## Voor ontwikkelaars
@@ -88,5 +92,4 @@ Bij een nieuwe versie: verhoog `VERSION` in `sw.js`, dan halen telefoons de nieu
 
 1. ~~Wisselberekening + wedstrijdscherm op één telefoon~~ (deze versie)
 2. Samen werken met de tweede coach (Firebase, gratis Spark-plan, inloggen met Google)
-3. KNHB-programma automatisch ophalen
-4. Seizoensoverzichten met grafieken per speler
+3. Seizoensoverzichten met grafieken per speler

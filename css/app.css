@@ -454,3 +454,19 @@ body:has(.tabbar) .toast { bottom: calc(94px + var(--safe-b)); }
 .pchip.k.on { background: #E3F3E7; color: #14652A; }
 .taskblock { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 14px; background: var(--bg); }
 .kpis b span { font-size: inherit; font-weight: inherit; color: inherit; }
+
+/* speelkracht: 9 vaste punten, 'dragende speler' licht groen op */
+.ticks { display: flex; justify-content: space-between; padding: 0 13px; margin-top: -2px; }
+.ticks i { width: 6px; height: 6px; border-radius: 999px; background: var(--line-2); transition: background .2s; }
+.ticks i.on { background: var(--blue-2); }
+.keylabel { transition: color .3s ease, text-shadow .3s ease; }
+.keylabel.on { color: #1f8a3a; font-weight: 900; text-shadow: 0 0 10px rgba(31,138,58,.45); animation: pop .35s var(--spring); }
+.keybadge { background: #E3F3E7; color: #14652A; padding: 2px 8px; }
+
+/* datum- en tijdvelden passen altijd in het scherm */
+.row > .col, .row > .grow { min-width: 0; }
+input[type="date"].input, input[type="time"].input { -webkit-appearance: none; appearance: none; min-width: 0; width: 100%; max-width: 100%; display: block; text-align: left; padding: 0 10px; }
+input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+
+.addtile { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 56px; margin-top: 6px; border-radius: 16px; border: 2px dashed var(--line-2); background: var(--bg); color: var(--blue); font-size: 15px; font-weight: 800; transition: transform .18s var(--ease-out), border-color .25s; }
+.addtile:active { transform: scale(.97); border-color: var(--blue-2); }

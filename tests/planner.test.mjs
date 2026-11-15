@@ -94,3 +94,19 @@ for (const [name, ids, lines, k] of [['6-tal 8 kids', [1, 2, 3, 4, 5, 7, 8, 9], 
   assert.ok(r.why.indexOf('turns') !== -1);
 }
 console.log('Vast-aantal-test geslaagd');
+
+// stand: verdedigen = dragende speler achterin, aanvallen = dragende speler voorin
+{
+  const { standPenalty, KEY_KRACHT } = await import('../js/planner.js');
+  for (const [stand, line] of [['verdedigen', 'A'], ['aanvallen', 'V']]) {
+    const ctx = { players, lines: { V: 2, M: 1, A: 2 }, periodLen: 1500, periods: 2, rules, stand };
+    const start = initialState(['1', '2', '3', '4', '5', '7', '8', '9'], ctx);
+    const r = planRest(start, ctx, 0);
+    const all = [start.pos].concat(r.steps.map((s) => s.pos));
+    const bad = all.filter((pos) => standPenalty(pos, players, stand) > 0).length;
+    const keyIn = all.filter((pos) => Object.keys(pos).some((id) => pos[id] === line && players[id].kracht >= KEY_KRACHT)).length;
+    console.log(`${stand}: ${keyIn} van ${all.length} momenten een dragende speler ${line === 'A' ? 'achterin' : 'voorin'} (overtredingen: ${bad})`);
+    assert.equal(bad, 0);
+  }
+}
+console.log('Standtest geslaagd');

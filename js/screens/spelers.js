@@ -1,6 +1,7 @@
 import { html, useState } from '../../vendor/preact-htm.js';
 import { update, activeTeam, hashPin, uid } from '../store.js';
 import { Icon, Sheet, Confirm, Switch, Seg, toast, POS_COLORS, POS_NAMES, KRACHT_BG } from '../ui.js';
+import { KEY_KRACHT } from '../planner.js';
 
 const STRENGTHS = ['Snel', 'Overzicht', 'Techniek', 'Inzet', 'Verdedigen', 'Passen', 'Scoren', 'Samenspel', 'Leiderschap', 'Vrolijk'];
 let unlockedUntil = 0;
@@ -83,6 +84,7 @@ export function Spelers({ state }) {
       <span class="row" style="gap:8px">
         <span class="minibar" style=${`background:linear-gradient(90deg, transparent ${p.kracht}%, var(--line) ${p.kracht}%), ${KRACHT_BG}`}></span>
         <span class="row" style="gap:4px;flex-wrap:wrap">
+          ${p.kracht >= KEY_KRACHT && html`<span class="badge keybadge">dragend</span>`}
           ${p.main && html`<span class="badge" style=${`background:${POS_COLORS[p.main]};color:#fff;padding:2px 8px;box-shadow:0 0 0 2px #fff,0 0 0 3px ${POS_COLORS[p.main]}`}>${POS_NAMES[p.main]}${p.flex === false ? ' · vast' : ''}</span>`}
           ${(p.prefs || []).filter((k) => k !== p.main).map((k) => html`<span class="badge" style=${`background:${POS_COLORS[k]};color:#fff;padding:2px 8px;opacity:.75`}>${POS_NAMES[k]}</span>`)}
         </span>
@@ -147,8 +149,9 @@ function PlayerEditor({ player, onClose, onSave, onDelete }) {
     </div>
     <div class="col">
       <span class="label">Speelkracht</span>
-      <input type="range" class="kracht" min="0" max="100" value=${p.kracht} style=${'background:' + KRACHT_BG} aria-label="Speelkracht" onInput=${(e) => set('kracht', Number(e.target.value))} />
-      <div class="between small"><span>groeit nog</span><span>draagt het spel</span></div>
+      <input type="range" class="kracht" min="0" max="8" step="1" value=${Math.round(p.kracht / 12.5)} style=${'background:' + KRACHT_BG} aria-label="Speelkracht" onInput=${(e) => set('kracht', Number(e.target.value) * 12.5)} />
+      <div class="ticks" aria-hidden="true">${Array.from({ length: 9 }, (_, i) => html`<i class=${i * 12.5 <= p.kracht ? 'on' : ''}></i>`)}</div>
+      <div class="between small"><span>groeit nog</span><span class=${'keylabel' + (p.kracht >= KEY_KRACHT ? ' on' : '')}>${p.kracht >= KEY_KRACHT ? 'dragende speler ✓' : 'draagt het spel'}</span></div>
     </div>
     <div class="col">
       <span class="label">Dominante rol</span>
