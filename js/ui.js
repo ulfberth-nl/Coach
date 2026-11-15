@@ -190,6 +190,7 @@ export function Icon({ name, size = 22 }) {
     chev: 'M9 6l6 6-6 6',
     more: 'M5 12h.01M12 12h.01M19 12h.01',
     copy: 'M9 9h11v12H9zM5 15V3h11',
+    calendar: 'M4 6h16v15H4zM4 10h16M8 3v5M16 3v5',
     clock: 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2'
   };
   const filled = name === 'play' || name === 'pause';

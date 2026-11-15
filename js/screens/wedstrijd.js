@@ -14,12 +14,34 @@ export function newConcept(d) {
   const present = t.players.filter((p) => p.active !== false).map((p) => p.id);
   const keeperId = t.keeper ? suggestKeeper(t, present, keeperCounts(d, t)) : null;
   d.matches = d.matches.filter((x) => x.started || x.id !== d.currentMatchId);
-  const m = M.createMatch(t, { present, keeperId, priority: t.rules.priority });
-  m.setup = { present: false, keeper: !t.keeper, opponent: false };
   const e = nextScheduled(t, d.matches);
+  const plan = scheduleSelection(t, e, present, keeperId);
+  const m = M.createMatch(t, { present: plan.present, keeperId: plan.keeperId, priority: t.rules.priority });
+  m.setup = { present: false, keeper: !t.keeper || !!(e && e.keeperId), opponent: false };
   if (e) { applySchedule(m, e); m.setup.opponent = true; }
   d.matches.push(m);
   d.currentMatchId = m.id;
+}
+
+// afmeldingen en geplande keeper uit het programma
+function scheduleSelection(t, e, present, keeperId) {
+  if (!e) return { present, keeperId };
+  const p = present.filter((id) => (e.absent || []).indexOf(id) === -1);
+  const k = t.keeper && e.keeperId && p.indexOf(e.keeperId) !== -1 ? e.keeperId : (p.indexOf(keeperId) !== -1 ? keeperId : null);
+  return { present: p, keeperId: k };
+}
+
+// programma-wedstrijd kiezen voor de klaargezette wedstrijd (incl. afmeldingen en keeper)
+export function useScheduleInConcept(d, e) {
+  const m = d.matches.find((x) => x.id === d.currentMatchId);
+  if (!m || m.started) return;
+  const t = d.teams.find((x) => x.id === m.teamId);
+  const active = t.players.filter((p) => p.active !== false).map((p) => p.id);
+  const sel = scheduleSelection(t, e, active, m.keeperId);
+  rebuildConcept(d, { present: sel.present, keeperId: sel.keeperId || m.keeperId });
+  const n = d.matches.find((x) => x.id === d.currentMatchId);
+  applySchedule(n, e);
+  n.setup = { ...(n.setup || {}), opponent: true, keeper: n.setup && n.setup.keeper ? true : !!e.keeperId };
 }
 
 // gegevens uit het programma overnemen
@@ -60,7 +82,7 @@ export function Wedstrijd({ state }) {
   // later toegevoegde programma-wedstrijd automatisch voorstellen als er nog niets is ingevuld
   const auto = !stale && !match.started && !match.scheduleId && !(match.setup && match.setup.opponent) ? nextScheduled(team, state.matches) : null;
   useEffect(() => {
-    if (auto) update((d) => { const m = d.matches.find((x) => x.id === d.currentMatchId); if (m && !m.started) { applySchedule(m, auto); m.setup = { ...(m.setup || {}), opponent: true }; } });
+    if (auto) update((d) => useScheduleInConcept(d, auto));
   }, [auto && auto.id]);
   if (stale) return html`<main class="matchscreen"></main>`;
   const mteam = state.teams.find((t) => t.id === match.teamId) || team;
@@ -182,11 +204,7 @@ function OpponentSheet({ match, upcoming = [], onClose }) {
     onClose();
   };
   const choose = (e) => {
-    update((d) => {
-      const m = d.matches.find((x) => x.id === match.id);
-      applySchedule(m, e);
-      if (m.setup) m.setup = { ...m.setup, opponent: true };
-    });
+    update((d) => useScheduleInConcept(d, e));
     onClose();
   };
   return html`<${Sheet} onClose=${save} label="Wedstrijdgegevens">
