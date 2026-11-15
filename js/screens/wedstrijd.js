@@ -4,6 +4,7 @@ import { update, activeTeam, currentMatch } from '../store.js';
 import * as M from '../match.js';
 import { PlanView } from '../planview.js';
 import { keeperCounts, suggestKeeper, WHY_TEXT } from './home.js';
+import { nextScheduled, todayISO } from './seizoen.js';
 import { mutate, undoAction, SwapSheet, BenchSheet, GoalSheet, BreakSheet, JoinSheet, KeeperSheet } from './live.js';
 import { Field, Neon, Sheet, Confirm, Seg, Switch, Icon, TeamBadge, OppBadge, useNow, useWakeLock, useDragSwap, justDragged, beep, flash, unlockAudio, toast, go, STANDS } from '../ui.js';
 
@@ -15,8 +16,15 @@ export function newConcept(d) {
   d.matches = d.matches.filter((x) => x.started || x.id !== d.currentMatchId);
   const m = M.createMatch(t, { present, keeperId, priority: t.rules.priority });
   m.setup = { present: false, keeper: !t.keeper, opponent: false };
+  const e = nextScheduled(t, d.matches);
+  if (e) { applySchedule(m, e); m.setup.opponent = true; }
   d.matches.push(m);
   d.currentMatchId = m.id;
+}
+
+// gegevens uit het programma overnemen
+export function applySchedule(m, e) {
+  Object.assign(m, { scheduleId: e.id, opponent: e.opponent || '', date: e.date, time: e.time || '', meet: e.meet || '', field: e.field || '', home: e.home !== false });
 }
 
 export function rebuildConcept(d, changes = {}) {
@@ -31,7 +39,14 @@ export function rebuildConcept(d, changes = {}) {
   const n = M.createMatch(t, { present, keeperId, priority: changes.priority || m.priority, opponent: m.opponent, date: m.date });
   n.id = m.id;
   n.setup = m.setup || { present: false, keeper: false, opponent: false };
+  for (const k of ['scheduleId', 'time', 'meet', 'field', 'home']) if (m[k] !== undefined) n[k] = m[k];
   d.matches[i] = n;
+}
+
+function upcomingFor(team, matches) {
+  const today = todayISO();
+  const played = new Set(matches.filter((m) => m.finished && m.scheduleId).map((m) => m.scheduleId));
+  return (team.schedule || []).filter((e) => e.date >= today && !played.has(e.id)).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
 }
 
 const mutateConcept = (fn) => update((d) => { const m = d.matches.find((x) => x.id === d.currentMatchId); if (m) fn(m, d); });
@@ -42,6 +57,11 @@ export function Wedstrijd({ state }) {
   const match = currentMatch(state);
   const stale = !match || (!match.started && match.teamId !== team.id);
   useEffect(() => { if (stale) update((d) => newConcept(d)); }, [stale]);
+  // later toegevoegde programma-wedstrijd automatisch voorstellen als er nog niets is ingevuld
+  const auto = !stale && !match.started && !match.scheduleId && !(match.setup && match.setup.opponent) ? nextScheduled(team, state.matches) : null;
+  useEffect(() => {
+    if (auto) update((d) => { const m = d.matches.find((x) => x.id === d.currentMatchId); if (m && !m.started) { applySchedule(m, auto); m.setup = { ...(m.setup || {}), opponent: true }; } });
+  }, [auto && auto.id]);
   if (stale) return html`<main class="matchscreen"></main>`;
   const mteam = state.teams.find((t) => t.id === match.teamId) || team;
   if (match.finished) return html`<${DoneView} match=${match} team=${mteam} />`;
@@ -55,7 +75,7 @@ function Affiche({ match, team, onClick, children }) {
       <${TeamBadge} team=${team} size=${32} />
       <span class="col grow" style="gap:0;min-width:0">
         <span class="aff-title">${match.opponent ? 'tegen ' + match.opponent : 'Tegenstander?'}</span>
-        <span class="aff-sub">${dateLabel(match.date)}${match.time ? ' · ' + match.time : ''}${match.field ? ' · veld ' + match.field : ''}</span>
+        <span class="aff-sub">${dateLabel(match.date)}${match.time ? ' · ' + match.time : ''}${match.field ? ' · ' + match.field : ''}${match.home === false ? ' · uit' : ''}</span>
       </span>
       <${OppBadge} name=${match.opponent} size=${32} />
     </button>
@@ -104,7 +124,7 @@ function PrepView({ state, match, team }) {
 
     ${sheet === 'players' && html`<${PlayersSheet} match=${match} team=${team} onClose=${() => setSheet(null)} />`}
     ${sheet === 'keeper' && html`<${KeeperPickSheet} match=${match} team=${team} counts=${counts} onClose=${() => setSheet(null)} />`}
-    ${sheet === 'opp' && html`<${OpponentSheet} match=${match} onClose=${() => setSheet(null)} />`}
+    ${sheet === 'opp' && html`<${OpponentSheet} match=${match} upcoming=${upcomingFor(team, state.matches)} onClose=${() => setSheet(null)} />`}
     ${sheet === 'menu' && html`<${GameMenu} match=${match} team=${team} onClose=${() => setSheet(null)} onSheet=${setSheet} />`}
     ${sheet === 'confirm' && html`<${Confirm} title="Toch starten?" text=${'Nog niet bevestigd: ' + todo.join(', ') + '.'} yes="Start" onYes=${start} onClose=${() => setSheet(null)} />`}
   </main>`;
@@ -147,7 +167,7 @@ function KeeperPickSheet({ match, team, counts, onClose }) {
   </${Sheet}>`;
 }
 
-function OpponentSheet({ match, onClose }) {
+function OpponentSheet({ match, upcoming = [], onClose }) {
   const [opp, setOpp] = useState(match.opponent || '');
   const [date, setDate] = useState(match.date);
   const [time, setTime] = useState(match.time || '');
@@ -155,13 +175,29 @@ function OpponentSheet({ match, onClose }) {
   const save = () => {
     update((d) => {
       const m = d.matches.find((x) => x.id === match.id);
+      if (m.scheduleId && (opp.trim() !== m.opponent || date !== m.date)) delete m.scheduleId;
       m.opponent = opp.trim(); m.date = date; m.time = time; m.field = fieldNo.trim();
       if (m.setup) m.setup = { ...m.setup, opponent: !!m.opponent };
     });
     onClose();
   };
+  const choose = (e) => {
+    update((d) => {
+      const m = d.matches.find((x) => x.id === match.id);
+      applySchedule(m, e);
+      if (m.setup) m.setup = { ...m.setup, opponent: true };
+    });
+    onClose();
+  };
   return html`<${Sheet} onClose=${save} label="Wedstrijdgegevens">
     <span class="h2" style="font-size:22px">Wedstrijd</span>
+    ${upcoming.length > 0 && html`<div class="col">
+      <span class="label">Uit het programma</span>
+      ${upcoming.slice(0, 5).map((e) => html`<button type="button" class="choice" aria-pressed=${match.scheduleId === e.id ? 'true' : 'false'} onClick=${() => choose(e)}>
+        <span class="col" style="gap:1px"><span style="font-weight:800;font-size:16px">${e.opponent || 'Tegenstander'}</span>
+        <span class="sub">${dateLabel(e.date)}${e.time ? ' · ' + e.time : ''}${e.home === false ? ' · uit' : ' · thuis'}</span></span></button>`)}
+      <span class="label" style="margin-top:6px">Of zelf invullen</span>
+    </div>`}
     <div class="col"><label class="label" for="o-opp">Tegenstander</label><input id="o-opp" class="input" value=${opp} placeholder="Bijv. Hurley JO9-3" onInput=${(e) => setOpp(e.target.value)} /></div>
     <div class="row">
       <div class="col grow"><label class="label" for="o-date">Datum</label><input id="o-date" type="date" class="input" value=${date} onInput=${(e) => setDate(e.target.value)} /></div>

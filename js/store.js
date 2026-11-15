@@ -53,6 +53,7 @@ export function newTeam(name = 'JO9-Wit', withSamples = true) {
     periods: 2,
     periodMin: 25,
     rules: defaultRules(),
+    schedule: [],
     players: withSamples ? samplePlayers() : []
   };
 }
