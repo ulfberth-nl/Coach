@@ -160,7 +160,7 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
       <button type="button" class="iconbtn" aria-label="Volgende" onClick=${() => setF(i + 1, true)} disabled=${i === cards.length - 1}><${Icon} name="chev" /></button>
     </div>
     <div ref=${zone} class="scrubzone">
-      <${Field} slots=${c.slots} lines=${team.lines} keeperId=${match.keeperId} nick=${nick} height=${320}
+      <${Field} slots=${c.slots} lines=${team.lines} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${'clamp(380px, 56dvh, 560px)'}
         onTap=${() => {}} neon=${ch.in} dashed=${ch.shift ? [ch.shift.id] : []} />
       <div class="benchrow">
         <span class="label">Bank</span>

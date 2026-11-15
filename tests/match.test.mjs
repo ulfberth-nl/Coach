@@ -124,3 +124,28 @@ console.log('Afwijkingstest geslaagd');
   Date.now = saved;
 }
 console.log('Kloktest geslaagd');
+
+// keeper wisselen: van de bank en uit het veld
+{
+  let now = 12_000_000;
+  const saved = Date.now;
+  Date.now = () => now;
+  const m = M.createMatch(team, { opponent: 'Q', present: ids, keeperId, priority: 'eerlijk' });
+  M.startClock(m); now += 300_000;
+  let d = M.derive(m, team, M.gameTime(m, team));
+  const fromBench = d.state.bench[0];
+  M.changeKeeper(m, team, fromBench, 'bank');
+  d = M.derive(m, team, M.gameTime(m, team));
+  assert.equal(d.state.keeper, fromBench);
+  assert.ok(d.state.bench.indexOf(keeperId) !== -1, 'oude keeper op de bank');
+  now += 60_000;
+  const fieldKid = Object.keys(d.state.pos)[0];
+  M.changeKeeper(m, team, fieldKid, 'klaar');
+  d = M.derive(m, team, M.gameTime(m, team));
+  assert.equal(d.state.keeper, fieldKid);
+  assert.equal(Object.keys(d.state.pos).length, 5, 'veld blijft vol');
+  assert.equal(d.state.disabled[fromBench], 'wedstrijd');
+  assert.ok(m.plan.steps.every((s) => s.type !== 'swap' || (s.in !== fieldKid && s.out !== fieldKid)), 'keeper zit niet in de wisselrotatie');
+  Date.now = saved;
+}
+console.log('Keepertest geslaagd');

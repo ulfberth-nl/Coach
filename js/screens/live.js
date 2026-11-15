@@ -18,7 +18,7 @@ export function mutate(fn) {
   return result;
 }
 
-const UNDO_TEXT = { swap: 'wissel', goal: 'goal', oppgoal: 'tegengoal', disable: 'uitschakelen', enable: 'weer inzetbaar', join: 'later gekomen', move: 'plekken ruilen' };
+const UNDO_TEXT = { swap: 'wissel', goal: 'goal', oppgoal: 'tegengoal', disable: 'uitschakelen', enable: 'weer inzetbaar', join: 'later gekomen', move: 'plekken ruilen', keeper: 'keeperwissel' };
 const undoAction = { label: 'Ongedaan', run: () => { const ev = mutate((m, t) => M.undo(m, t)); if (ev) toast('Ongedaan: ' + UNDO_TEXT[ev.type]); } };
 
 export function Live({ state }) {
@@ -171,8 +171,9 @@ function LiveInner({ match, team }) {
     ${!match.finished && html`<${Seg} label="Opstellingsstand" value=${stand} options=${STANDS} onChange=${(v) => mutate((m, t) => M.setStand(m, t, 'manual', v))} />`}
 
     <div ref=${zone} class="col" style="gap:10px">
-      <${Field} slots=${d.state.slots} lines=${team.lines} keeperId=${match.keeperId} nick=${nick}
+      <${Field} slots=${d.state.slots} lines=${team.lines} keeperId=${d.state.keeper} nick=${nick} height=${'clamp(400px, 60dvh, 600px)'}
         onTap=${match.finished ? null : tapField}
+        onKeeper=${match.started && !match.finished && !pending ? () => setSheet({ type: 'keeper' }) : null}
         neon=${match.started && next && !pending ? [next.out] : []}
         sub=${(id) => M.fmt(d.state.played[id])} />
       <div class="benchrow">
@@ -200,6 +201,7 @@ function LiveInner({ match, team }) {
     ${sheet && sheet.type === 'goal' && html`<${GoalSheet} match=${match} team=${team} d=${d} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'break' && html`<${BreakSheet} match=${match} team=${team} d=${d} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'join' && html`<${JoinSheet} match=${match} team=${team} onClose=${() => setSheet(null)} />`}
+    ${sheet && sheet.type === 'keeper' && html`<${KeeperSheet} match=${match} team=${team} d=${d} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'menu' && html`<${MatchMenu} match=${match} team=${team} onClose=${() => setSheet(null)}
       onEnd=${() => setSheet({ type: 'end' })} onFinish=${() => setSheet({ type: 'finish' })} onDelete=${() => setSheet({ type: 'delete' })} />`}
     ${sheet && sheet.type === 'finish' && html`<${Confirm} title="Wedstrijd nu afsluiten?" text="Bijvoorbeeld als hij eerder stopt. De tijd die niet gespeeld is telt niet mee. Daarna zie je het overzicht."
@@ -372,7 +374,7 @@ function BreakSheet({ match, team, d, onClose }) {
     <span class="h2" style="font-size:22px">Opstelling ${M.periodLabel(team, match.clock.period)}</span>
     <span class="sub" style="color:var(--ink)">${comingIn.length ? html`<span class="chg in">Erin: ${comingIn.map(nick).join(', ')}</span> <span class="chg out">Eruit: ${goingOut.map(nick).join(', ')}</span>` : 'Dezelfde spelers, posities opnieuw verdeeld.'}</span>
     <div ref=${zone} class="col" style="gap:8px">
-      <${Field} slots=${lu.slots} lines=${team.lines} keeperId=${match.keeperId} nick=${nick} height=${300} onTap=${() => {}} neon=${comingIn} />
+      <${Field} slots=${lu.slots} lines=${team.lines} keeperId=${d.state.keeper} nick=${nick} height=${360} onTap=${() => {}} neon=${comingIn} />
       <div class="benchrow">
         <span class="label">Bank</span>
         <div class="scroll">
@@ -424,5 +426,41 @@ function MatchMenu({ match, team, onClose, onEnd, onFinish, onDelete }) {
     ${!match.finished && html`<button type="button" class="choice" onClick=${onFinish}><span class="col" style="gap:1px"><span style="font-weight:800;font-size:16px">Wedstrijd nu afsluiten</span><span class="sub">Bewaren en naar het overzicht</span></span></button>`}
     <button type="button" class="choice" style="border-color:#F0C2B4" onClick=${onDelete}><span class="col" style="gap:1px"><span style="font-weight:800;font-size:16px;color:var(--danger)">Wedstrijd stoppen en weggooien</span><span class="sub">Niets bewaren</span></span></button>
     <button type="button" class="btn plain block" onClick=${onClose}>Sluiten</button>
+  </${Sheet}>`;
+}
+
+// ---------- keeper wisselen (bijvoorbeeld bij een blessure) ----------
+function KeeperSheet({ match, team, d, onClose }) {
+  const nick = (id) => M.nickOf(team, id);
+  const keeper = d.state.keeper;
+  const [to, setTo] = useState(null);
+  const [mode, setMode] = useState('bank');
+  const bench = d.state.bench.filter((id) => !d.state.disabled[id]);
+  const field = Object.keys(d.state.pos);
+  const fromField = !!to && to in d.state.pos;
+  const opts = fromField ? [['veld', 'Neemt plek over'], ['bank', 'Naar de bank'], ['klaar', 'Blessure']] : [['bank', 'Naar de bank'], ['klaar', 'Blessure']];
+  const m = opts.some(([v]) => v === mode) ? mode : 'bank';
+  const run = () => {
+    mutate((mm, t) => M.changeKeeper(mm, t, to, m));
+    toast(`${nick(to)} keept nu`, undoAction);
+    onClose();
+  };
+  return html`<${Sheet} onClose=${onClose} label="Keeper wisselen">
+    <span class="h2" style="font-size:22px">Keeper wisselen</span>
+    <span class="sub">Nu keept ${nick(keeper)}.</span>
+    <div class="col">
+      <span class="label">Nieuwe keeper</span>
+      <div class="wrap">
+        ${bench.map((id) => html`<button type="button" class="chip big" aria-pressed=${to === id ? 'true' : 'false'} onClick=${() => setTo(id)}>${nick(id)}<span class="small">bank</span></button>`)}
+        ${field.map((id) => html`<button type="button" class="chip big warm" aria-pressed=${to === id ? 'true' : 'false'} onClick=${() => setTo(id)}>${nick(id)}<span class="small">veld</span></button>`)}
+      </div>
+    </div>
+    ${to && html`<div class="col">
+      <span class="label">${nick(keeper)} daarna</span>
+      <${Seg} label="Oude keeper" value=${m} onChange=${setMode} options=${opts} />
+      ${fromField && m !== 'veld' && html`<span class="small">Er komt iemand van de bank op de plek van ${nick(to)}.</span>`}
+    </div>`}
+    <${Neon} box><button type="button" class="btn primary block" style="box-shadow:none" disabled=${!to} onClick=${run}>Keeper wisselen</button></${Neon}>
+    <button type="button" class="btn plain block" onClick=${onClose}>Annuleren</button>
   </${Sheet}>`;
 }

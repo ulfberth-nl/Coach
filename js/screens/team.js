@@ -3,7 +3,7 @@ import { update, activeTeam, currentMatch, newTeam, exportData, importData } fro
 import { replan, periodWord } from '../match.js';
 import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, toast, STANDS } from '../ui.js';
 
-export const APP_VERSION = '0.4.0';
+export const APP_VERSION = '0.4.1';
 
 // logo verkleinen tot 256 px zodat het licht blijft in de opslag
 function readLogo(file) {
@@ -128,8 +128,8 @@ export function Team({ state }) {
 
     <section class="card">
       <span class="h2">Wisselen</span>
-      <span class="label">Wissels per kind</span>
-      <${Seg} label="Wissels per kind" value=${r.turnsPerPeriod || 0} onChange=${(v) => setRule('turnsPerPeriod', v)} options=${[[0, 'App kiest'], [1, '1× per ' + pw], [2, '2× per ' + pw], [3, '3×']]} />
+      <span class="label">Wissels per kind, per ${pw}</span>
+      <${Seg} label="Wissels per kind" value=${r.turnsPerPeriod || 0} onChange=${(v) => setRule('turnsPerPeriod', v)} options=${[[0, 'Auto'], [1, '1×'], [2, '2×'], [3, '3×']]} />
       <span class="small">${r.turnsPerPeriod ? `Ieder kind gaat ${r.turnsPerPeriod}× per ${pw} naar de bank (${r.turnsPerPeriod * team.periods}× per wedstrijd). De app kiest de momenten.` : 'De app kiest het kleinste aantal wissels dat binnen de regels hieronder past.'}</span>
       ${!r.turnsPerPeriod && html`<${Setting} title="Iedereen even vaak gewisseld"><${Switch} label="Iedereen even vaak gewisseld" on=${r.evenOften} onChange=${(v) => setRule('evenOften', v)} /></${Setting}>`}
       <${Setting} title="Gelijke speeltijd"><${Switch} label="Gelijke speeltijd" on=${r.equalTime} onChange=${(v) => setRule('equalTime', v)} /></${Setting}>
