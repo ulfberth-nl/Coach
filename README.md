@@ -26,6 +26,12 @@ Klaarzetten en spelen gebeuren op hetzelfde scherm, dat altijd in één beeld pa
 - **Live:** klok en stand bovenin, de balk met de volgende wissel, het veld en de bank. De menubalk verdwijnt; Seizoen en Team zitten dan in het ⋯-menu.
 - **Afgelopen:** de uitslag, het overzicht en *Nieuwe wedstrijd klaarzetten*.
 
+## Seizoen en programma
+
+- **+ Wedstrijd:** tegenstander, thuis/uit, datum, aanvang, verzameltijd, veld en taken voor ouders (fluiten 0–2, fruit 0–1, bar/wedstrijdtafel 0–2). *Eerlijk verdelen* kiest wie het minst aan de beurt was.
+- **Bericht kopiëren:** een overzicht met emoji's om in de teamapp te plakken.
+- Het Wedstrijd-scherm zet automatisch de eerstvolgende wedstrijd uit het programma klaar; via het affiche kies je een andere.
+
 ## Tijdens de wedstrijd
 
 - **Klok:** tik op de klok om te starten of te pauzeren. Blauw met een kloppende stip = loopt, oranje en knipperend = staat stil.

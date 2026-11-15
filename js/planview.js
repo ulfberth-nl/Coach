@@ -124,7 +124,9 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
     let active = null;
     const at = (el, x) => {
       const r = (el.querySelector('.cells') || el).getBoundingClientRect();
-      setF(fOfTime(Math.max(0, Math.min(1, (x - r.left) / r.width)) * END), false);
+      const p = Math.max(0, Math.min(1, (x - r.left) / r.width));
+      // tijdlijn: gelijk verdeelde bolletjes; rooster: echte tijd
+      setF(el === track.current ? p * (cards.length - 1) : fOfTime(p * END), false);
     };
     const downs = els.map((el) => { const h = (e) => { active = el; at(el, e.clientX); }; el.addEventListener('pointerdown', h); return [el, h]; });
     const move = (e) => { if (active) { e.preventDefault(); at(active, e.clientX); } };
@@ -140,6 +142,9 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   const title = c.kind === 'lineup' ? (c.period === 0 ? 'Start' : 'Opstelling ' + M.periodLabel(team, c.period)) : `Wissel ${swapNo[i]} van ${n}`;
   const t = timeOf(f);
   const pct = (t / END) * 100;
+  const n1 = Math.max(1, cards.length - 1);
+  const dotPct = (k) => (k / n1) * 100;
+  const headPct = (f / n1) * 100;
   const kids = match.present.filter((id) => id !== match.keeperId);
   const segs = cards.map((cc, k) => ({ a: cc.t, b: k + 1 < cards.length ? cards[k + 1].t : END, pos: cc.pos }));
   const status = i < nowIndex ? 'Gedaan' : i === nowIndex ? 'Nu' : nowIndex >= 0 ? 'Gepland' : null;
@@ -147,9 +152,9 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   return html`<div class=${'planview col' + (compact ? ' compact' : '')} style="gap:8px">
     <div class="tl" ref=${track} aria-label="Tijdlijn">
       <span class="tl-line"></span>
-      ${Array.from({ length: team.periods - 1 }, (_, p) => html`<span class="tl-break" style=${`left:${((p + 1) * L / END) * 100}%`}><b>${team.periods === 2 ? 'rust' : 'pauze'}</b></span>`)}
-      ${cards.map((cc, k) => html`<span class=${'tl-dot' + (k < i ? ' past' : k === i ? ' cur' : '') + (cc.kind === 'lineup' ? ' lu' : '')} style=${`left:${(cc.t / END) * 100}%`}></span>`)}
-      <span class="tl-head" style=${`left:${pct}%`}><span class="tl-time" style=${`transform:translateX(-${pct}%)`}>${label(t)}</span></span>
+      ${cards.map((cc, k) => (k > 0 && cc.kind === 'lineup' ? html`<span class="tl-break" style=${`left:${dotPct(k - 0.5)}%`}><b>${team.periods === 2 ? 'rust' : 'pauze'}</b></span>` : null))}
+      ${cards.map((cc, k) => html`<span class=${'tl-dot' + (k < i ? ' past' : k === i ? ' cur' : '') + (cc.kind === 'lineup' ? ' lu' : '')} style=${`left:${dotPct(k)}%`}></span>`)}
+      <span class="tl-head" style=${`left:${headPct}%`}><span class="tl-time" style=${`transform:translateX(-${headPct}%)`}>${label(t)}</span></span>
     </div>
     ${!compact && html`<div class="between">
       <button type="button" class="iconbtn" aria-label="Vorige" onClick=${() => setF(i - 1, true)} disabled=${i === 0}><span style="transform:rotate(180deg);display:inline-flex"><${Icon} name="chev" /></span></button>
@@ -159,11 +164,11 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
       </div>
       <button type="button" class="iconbtn" aria-label="Volgende" onClick=${() => setF(i + 1, true)} disabled=${i === cards.length - 1}><${Icon} name="chev" /></button>
     </div>`}
+    ${compact && html`<div class="fieldcap">${title}${i > 0 && c.kind === 'swap' ? html` · <b>${nick(c.in)}</b> erin voor ${nick(c.out)}` : ''}</div>`}
     <div ref=${zone} class="scrubzone">
       <div class="fieldbox">
         <${Field} slots=${c.slots} lines=${team.lines} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
           onTap=${() => {}} neon=${ch.in} dashed=${ch.shift ? [ch.shift.id] : []} />
-        ${compact && html`<span class="fieldtag">${title}${i > 0 && c.kind === 'swap' ? html` · <b>${nick(c.in)}</b> voor ${nick(c.out)}` : ''}</span>`}
       </div>
       <div class="benchrow">
         <span class="label">Bank</span>

@@ -1,10 +1,19 @@
-import { html, useState } from '../../vendor/preact-htm.js';
+import { html, useMemo, useState } from '../../vendor/preact-htm.js';
 import { update, activeTeam, currentMatch, newTeam, exportData, importData } from '../store.js';
-import { replan, periodWord } from '../match.js';
+import { replan, periodWord, createMatch, matchEnd, mins } from '../match.js';
+import { suggestKeeper } from './home.js';
 import { rebuildConcept } from './wedstrijd.js';
 import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, toast, STANDS } from '../ui.js';
 
-export const APP_VERSION = '0.5.0';
+export const APP_VERSION = '0.6.0';
+
+// Eerlijkheid in drie standen; zetten de onderliggende regels in één keer
+const FAIR = {
+  streng: { label: 'Streng', sub: 'Iedereen even lang: hooguit 2 minuten verschil.', rules: { equalTime: true, marge: 2, priority: 'eerlijk', evenOften: true } },
+  normaal: { label: 'Normaal', sub: 'Iedereen ongeveer even lang: hooguit 5 minuten verschil.', rules: { equalTime: true, marge: 5, priority: 'eerlijk', evenOften: true } },
+  ruim: { label: 'Ruim', sub: 'De beste bezetting gaat voor; sterkere spelers mogen iets langer staan (hooguit 8 minuten verschil).', rules: { equalTime: true, marge: 8, priority: 'bezetting', evenOften: true } }
+};
+const presetOf = (r) => Object.keys(FAIR).find((k) => Object.entries(FAIR[k].rules).every(([key, v]) => r[key] === v)) || 'eigen';
 
 // logo verkleinen tot 256 px zodat het licht blijft in de opslag
 function readLogo(file) {
@@ -34,6 +43,23 @@ export function Team({ state }) {
   const locked = !!(running && running.started && !running.finished && running.teamId === team.id);
   const [confirm, setConfirm] = useState(null);
   const pw = periodWord(team);
+  const [more, setMore] = useState(false);
+  const preset = presetOf(r);
+  const preview = useMemo(() => {
+    const present = team.players.filter((p) => p.active !== false).map((p) => p.id);
+    const keeper = team.keeper ? suggestKeeper(team, present, {}) : null;
+    const F = team.lines.A + team.lines.M + team.lines.V;
+    if (present.filter((id) => id !== keeper).length < F) return null;
+    const plan = createMatch(team, { present, keeperId: keeper, priority: r.priority }).plan;
+    const swaps = plan.steps.filter((x) => x.type === 'swap').length;
+    const f = plan.fair;
+    return {
+      n: present.length, swaps, ok: plan.ok,
+      every: swaps ? Math.round((matchEnd(team) / (swaps + team.periods)) / 30) / 2 : 0,
+      minP: mins(f.minPlayed), maxP: mins(f.maxPlayed), maxStint: mins(f.maxStint || 0),
+      turns: f.minTurns === f.maxTurns ? `Iedereen ${f.minTurns}× naar de bank` : `${f.minTurns}–${f.maxTurns}× naar de bank`
+    };
+  }, [team]);
 
   const set = (fn) => update((draft) => {
     const t = activeTeam(draft);
@@ -128,19 +154,38 @@ export function Team({ state }) {
 
     <section class="card">
       <span class="h2">Wisselen</span>
-      <span class="label">Wissels per kind, per ${pw}</span>
-      <${Seg} label="Wissels per kind" value=${r.turnsPerPeriod || 0} onChange=${(v) => setRule('turnsPerPeriod', v)} options=${[[0, 'Auto'], [1, '1×'], [2, '2×'], [3, '3×']]} />
-      <span class="small">${r.turnsPerPeriod ? `Ieder kind gaat ${r.turnsPerPeriod}× per ${pw} naar de bank (${r.turnsPerPeriod * team.periods}× per wedstrijd). De app kiest de momenten.` : 'De app kiest het kleinste aantal wissels dat binnen de regels hieronder past.'}</span>
-      ${!r.turnsPerPeriod && html`<${Setting} title="Iedereen even vaak gewisseld"><${Switch} label="Iedereen even vaak gewisseld" on=${r.evenOften} onChange=${(v) => setRule('evenOften', v)} /></${Setting}>`}
-      <${Setting} title="Gelijke speeltijd"><${Switch} label="Gelijke speeltijd" on=${r.equalTime} onChange=${(v) => setRule('equalTime', v)} /></${Setting}>
-      ${r.equalTime && html`<${Setting} title="Marge speeltijd" sub="Maximaal verschil tussen kinderen"><${Stepper} label="Marge" value=${r.marge} min=${1} max=${15} suffix=" min" onChange=${(v) => setRule('marge', v)} /></${Setting}>`}
-      <${Setting} title="Niet te lang op de bank" sub="Niemand zit langer achter elkaar op de bank dan"><${Switch} label="Niet te lang op de bank" on=${!!r.maxBenchOn} onChange=${(v) => setRule('maxBenchOn', v)} /></${Setting}>
-      ${r.maxBenchOn && html`<${Setting} title="Maximaal op de bank"><${Stepper} label="Maximaal op de bank" value=${r.maxBench || 10} min=${3} max=${30} suffix=" min" onChange=${(v) => setRule('maxBench', v)} /></${Setting}>`}
-      <${Setting} title="Minimaal tussen wissels"><${Stepper} label="Minimaal tussen wissels" value=${r.minInterval || 2} min=${1} max=${8} suffix=" min" onChange=${(v) => setRule('minInterval', v)} /></${Setting}>
+      <span class="label">Hoe vaak gaat elk kind naar de bank?</span>
+      <${Seg} label="Wisselritme" value=${[0, 1, 2].indexOf(r.turnsPerPeriod || 0) !== -1 ? (r.turnsPerPeriod || 0) : -1} onChange=${(v) => setRule('turnsPerPeriod', v)} options=${[[0, 'App kiest'], [1, '1× per ' + pw], [2, '2× per ' + pw]]} />
+      <span class="small">${r.turnsPerPeriod ? `Ieder kind ${r.turnsPerPeriod}× per ${pw} op de bank; de app kiest de momenten.` : 'De app kiest het kleinste aantal wissels dat eerlijk uitkomt.'}</span>
+      <span class="label">Eerlijkheid</span>
+      <${Seg} label="Eerlijkheid" value=${preset} onChange=${(v) => set((t) => { Object.assign(t.rules, FAIR[v].rules); })} options=${Object.keys(FAIR).map((k) => [k, FAIR[k].label])} />
+      <span class="small">${preset in FAIR ? FAIR[preset].sub : 'Eigen instellingen (zie hieronder).'}</span>
       <${Setting} title="Nieuwe opstelling na de rust" sub="Gratis moment om meerdere kinderen te wisselen"><${Switch} label="Nieuwe opstelling na de rust" on=${r.newLineupAtBreak} onChange=${(v) => setRule('newLineupAtBreak', v)} /></${Setting}>
-      <span class="label">Standaard voorrang</span>
-      <${Seg} label="Standaard voorrang" value=${r.priority} onChange=${(v) => setRule('priority', v)} options=${[['eerlijk', 'Eerlijkheid'], ['bezetting', 'Beste bezetting']]} />
-      <span class="small">Bij het klaarzetten kun je per wedstrijd een andere keuze maken.</span>
+
+      ${preview && html`<div class="preview">
+        <span class="label">Zo ziet een wedstrijd eruit met je ${preview.n} spelers</span>
+        <div class="pv-grid">
+          <div><b class="num">${preview.swaps}</b><span>wissels</span></div>
+          <div><b class="num">~${String(preview.every).replace('.', ',')}′</b><span>tussen wissels</span></div>
+          <div><b class="num">${preview.minP === preview.maxP ? preview.minP : preview.minP + '–' + preview.maxP}′</b><span>speeltijd per kind</span></div>
+          <div><b class="num">${preview.maxStint}′</b><span>langst op de bank</span></div>
+        </div>
+        <span class="small">${preview.turns}${!preview.ok ? ' · niet alles past precies, dit is de eerlijkste verdeling' : ''}</span>
+      </div>`}
+
+      <button type="button" class="between" style="background:none;border:none;padding:0;min-height:44px;width:100%" aria-expanded=${more ? 'true' : 'false'} onClick=${() => setMore(!more)}>
+        <span class="label">Meer instellingen</span><span class=${'chev' + (more ? ' open' : '')}><${Icon} name="chev" size=${18} /></span>
+      </button>
+      <div class=${'collapse' + (more ? ' open' : '')}><div class="col" style="gap:6px">
+        ${!r.turnsPerPeriod && html`<${Setting} title="Iedereen even vaak gewisseld"><${Switch} label="Iedereen even vaak gewisseld" on=${r.evenOften} onChange=${(v) => setRule('evenOften', v)} /></${Setting}>`}
+        <${Setting} title="Gelijke speeltijd"><${Switch} label="Gelijke speeltijd" on=${r.equalTime} onChange=${(v) => setRule('equalTime', v)} /></${Setting}>
+        ${r.equalTime && html`<${Setting} title="Maximaal verschil in speeltijd"><${Stepper} label="Marge" value=${r.marge} min=${1} max=${15} suffix=" min" onChange=${(v) => setRule('marge', v)} /></${Setting}>`}
+        <${Setting} title="Niet te lang op de bank"><${Switch} label="Niet te lang op de bank" on=${!!r.maxBenchOn} onChange=${(v) => setRule('maxBenchOn', v)} /></${Setting}>
+        ${r.maxBenchOn && html`<${Setting} title="Maximaal achter elkaar op de bank"><${Stepper} label="Maximaal op de bank" value=${r.maxBench || 10} min=${3} max=${30} suffix=" min" onChange=${(v) => setRule('maxBench', v)} /></${Setting}>`}
+        <${Setting} title="Minimaal tussen wissels"><${Stepper} label="Minimaal tussen wissels" value=${r.minInterval || 2} min=${1} max=${8} suffix=" min" onChange=${(v) => setRule('minInterval', v)} /></${Setting}>
+        ${r.turnsPerPeriod === 3 && html`<span class="small">Nu: 3× per ${pw}.</span>`}
+        <${Setting} title="3× per ${pw} naar de bank" sub="Voor grote selecties"><${Switch} label="3 keer" on=${r.turnsPerPeriod === 3} onChange=${(v) => setRule('turnsPerPeriod', v ? 3 : 0)} /></${Setting}>
+      </div></div>
     </section>
 
     <section class="card">
