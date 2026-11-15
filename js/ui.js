@@ -190,9 +190,9 @@ export function Icon({ name, size = 22 }) {
 
 // ---------- het veld ----------
 // slots: { V0: id, M0: id, A0: id, ... }  aanval boven, eigen doel (keeper) onder
-export function Field({ slots, lines, keeperId, nick, onTap, neon = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false }) {
+export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false }) {
   const rows = ['V', 'M', 'A'].filter((l) => (lines[l] || 0) > 0);
-  const tops = { 3: ['5%', '30%', '55%'], 2: ['14%', '50%'], 1: ['40%'] }[rows.length] || [];
+  const tops = { 3: ['5%', '30%', '56%'], 2: ['14%', '50%'], 1: ['40%'] }[rows.length] || [];
   const dense = Object.values(lines).some((n) => n >= 4);
   const pillKind = (id) => (dashed.indexOf(id) !== -1 ? 'dashed' : '') + (muted.indexOf(id) !== -1 ? ' muted' : '') + (selected === id ? ' orange' : '');
   const pillStyle = dense || compact ? 'max-width:74px;font-size:12px;padding:5px 8px' : '';
@@ -206,7 +206,7 @@ export function Field({ slots, lines, keeperId, nick, onTap, neon = [], dashed =
       ${below && id ? below(id) : null}
     </button>`;
   };
-  return html`<div class="field" style=${`height:${height}px`}>
+  return html`<div class="field" style=${`height:${typeof height === 'number' ? height + 'px' : height}`}>
     <span class="lines"></span>
     <span class="arc top"></span>
     <span class="arc bottom"></span>
@@ -214,7 +214,7 @@ export function Field({ slots, lines, keeperId, nick, onTap, neon = [], dashed =
       const n = lines[l];
       return Array.from({ length: n }, (_, i) => spot(slots[l + i], `${((i + 1) / (n + 1)) * 100}%`, tops[r], l + i));
     })}
-    ${keeperId && html`<div class="spot" style="left:50%;bottom:16px;top:auto"><${KeeperPill} name=${nick(keeperId)} /></div>`}
+    ${keeperId && html`<button type="button" class="spot keeperspot" key=${'k' + keeperId} style="left:50%;bottom:16px;top:auto" disabled=${!onKeeper} onClick=${() => onKeeper && onKeeper(keeperId)} aria-label=${'Keeper ' + nick(keeperId)}><${KeeperPill} name=${nick(keeperId)} /></button>`}
   </div>`;
 }
 
@@ -277,11 +277,15 @@ export function useDragSwap(ref, enabled, onSwap) {
       }
       st = null;
     };
+    // iPhone: tijdens slepen nooit de pagina laten scrollen
+    const noScroll = (e) => { if (st) e.preventDefault(); };
+    root.addEventListener('touchmove', noScroll, { passive: false });
     root.addEventListener('pointerdown', down);
     window.addEventListener('pointermove', move, { passive: false });
     window.addEventListener('pointerup', up);
     window.addEventListener('pointercancel', up);
     return () => {
+      root.removeEventListener('touchmove', noScroll);
       root.classList.remove('draggable');
       root.removeEventListener('pointerdown', down);
       window.removeEventListener('pointermove', move);

@@ -80,11 +80,37 @@ export function slotSwap(slots, out, inn, shift) {
   return next;
 }
 
+// Keeper wisselen: nieuwe keeper komt van de bank of uit het veld; de oude keeper gaat naar de bank
+// (mode 'bank' of 'klaar') of neemt de veldplek over (mode 'veld'). Bij een veldspeler als nieuwe keeper
+// vult ev.fill (een bankspeler) zo nodig de lege plek.
+export function applyKeeperChange(s, ev) {
+  const old = s.keeper, nw = ev.to;
+  if (!nw || nw === old) return;
+  if (nw in s.pos) {
+    const line = s.pos[nw];
+    const slot = slotOf(s.slots, nw);
+    const pos = { ...s.pos };
+    delete pos[nw];
+    const slots = { ...s.slots };
+    let bench = s.bench.slice();
+    if (ev.mode === 'veld' && old) { pos[old] = line; slots[slot] = old; }
+    else {
+      if (ev.fill && bench.indexOf(ev.fill) !== -1) { bench = bench.filter((x) => x !== ev.fill); pos[ev.fill] = line; slots[slot] = ev.fill; }
+      else slots[slot] = null;
+      if (old) bench.push(old);
+    }
+    s.pos = pos; s.slots = slots; s.bench = bench;
+  } else {
+    s.bench = s.bench.filter((x) => x !== nw).concat(old ? [old] : []);
+  }
+  s.keeper = nw;
+}
+
 // ---------- afgeleide stand uit de gebeurtenissen ----------
 export function derive(match, team, T) {
   const players = playersMap(team);
   const L = periodLen(team);
-  const st = { pos: {}, bench: [], played: {}, turns: {}, since: {}, disabled: {}, slots: {} };
+  const st = { pos: {}, bench: [], played: {}, turns: {}, since: {}, disabled: {}, slots: {}, keeper: match.keeperId || null };
   const score = { us: 0, them: 0 };
   const goals = {};
   const lineTime = {};
@@ -96,7 +122,7 @@ export function derive(match, team, T) {
     const dt = Math.max(0, to - last);
     if (dt > 0) {
       for (const id of Object.keys(st.pos)) { st.played[id] += dt; lineTime[id][st.pos[id]] += dt; }
-      if (match.keeperId && lineTime[match.keeperId]) lineTime[match.keeperId].K += dt;
+      if (st.keeper && lineTime[st.keeper]) lineTime[st.keeper].K += dt;
     }
     last = Math.max(last, to);
   };
@@ -139,6 +165,11 @@ export function derive(match, team, T) {
       delete st.disabled[ev.playerId];
     } else if (ev.type === 'periodEnd') {
       last = Math.max(last, (ev.period + 1) * L);
+    } else if (ev.type === 'keeper') {
+      const old = st.keeper;
+      applyKeeperChange(st, ev);
+      if (old) { st.since[old] = ev.t; if (late.indexOf(old) === -1) late.push(old); if (ev.mode === 'klaar') st.disabled[old] = 'wedstrijd'; }
+      if (ev.fill) st.since[ev.fill] = ev.t;
     } else if (ev.type === 'move') {
       const la = st.pos[ev.a], lb = st.pos[ev.b];
       if (la && lb) {
@@ -198,7 +229,7 @@ function planAnchor(match, team, T) {
   let anchor = pStart;
   for (const e of match.events) {
     if (e.t > T + 0.5) break;
-    if ((e.type === 'swap' || e.type === 'lineup' || e.type === 'join') && e.t >= anchor) anchor = e.t;
+    if ((e.type === 'swap' || e.type === 'lineup' || e.type === 'join' || e.type === 'keeper') && e.t >= anchor) anchor = e.t;
   }
   return Math.min(anchor, T);
 }
@@ -390,6 +421,20 @@ export function doSwap(match, team, out, inn, shift) {
   replan(match, team);
 }
 
+export function changeKeeper(match, team, to, mode) {
+  const T = gameTime(match, team);
+  const d = derive(match, team, T);
+  let fill = null;
+  if (to in d.state.pos && mode !== 'veld') {
+    const players = playersMap(team);
+    fill = d.state.bench.filter((id) => !d.state.disabled[id]).sort((a, b) => (d.state.played[a] - d.state.played[b]) ||
+      (Math.abs(players[a].kracht - players[to].kracht) - Math.abs(players[b].kracht - players[to].kracht)))[0] || null;
+  }
+  match.events.push({ id: uid(), type: 'keeper', t: T, from: d.state.keeper, to, mode, fill });
+  match.firstAt = null;
+  replan(match, team);
+}
+
 // Twee veldspelers ruilen van plek tijdens de wedstrijd.
 export function movePlayers(match, team, a, b) {
   match.events.push({ id: uid(), type: 'move', t: gameTime(match, team), a, b });
@@ -434,7 +479,7 @@ export function setScorer(match, eventId, scorer) {
   if (ev) ev.scorer = scorer || null;
 }
 
-const UNDOABLE = ['swap', 'goal', 'oppgoal', 'disable', 'enable', 'join', 'move'];
+const UNDOABLE = ['swap', 'goal', 'oppgoal', 'disable', 'enable', 'join', 'move', 'keeper'];
 
 export function lastUndoable(match) {
   for (let i = match.events.length - 1; i >= 0; i--) {
@@ -531,18 +576,25 @@ export function summary(match, team) {
 export function timeline(match, team) {
   const players = playersMap(team);
   const cards = [];
-  let slots = null, pos = null, bench = null;
+  let slots = null, pos = null, bench = null, keeper = match.keeperId || null;
   for (const ev of match.events) {
+    if (ev.type === 'keeper' && pos) {
+      const s = { pos, bench, slots, keeper };
+      applyKeeperChange(s, ev);
+      ({ pos, bench, slots, keeper } = s);
+      if (cards.length) cards[cards.length - 1] = { ...cards[cards.length - 1], slots, pos, bench, keeper };
+      continue;
+    }
     if (ev.type === 'lineup') {
       slots = ev.slots ? { ...ev.slots } : makeSlots(ev.pos, team.lines, players);
       pos = { ...ev.pos }; bench = ev.bench.slice();
-      cards.push({ kind: 'lineup', t: ev.t, period: ev.period, slots, pos, bench, past: true });
+      cards.push({ kind: 'lineup', t: ev.t, period: ev.period, slots, pos, bench, keeper, past: true });
     } else if (ev.type === 'swap' && slots) {
       slots = slotSwap(slots, ev.out, ev.in, ev.shift);
       const np = { ...pos }; delete np[ev.out];
       if (ev.shift && ev.shift.id in np) { np[ev.in] = np[ev.shift.id]; np[ev.shift.id] = ev.shift.to; } else np[ev.in] = pos[ev.out];
       pos = np; bench = bench.filter((x) => x !== ev.in).concat([ev.out]);
-      cards.push({ kind: 'swap', t: ev.t, out: ev.out, in: ev.in, shift: ev.shift, slots, pos, bench, past: true });
+      cards.push({ kind: 'swap', t: ev.t, out: ev.out, in: ev.in, shift: ev.shift, slots, pos, bench, keeper, past: true });
     } else if (ev.type === 'join' && bench) {
       bench = bench.concat([ev.playerId]);
     } else if (ev.type === 'move' && pos && pos[ev.a] && pos[ev.b]) {
@@ -558,11 +610,11 @@ export function timeline(match, team) {
       if (s.type === 'lineup') {
         slots = makeSlots(s.pos, team.lines, players);
         pos = { ...s.pos }; bench = s.bench.slice();
-        cards.push({ kind: 'lineup', t: s.t, period: s.period, slots, pos, bench, past: false });
+        cards.push({ kind: 'lineup', t: s.t, period: s.period, slots, pos, bench, keeper, past: false });
       } else {
         slots = slotSwap(slots, s.out, s.in, s.shift);
         pos = { ...s.pos }; bench = bench.filter((x) => x !== s.in).concat([s.out]);
-        cards.push({ kind: 'swap', t: s.t, out: s.out, in: s.in, shift: s.shift, slots, pos, bench, past: false });
+        cards.push({ kind: 'swap', t: s.t, out: s.out, in: s.in, shift: s.shift, slots, pos, bench, keeper, past: false });
       }
     }
   }

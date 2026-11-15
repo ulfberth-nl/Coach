@@ -361,3 +361,8 @@ input.kracht::-moz-range-thumb { width: 26px; height: 26px; border-radius: 999px
 @keyframes dotPulse { 0% { box-shadow: 0 0 0 0 rgba(245,165,36,.7); } 70% { box-shadow: 0 0 0 7px rgba(245,165,36,0); } 100% { box-shadow: 0 0 0 0 rgba(245,165,36,0); } }
 .tabbar a.live { animation: tabGlow 2.4s ease-in-out infinite; color: var(--ink); font-weight: 800; }
 .tabbar a.live::after { content: ''; position: absolute; top: 8px; left: calc(50% + 10px); width: 9px; height: 9px; border-radius: 999px; background: var(--orange); animation: dotPulse 1.6s infinite; }
+
+/* slepen: het veld en de bank zijn 'op slot' voor scrollen en zoomen */
+.draggable, .draggable .field, .draggable .benchrow, .draggable .scroll, .draggable [data-pid], .scrubzone, .scrubzone * { touch-action: none !important; }
+.pill, .benchpill { -webkit-user-drag: none; }
+.keeperspot { background: none; border: none; padding: 0; }
