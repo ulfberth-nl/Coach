@@ -104,3 +104,23 @@ console.log('Alle wedstrijdtests geslaagd');
   Date.now = saved;
 }
 console.log('Afwijkingstest geslaagd');
+
+// klok terugzetten en wedstrijd eerder afsluiten
+{
+  let now = 9_000_000;
+  const saved = Date.now;
+  Date.now = () => now;
+  const m = M.createMatch(team, { opponent: 'K', present: ids, keeperId, priority: 'eerlijk' });
+  M.startClock(m); now += 90_000;
+  M.setClock(m, team, 0);
+  assert.equal(m.started, false, 'per ongeluk gestart: terug naar klaar voor de aftrap');
+  M.startClock(m); now += 600_000;
+  M.adjustClock(m, team, -60);
+  assert.ok(Math.abs(M.elapsedInPeriod(m) - 540) < 1, 'minuut eraf');
+  M.finishNow(m, team);
+  const s = M.summary(m, team);
+  const tot = Object.keys(s.state.played).filter((id) => id !== keeperId).reduce((a, id) => a + s.state.played[id], 0);
+  assert.ok(Math.abs(tot - 5 * 540) < 3, 'alleen gespeelde tijd telt');
+  Date.now = saved;
+}
+console.log('Kloktest geslaagd');

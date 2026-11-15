@@ -25,7 +25,7 @@ export function elapsedInPeriod(match, ms = Date.now()) {
 // Wedstrijdtijd in seconden; blijft binnen de huidige periode, ook als de klok doorloopt.
 export function gameTime(match, team, ms = Date.now()) {
   const L = periodLen(team);
-  if (match.finished) return matchEnd(team);
+  if (match.finished) return match.endT != null ? match.endT : matchEnd(team);
   return match.clock.period * L + Math.min(elapsedInPeriod(match, ms), L - 1);
 }
 
@@ -328,13 +328,49 @@ export function endPeriod(match, team) {
   match.firstAt = null;
   if (p + 1 >= team.periods) {
     match.finished = true;
-    match.clock.accum = L;
+    match.endT = p * L + Math.min(match.clock.accum, L);
     match.plan = { ...(match.plan || {}), steps: [] };
   } else {
     match.clock.period = p + 1;
     match.clock.accum = 0;
     replan(match, team);
   }
+}
+
+// Wedstrijd nu afsluiten (bijvoorbeeld als hij eerder stopt). Niet gespeelde tijd telt niet mee.
+export function finishNow(match, team) {
+  pauseClock(match);
+  const L = periodLen(team);
+  const p = match.clock.period;
+  const T = p * L + Math.min(match.clock.accum, L);
+  match.events.push({ id: uid(), type: 'periodEnd', t: T, period: p });
+  match.finished = true;
+  match.started = true;
+  match.endT = T;
+  match.firstAt = null;
+  match.plan = { ...(match.plan || {}), steps: [] };
+}
+
+// Klok van deze periode op een tijd zetten (in seconden). Latere gebeurtenissen schuiven mee terug.
+export function setClock(match, team, sec) {
+  const L = periodLen(team);
+  const p = match.clock.period;
+  const s = Math.max(0, Math.min(L, Math.round(sec)));
+  if (match.clock.running) { match.clock.startedAt = Date.now() - s * 1000; match.clock.accum = 0; } else match.clock.accum = s;
+  const newT = p * L + Math.min(s, L - 1);
+  for (const ev of match.events) if (ev.type !== 'periodEnd' && ev.t > newT && ev.t >= p * L) ev.t = newT;
+  const happened = match.events.some((e) => e.type !== 'lineup' || e.t > 0);
+  if (p === 0 && s === 0 && !happened) {
+    match.clock.running = false;
+    match.clock.accum = 0;
+    match.started = false;
+  }
+  match.firstAt = null;
+  replan(match, team);
+}
+
+export function adjustClock(match, team, delta) {
+  setClock(match, team, elapsedInPeriod(match) + delta);
 }
 
 export function applyLineup(match, team, lu) {
@@ -487,7 +523,7 @@ export function breakProposal(match, team) {
 }
 
 export function summary(match, team) {
-  const T = match.finished ? matchEnd(team) : gameTime(match, team);
+  const T = gameTime(match, team);
   return { ...derive(match, team, T), T };
 }
 

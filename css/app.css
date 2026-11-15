@@ -23,6 +23,11 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; background: var(--bg); }
+/* app-gevoel op de iPhone: geen tekstselectie, vergrootglas of dubbeltik-zoom bij tikken en slepen */
+html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+input, textarea, select { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+button, a, .field, .benchrow, .tl, .scrubzone { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 body { font-family: Nunito, system-ui, -apple-system, sans-serif; color: var(--ink); font-size: 15px; -webkit-font-smoothing: antialiased; overscroll-behavior-y: none; }
 button, input, select { font-family: inherit; color: inherit; }
 button { cursor: pointer; }
@@ -89,7 +94,7 @@ select.input { appearance: none; -webkit-appearance: none; }
 .pill.keeper { background: var(--ink); color: #fff; display: inline-flex; align-items: center; gap: 6px; max-width: none; }
 .pill.keeper .k { font-size: 11px; font-weight: 900; padding: 1px 6px; border-radius: 6px; background: var(--orange); color: var(--ink); }
 .pill.orange { background: var(--orange); }
-.pill.dashed { background: #fff; border: 2px dashed var(--orange); }
+.pill.dashed { background: #fff; outline: 2px dashed var(--orange); outline-offset: 2px; }
 .pill.muted { opacity: 0.55; }
 
 /* neon: draaiende kleurrand met gloed = "dit vraagt nu je aandacht" */
@@ -100,11 +105,14 @@ select.input { appearance: none; -webkit-appearance: none; }
   0%, 100% { box-shadow: 0 0 8px 2px rgba(245,165,36,.8), 0 0 16px 4px rgba(245,165,36,.35); }
   50% { box-shadow: 0 0 8px 2px rgba(43,87,201,.75), 0 0 16px 4px rgba(127,166,255,.4); }
 }
-.neon { position: relative; display: inline-block; border-radius: 999px; animation: neonGlow 3.2s ease-in-out infinite; }
+.neon { position: relative; display: inline-flex; vertical-align: middle; border-radius: 999px; animation: neonGlow 3.2s ease-in-out infinite; }
 .neon > .glow { display: none; }
 .neon > .ring { position: absolute; inset: 0; border-radius: inherit; background: conic-gradient(from var(--spin), #F5A524, #FFE08A, #2B57C9, #7FA6FF, #F5A524); animation: spin 3.2s linear infinite; }
-.neon > .in { position: relative; display: block; margin: 3px; border-radius: inherit; }
+.neon > .in { position: relative; display: flex; margin: 3px; border-radius: inherit; }
 .neon.box { border-radius: 22px; display: block; }
+.neon.box > .in { display: block; }
+/* in het veld en op de bank neemt de rand geen extra ruimte in: de speler verschuift niet */
+.field .neon, .benchrow .neon { margin: -3px; }
 @media (prefers-reduced-motion: reduce) { .neon, .neon > .ring { animation: none; } .neon { box-shadow: 0 0 10px 2px rgba(245,165,36,.7); } }
 
 /* ---------- veld ---------- */
@@ -196,7 +204,7 @@ input.kracht::-moz-range-thumb { width: 26px; height: 26px; border-radius: 999px
 .pindots span.on { background: var(--ink); border-color: var(--ink); }
 
 /* melding en flits */
-.toast { position: fixed; left: 50%; transform: translateX(-50%); top: calc(10px + var(--safe-t)); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 14px; font-weight: 700; z-index: 60; display: flex; gap: 12px; align-items: center; max-width: calc(100% - 32px); }
+.toast { width: max-content; max-width: calc(100vw - 24px) !important; position: fixed; left: 50%; transform: translateX(-50%); top: calc(10px + var(--safe-t)); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 14px; font-weight: 700; z-index: 60; display: flex; gap: 12px; align-items: center; max-width: calc(100% - 32px); }
 .toast button { background: none; border: none; color: var(--orange); font-weight: 900; font-size: 14px; }
 @keyframes flash { 0%, 100% { opacity: 0; } 15%, 45% { opacity: 0.85; } 30% { opacity: 0.2; } }
 .flash { position: fixed; inset: 0; background: var(--orange); pointer-events: none; z-index: 70; animation: flash 1.6s ease-out 1 forwards; }
@@ -275,7 +283,7 @@ input.kracht::-moz-range-thumb { width: 26px; height: 26px; border-radius: 999px
 .drag-ghost { position: fixed; z-index: 100; pointer-events: none; translate: -50% -60%; scale: 1.15; box-shadow: 0 12px 28px rgba(17,24,39,.35) !important; }
 .drag-src { opacity: .35; }
 .drop-target .pill, .benchpill.drop-target { outline: 3px solid var(--orange); outline-offset: 2px; transform: scale(1.08); }
-.benchpill.wasout { border: 2px dashed var(--orange); }
+.benchpill.wasout { outline: 2px dashed var(--orange); outline-offset: 1px; }
 .chg { font-weight: 800; padding: 1px 6px; border-radius: 6px; }
 .chg.in { background: var(--blue-tint); color: var(--blue-ink); }
 .chg.out { background: var(--orange-tint); }
@@ -324,3 +332,32 @@ input.kracht::-moz-range-thumb { width: 26px; height: 26px; border-radius: 999px
 .goaltile.them { animation-delay: .06s; }
 .gt-name { font-size: 16px; font-weight: 900; text-align: center; }
 .gt-sub { font-size: 13px; font-weight: 700; color: var(--muted); }
+
+/* ================= v0.4: rustiger klok, grote stand, live-tab ================= */
+.clockstate { font-size: 12px; font-weight: 700; color: var(--muted); gap: 6px; }
+.rundot { width: 8px; height: 8px; }
+.stopdot { width: 8px; height: 8px; border-radius: 2px; background: var(--orange); }
+.clockbtn.running { background: #fff; border-color: var(--blue-2); }
+.clockbtn.stopped { background: var(--orange-soft); border-color: var(--orange); }
+.scorebtn, .scorebtn:not(:disabled) { background: none; border: none; padding: 0 2px 0 6px; justify-content: center; }
+.scorebtn .score { font-size: 58px; line-height: 1; letter-spacing: -0.04em; transition: color .4s ease; }
+.scorebtn .dash { color: var(--line-2); margin: 0 1px; }
+.scorebtn.ahead .score { color: #1f8a3a; }
+.scorebtn.behind .score { color: #E08A00; }
+.scorebtn.level .score { color: var(--ink); }
+.timeadj { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; width: 100%; }
+.timeadj .btn { padding: 0; font-family: Inter, sans-serif; font-variant-numeric: tabular-nums; font-size: 15px; }
+
+/* neon om de oranje live-kaart: donkerblauw/wit, zodat hij opvalt op oranje */
+@keyframes neonGlowCool {
+  0%, 100% { box-shadow: 0 0 8px 2px rgba(31,60,136,.55), 0 0 16px 4px rgba(43,87,201,.3); }
+  50% { box-shadow: 0 0 8px 2px rgba(17,24,39,.45), 0 0 16px 4px rgba(127,166,255,.45); }
+}
+.livecard .neon { animation: neonGlowCool 3.2s ease-in-out infinite; }
+.livecard .neon > .ring { background: conic-gradient(from var(--spin), #1F3C88, #FFFFFF, #2B57C9, #111827, #7FA6FF, #1F3C88); }
+
+/* wedstrijd-tab pulseert zacht als er een wedstrijd live is */
+@keyframes tabGlow { 0%, 100% { background-color: rgba(245,165,36,0); } 50% { background-color: rgba(245,165,36,.22); } }
+@keyframes dotPulse { 0% { box-shadow: 0 0 0 0 rgba(245,165,36,.7); } 70% { box-shadow: 0 0 0 7px rgba(245,165,36,0); } 100% { box-shadow: 0 0 0 0 rgba(245,165,36,0); } }
+.tabbar a.live { animation: tabGlow 2.4s ease-in-out infinite; color: var(--ink); font-weight: 800; }
+.tabbar a.live::after { content: ''; position: absolute; top: 8px; left: calc(50% + 10px); width: 9px; height: 9px; border-radius: 999px; background: var(--orange); animation: dotPulse 1.6s infinite; }

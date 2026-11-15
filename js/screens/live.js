@@ -139,6 +139,7 @@ function LiveInner({ match, team }) {
       <span class="h2 grow" style="text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${match.opponent ? 'tegen ' + match.opponent : team.name}</span>
       <button type="button" class="iconbtn" aria-label="Laatste actie ongedaan maken" disabled=${!canUndo} onClick=${undoAction.run}><${Icon} name="undo" size=${20} /></button>
       <a class="link" href="#/plan">Plan</a>
+      <button type="button" class="iconbtn" aria-label="Wedstrijdmenu: tijd, afsluiten" onClick=${() => setSheet({ type: 'menu' })}><${Icon} name="more" size=${22} /></button>
     </div>
 
     <section class="card" style="gap:8px">
@@ -146,13 +147,13 @@ function LiveInner({ match, team }) {
         <button type="button" class=${'clockbtn ' + (match.finished ? 'done' : running ? 'running' : 'stopped')} onClick=${toggleClock}
           aria-label=${running ? 'Klok loopt, tik om te pauzeren' : 'Klok staat stil, tik om te starten'}>
           <span class="num clock" style=${el > L ? 'color:#B26A00' : ''}>${M.fmt(el)}</span>
-          <span class="clockstate">${match.finished ? 'Afgelopen'
-            : running ? html`<span class="rundot"></span>Loopt · tik voor pauze`
-            : html`<${Icon} name="play" size=${14} />${match.started ? 'Stil · tik om te starten' : 'Tik bij de aftrap'}`}</span>
+          <span class="clockstate">${match.finished ? 'afgelopen'
+            : running ? html`<span class="rundot"></span>loopt`
+            : html`<span class="stopdot"></span>${match.started ? 'stil' : 'start bij de aftrap'}`}</span>
         </button>
-        <button type="button" class="scorebtn" disabled=${!match.started || match.finished} onClick=${() => setSheet({ type: 'goal' })} aria-label=${`Stand ${d.score.us} tegen ${d.score.them}, tik bij een doelpunt`}>
-          <span class="num score bump" key=${d.score.us + '-' + d.score.them}>${d.score.us}–${d.score.them}</span>
-          <span class="clockstate">${match.started && !match.finished ? 'tik bij goal' : 'stand'}</span>
+        <button type="button" class=${'scorebtn ' + (d.score.us > d.score.them ? 'ahead' : d.score.us < d.score.them ? 'behind' : 'level')}
+          disabled=${!match.started || match.finished} onClick=${() => setSheet({ type: 'goal' })} aria-label=${`Stand ${d.score.us} tegen ${d.score.them}, tik bij een doelpunt`}>
+          <span class="num score bump" key=${d.score.us + '-' + d.score.them}>${d.score.us}<span class="dash">–</span>${d.score.them}</span>
         </button>
       </div>
       <div class="between">
@@ -199,6 +200,12 @@ function LiveInner({ match, team }) {
     ${sheet && sheet.type === 'goal' && html`<${GoalSheet} match=${match} team=${team} d=${d} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'break' && html`<${BreakSheet} match=${match} team=${team} d=${d} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'join' && html`<${JoinSheet} match=${match} team=${team} onClose=${() => setSheet(null)} />`}
+    ${sheet && sheet.type === 'menu' && html`<${MatchMenu} match=${match} team=${team} onClose=${() => setSheet(null)}
+      onEnd=${() => setSheet({ type: 'end' })} onFinish=${() => setSheet({ type: 'finish' })} onDelete=${() => setSheet({ type: 'delete' })} />`}
+    ${sheet && sheet.type === 'finish' && html`<${Confirm} title="Wedstrijd nu afsluiten?" text="Bijvoorbeeld als hij eerder stopt. De tijd die niet gespeeld is telt niet mee. Daarna zie je het overzicht."
+      yes="Afsluiten" onYes=${() => { mutate((m, t) => M.finishNow(m, t)); setTimeout(() => go('/afloop/' + match.id), 0); }} onClose=${() => setSheet(null)} />`}
+    ${sheet && sheet.type === 'delete' && html`<${Confirm} title="Wedstrijd stoppen en weggooien?" text="Alles van deze wedstrijd verdwijnt (tijd, wissels, doelpunten). Handig na een test of een verkeerde start." yes="Weggooien" danger
+      onYes=${() => { update((dd) => { dd.matches = dd.matches.filter((x) => x.id !== match.id); if (dd.currentMatchId === match.id) dd.currentMatchId = null; }); toast('Wedstrijd weggegooid'); setTimeout(() => go('/'), 0); }} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'end' && html`<${Confirm} title=${'Einde ' + M.periodLabel(team, match.clock.period) + '?'}
       text=${match.clock.period + 1 >= team.periods ? 'Daarna zie je het overzicht van de wedstrijd.' : 'De klok stopt. Daarna zet je de opstelling voor de volgende ' + M.periodWord(team) + ' klaar.'}
       yes=${match.clock.period + 1 >= team.periods ? 'Wedstrijd afsluiten' : 'Einde ' + M.periodLabel(team, match.clock.period)}
@@ -391,6 +398,31 @@ function JoinSheet({ match, team, onClose }) {
       ? html`<div class="wrap">${missing.map((p) => html`<button type="button" class="chip big" onClick=${() => { mutate((m, t) => M.joinPlayer(m, t, p.id)); toast((p.nick || p.name) + ' zit op de bank', undoAction); onClose(); }}>${p.nick || p.name}</button>`)}</div>
         <span class="small">Komt op de bank en wordt in het schema opgenomen. Telt niet mee voor de gelijke verdeling.</span>`
       : html`<p class="sub" style="margin:0">Iedereen uit de selectie is er al.</p>`}
+    <button type="button" class="btn plain block" onClick=${onClose}>Sluiten</button>
+  </${Sheet}>`;
+}
+
+// ---------- wedstrijdmenu: tijd aanpassen, afsluiten, weggooien ----------
+function MatchMenu({ match, team, onClose, onEnd, onFinish, onDelete }) {
+  const now = useNow(500);
+  const el = M.elapsedInPeriod(match, now);
+  const adj = (delta) => mutate((m, t) => M.adjustClock(m, t, delta));
+  return html`<${Sheet} onClose=${onClose} label="Wedstrijdmenu">
+    <span class="h2" style="font-size:22px">Wedstrijd</span>
+    <div class="card" style="box-shadow:none;border:1px solid var(--line);align-items:center;gap:10px">
+      <span class="label">Tijd ${M.periodLabel(team, match.clock.period)}</span>
+      <span class="num" style="font-size:44px;line-height:1">${M.fmt(el)}</span>
+      <div class="timeadj">
+        <button type="button" class="btn plain" onClick=${() => adj(-60)}>−1:00</button>
+        <button type="button" class="btn plain" onClick=${() => adj(-10)}>−0:10</button>
+        <button type="button" class="btn plain" onClick=${() => adj(10)}>+0:10</button>
+        <button type="button" class="btn plain" onClick=${() => adj(60)}>+1:00</button>
+      </div>
+      <button type="button" class="link" onClick=${() => { mutate((m, t) => M.setClock(m, t, 0)); toast('Klok op 0:00'); }}>Klok op 0:00 zetten</button>
+    </div>
+    ${match.started && !match.finished && html`<button type="button" class="choice" onClick=${onEnd}><span style="font-weight:800;font-size:16px">Einde ${M.periodLabel(team, match.clock.period)}</span></button>`}
+    ${!match.finished && html`<button type="button" class="choice" onClick=${onFinish}><span class="col" style="gap:1px"><span style="font-weight:800;font-size:16px">Wedstrijd nu afsluiten</span><span class="sub">Bewaren en naar het overzicht</span></span></button>`}
+    <button type="button" class="choice" style="border-color:#F0C2B4" onClick=${onDelete}><span class="col" style="gap:1px"><span style="font-weight:800;font-size:16px;color:var(--danger)">Wedstrijd stoppen en weggooien</span><span class="sub">Niets bewaren</span></span></button>
     <button type="button" class="btn plain block" onClick=${onClose}>Sluiten</button>
   </${Sheet}>`;
 }
