@@ -1,6 +1,6 @@
 // Service worker: de app werkt ook zonder bereik langs het veld.
 // Verhoog VERSION bij elke nieuwe versie, dan halen telefoons de nieuwe bestanden op.
-const VERSION = 'coach-v0.2.0';
+const VERSION = 'coach-v0.3.0';
 const FILES = [
   './',
   'index.html',
@@ -12,6 +12,7 @@ const FILES = [
   'js/planner.js',
   'js/match.js',
   'js/ui.js',
+  'js/planview.js',
   'js/screens/home.js',
   'js/screens/live.js',
   'js/screens/plan.js',

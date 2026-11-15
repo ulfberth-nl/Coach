@@ -86,3 +86,21 @@ M.swapInStartLineup(m3, team, a, b);
 assert.ok(b in m3.events[0].pos && m3.events[0].bench.includes(a));
 Date.now = realNow;
 console.log('Alle wedstrijdtests geslaagd');
+
+// een onverwachte vroege wissel mag het plan niet laten ontploffen
+{
+  let now = 5_000_000;
+  const saved = Date.now;
+  Date.now = () => now;
+  const m = M.createMatch(team, { opponent: 'Z', present: ids, keeperId, priority: 'eerlijk' });
+  const base = m.baseline;
+  M.startClock(m);
+  now += 60_000;
+  const d = M.derive(m, team, M.gameTime(m, team));
+  M.doSwap(m, team, Object.keys(d.state.pos)[0], d.state.bench[0], null);
+  const after = m.plan.steps.filter((s) => s.type === 'swap').length + 1;
+  console.log(`plan: ${base} wissels; na een extra wissel in minuut 1: ${after} (ruimer: ${m.plan.relaxed})`);
+  assert.ok(after <= base + 3, 'niet ineens veel meer wissels');
+  Date.now = saved;
+}
+console.log('Afwijkingstest geslaagd');

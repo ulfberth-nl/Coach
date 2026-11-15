@@ -20,6 +20,7 @@ export function defaultRules() {
     newLineupAtBreak: true,
     maxBenchOn: true,
     maxBench: 10,
+    turnsPerPeriod: 0,
     minInterval: 2
   };
 }
@@ -44,6 +45,7 @@ export function newTeam(name = 'JO9-Wit', withSamples = true) {
   return {
     id: uid(),
     name,
+    short: withSamples ? 'SB' : '',
     type: 'veld',
     keeper: true,
     formation: '2-1-2',

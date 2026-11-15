@@ -1,9 +1,30 @@
 import { html, useState } from '../../vendor/preact-htm.js';
 import { update, activeTeam, currentMatch, newTeam, exportData, importData } from '../store.js';
-import { replan } from '../match.js';
-import { Seg, Switch, Setting, Stepper, Icon, Confirm, toast, STANDS } from '../ui.js';
+import { replan, periodWord } from '../match.js';
+import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, toast, STANDS } from '../ui.js';
 
-export const APP_VERSION = '0.2.0';
+export const APP_VERSION = '0.3.0';
+
+// logo verkleinen tot 256 px zodat het licht blijft in de opslag
+function readLogo(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const size = 256;
+      const c = document.createElement('canvas');
+      c.width = size; c.height = size;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, size, size);
+      const s = Math.min(img.width, img.height);
+      ctx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
 
 export function Team({ state }) {
   const team = activeTeam(state);
@@ -11,6 +32,7 @@ export function Team({ state }) {
   const running = currentMatch(state);
   const locked = !!(running && !running.finished && running.teamId === team.id);
   const [confirm, setConfirm] = useState(null);
+  const pw = periodWord(team);
 
   const set = (fn) => update((draft) => {
     const t = activeTeam(draft);
@@ -46,6 +68,12 @@ export function Team({ state }) {
     });
     e.target.value = '';
   };
+  const pickLogo = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    readLogo(file).then((url) => { set((t) => { t.logo = url; }); toast('Logo ingesteld'); }).catch(() => toast('Dit plaatje kan ik niet lezen'));
+    e.target.value = '';
+  };
 
   return html`<main class="screen with-tabs">
     <div class="topbar">
@@ -60,12 +88,22 @@ export function Team({ state }) {
 
     <section class="card">
       <span class="h2">Team</span>
-      <div class="col">
-        <label class="label" for="tname">Naam</label>
-        <input id="tname" class="input" value=${team.name} maxLength="30" onChange=${(e) => set((t) => { t.name = e.target.value.trim() || t.name; })} />
+      <div class="row" style="gap:14px">
+        <${TeamBadge} team=${team} size=${64} />
+        <div class="col grow">
+          <label class="label" for="tname">Naam</label>
+          <input id="tname" class="input" value=${team.name} maxLength="30" onChange=${(e) => set((t) => { t.name = e.target.value.trim() || t.name; })} />
+        </div>
       </div>
+      <div class="row">
+        <label class="btn plain grow" style="cursor:pointer">${team.logo ? 'Ander logo' : 'Logo kiezen'}<input type="file" accept="image/*" class="sr" onChange=${pickLogo} /></label>
+        ${team.logo
+          ? html`<button type="button" class="btn plain" onClick=${() => set((t) => { delete t.logo; })}>Weghalen</button>`
+          : html`<input class="input" style="width:96px" maxLength="4" aria-label="Afkorting op het logo" placeholder="SB" value=${team.short || ''} onChange=${(e) => set((t) => { t.short = e.target.value.trim(); })} />`}
+      </div>
+      <span class="small">Het logo zie je als je een doelpunt invoert. Het blijft op deze telefoon.</span>
       <a class="setting" href="#/spelers" style="text-decoration:none;color:inherit">
-        <div class="col" style="gap:1px"><span class="t">Spelers en beoordeling</span><span class="small">${team.players.filter((p) => p.active !== false).length} spelers · achter pincode</span></div>
+        <div class="col" style="gap:1px"><span class="t">Spelers en beoordeling</span><span class="small">${team.players.filter((p) => p.active !== false).length} spelers · dominante rol, kracht · achter pincode</span></div>
         <span class="row"><${Icon} name="lock" size=${18} /><${Icon} name="chev" size=${18} /></span>
       </a>
     </section>
@@ -89,7 +127,24 @@ export function Team({ state }) {
     </section>
 
     <section class="card">
-      <span class="h2">Rekenregels wissels</span>
+      <span class="h2">Wisselen</span>
+      <span class="label">Wissels per kind</span>
+      <${Seg} label="Wissels per kind" value=${r.turnsPerPeriod || 0} onChange=${(v) => setRule('turnsPerPeriod', v)} options=${[[0, 'App kiest'], [1, '1× per ' + pw], [2, '2× per ' + pw], [3, '3×']]} />
+      <span class="small">${r.turnsPerPeriod ? `Ieder kind gaat ${r.turnsPerPeriod}× per ${pw} naar de bank (${r.turnsPerPeriod * team.periods}× per wedstrijd). De app kiest de momenten.` : 'De app kiest het kleinste aantal wissels dat binnen de regels hieronder past.'}</span>
+      ${!r.turnsPerPeriod && html`<${Setting} title="Iedereen even vaak gewisseld"><${Switch} label="Iedereen even vaak gewisseld" on=${r.evenOften} onChange=${(v) => setRule('evenOften', v)} /></${Setting}>`}
+      <${Setting} title="Gelijke speeltijd"><${Switch} label="Gelijke speeltijd" on=${r.equalTime} onChange=${(v) => setRule('equalTime', v)} /></${Setting}>
+      ${r.equalTime && html`<${Setting} title="Marge speeltijd" sub="Maximaal verschil tussen kinderen"><${Stepper} label="Marge" value=${r.marge} min=${1} max=${15} suffix=" min" onChange=${(v) => setRule('marge', v)} /></${Setting}>`}
+      <${Setting} title="Niet te lang op de bank" sub="Niemand zit langer achter elkaar op de bank dan"><${Switch} label="Niet te lang op de bank" on=${!!r.maxBenchOn} onChange=${(v) => setRule('maxBenchOn', v)} /></${Setting}>
+      ${r.maxBenchOn && html`<${Setting} title="Maximaal op de bank"><${Stepper} label="Maximaal op de bank" value=${r.maxBench || 10} min=${3} max=${30} suffix=" min" onChange=${(v) => setRule('maxBench', v)} /></${Setting}>`}
+      <${Setting} title="Minimaal tussen wissels"><${Stepper} label="Minimaal tussen wissels" value=${r.minInterval || 2} min=${1} max=${8} suffix=" min" onChange=${(v) => setRule('minInterval', v)} /></${Setting}>
+      <${Setting} title="Nieuwe opstelling na de rust" sub="Gratis moment om meerdere kinderen te wisselen"><${Switch} label="Nieuwe opstelling na de rust" on=${r.newLineupAtBreak} onChange=${(v) => setRule('newLineupAtBreak', v)} /></${Setting}>
+      <span class="label">Standaard voorrang</span>
+      <${Seg} label="Standaard voorrang" value=${r.priority} onChange=${(v) => setRule('priority', v)} options=${[['eerlijk', 'Eerlijkheid'], ['bezetting', 'Beste bezetting']]} />
+      <span class="small">Bij het klaarzetten kun je per wedstrijd een andere keuze maken.</span>
+    </section>
+
+    <section class="card">
+      <span class="h2">Opstelling en stand</span>
       <${Setting} title="Opstelling volgt de stand" sub="Past de stand automatisch aan bij een goal"><${Switch} label="Opstelling volgt de stand" on=${r.autoStand} onChange=${(v) => setRule('autoStand', v)} /></${Setting}>
       ${r.autoStand && html`
         <span class="label">Bij achterstand</span>
@@ -102,18 +157,8 @@ export function Team({ state }) {
     </section>
 
     <section class="card">
-      <span class="h2">Eerlijkheid</span>
-      <${Setting} title="Iedereen even vaak gewisseld"><${Switch} label="Iedereen even vaak gewisseld" on=${r.evenOften} onChange=${(v) => setRule('evenOften', v)} /></${Setting}>
-      <${Setting} title="Gelijke speeltijd"><${Switch} label="Gelijke speeltijd" on=${r.equalTime} onChange=${(v) => setRule('equalTime', v)} /></${Setting}>
-      ${r.equalTime && html`<${Setting} title="Marge speeltijd" sub="Maximaal verschil tussen kinderen"><${Stepper} label="Marge" value=${r.marge} min=${1} max=${15} suffix=" min" onChange=${(v) => setRule('marge', v)} /></${Setting}>`}
-      <${Setting} title="Niet te lang op de bank" sub="Niemand zit langer achter elkaar op de bank dan"><${Switch} label="Niet te lang op de bank" on=${!!r.maxBenchOn} onChange=${(v) => setRule('maxBenchOn', v)} /></${Setting}>
-      ${r.maxBenchOn && html`<${Setting} title="Maximaal op de bank"><${Stepper} label="Maximaal op de bank" value=${r.maxBench || 10} min=${3} max=${30} suffix=" min" onChange=${(v) => setRule('maxBench', v)} /></${Setting}>`}
-      <${Setting} title="Minimaal tussen wissels"><${Stepper} label="Minimaal tussen wissels" value=${r.minInterval || 2} min=${1} max=${8} suffix=" min" onChange=${(v) => setRule('minInterval', v)} /></${Setting}>
-      <${Setting} title="Nieuwe opstelling na de rust" sub="Gratis moment om meerdere kinderen te wisselen"><${Switch} label="Nieuwe opstelling na de rust" on=${r.newLineupAtBreak} onChange=${(v) => setRule('newLineupAtBreak', v)} /></${Setting}>
-      <${Setting} title="Keepertijd telt mee" sub="Uit: keepertijd telt niet als speeltijd in de overzichten"><${Switch} label="Keepertijd telt mee" on=${r.keeperCounts} onChange=${(v) => setRule('keeperCounts', v)} /></${Setting}>
-      <span class="label">Standaard voorrang</span>
-      <${Seg} label="Standaard voorrang" value=${r.priority} onChange=${(v) => setRule('priority', v)} options=${[['eerlijk', 'Eerlijkheid'], ['bezetting', 'Beste bezetting']]} />
-      <span class="small">Bij het klaarzetten kun je per wedstrijd een andere keuze maken.</span>
+      <span class="h2">Overzichten</span>
+      <${Setting} title="Keepertijd telt mee" sub="Uit: keepertijd telt niet als speeltijd"><${Switch} label="Keepertijd telt mee" on=${r.keeperCounts} onChange=${(v) => setRule('keeperCounts', v)} /></${Setting}>
     </section>
 
     <section class="card">

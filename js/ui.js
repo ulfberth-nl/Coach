@@ -1,5 +1,5 @@
 // Gedeelde bouwstenen voor de schermen.
-import { html, useEffect, useState } from '../vendor/preact-htm.js';
+import { html, useEffect, useRef, useState } from '../vendor/preact-htm.js';
 
 export const POS_COLORS = { K: 'var(--pos-K)', A: 'var(--pos-A)', M: 'var(--pos-M)', V: 'var(--pos-V)' };
 export const POS_NAMES = { K: 'Keeper', A: 'Achter', M: 'Midden', V: 'Voor' };
@@ -225,3 +225,87 @@ export function PosBar({ parts }) {
 }
 
 export const KRACHT_BG = 'linear-gradient(90deg, #1F3C88, #2B57C9 72%, #F5A524)';
+
+// ---------- slepen om te ruilen (vinger of muis) ----------
+// Elementen met data-pid binnen de container kunnen op elkaar worden gesleept.
+export function useDragSwap(ref, enabled, onSwap) {
+  const cb = useRef(onSwap);
+  cb.current = onSwap;
+  useEffect(() => {
+    const root = ref.current;
+    if (!root || !enabled) return undefined;
+    root.classList.add('draggable');
+    let st = null;
+    const down = (e) => {
+      const el = e.target.closest('[data-pid]');
+      if (!el || !el.dataset.pid || !root.contains(el)) return;
+      st = { id: el.dataset.pid, x: e.clientX, y: e.clientY, el, ghost: null, over: null };
+    };
+    const move = (e) => {
+      if (!st) return;
+      if (!st.ghost) {
+        if (Math.hypot(e.clientX - st.x, e.clientY - st.y) < 8) return;
+        const src = st.el.querySelector('.pill') || st.el;
+        const g = src.cloneNode(true);
+        g.classList.add('drag-ghost');
+        document.body.appendChild(g);
+        st.ghost = g;
+        st.el.classList.add('drag-src');
+      }
+      e.preventDefault();
+      st.ghost.style.left = e.clientX + 'px';
+      st.ghost.style.top = e.clientY + 'px';
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      const t = under && under.closest('[data-pid]');
+      const over = t && root.contains(t) && t.dataset.pid && t.dataset.pid !== st.id ? t : null;
+      if (over !== st.over) {
+        if (st.over) st.over.classList.remove('drop-target');
+        if (over) over.classList.add('drop-target');
+        st.over = over;
+      }
+    };
+    const up = () => {
+      if (!st) return;
+      if (st.ghost) {
+        st.ghost.remove();
+        st.el.classList.remove('drag-src');
+        if (st.over) { st.over.classList.remove('drop-target'); cb.current(st.id, st.over.dataset.pid); }
+        root.dataset.justDragged = '1';
+        setTimeout(() => { delete root.dataset.justDragged; }, 60);
+      }
+      st = null;
+    };
+    root.addEventListener('pointerdown', down);
+    window.addEventListener('pointermove', move, { passive: false });
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    return () => {
+      root.classList.remove('draggable');
+      root.removeEventListener('pointerdown', down);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
+  }, [enabled]);
+}
+export const justDragged = (ref) => !!(ref.current && ref.current.dataset.justDragged);
+
+// ---------- logo's ----------
+export function TeamBadge({ team, size = 64 }) {
+  if (team.logo) return html`<img src=${team.logo} alt=${team.name} width=${size} height=${size} style=${`width:${size}px;height:${size}px;border-radius:999px;object-fit:cover;background:#fff`} />`;
+  const short = (team.short || team.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 2)).slice(0, 4).toUpperCase();
+  return html`<svg width=${size} height=${size} viewBox="0 0 64 64" role="img" aria-label=${team.name}>
+    <circle cx="32" cy="32" r="31" fill="#1F3C88" />
+    <circle cx="32" cy="32" r="25" fill="none" stroke="#F5A524" stroke-width="5" />
+    <text x="32" y="38" text-anchor="middle" font-family="Nunito, sans-serif" font-weight="900" font-size=${short.length > 2 ? 15 : 19} fill="#fff">${short}</text>
+  </svg>`;
+}
+
+export function OppBadge({ name, size = 64 }) {
+  const short = (name || '').replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || '?';
+  return html`<svg width=${size} height=${size} viewBox="0 0 64 64" role="img" aria-label=${name || 'Tegenstander'}>
+    <path d="M32 3 L57 12 V30 C57 45 46 56 32 61 C18 56 7 45 7 30 V12 Z" fill="#6B7280" />
+    <path d="M32 9 L51 16 V30 C51 42 43 51 32 55 C21 51 13 42 13 30 V16 Z" fill="#9CA3AF" />
+    <text x="32" y="39" text-anchor="middle" font-family="Nunito, sans-serif" font-weight="900" font-size="18" fill="#fff">${short}</text>
+  </svg>`;
+}

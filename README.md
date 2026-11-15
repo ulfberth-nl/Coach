@@ -19,8 +19,17 @@ Dit is **stap 1**: alles werkt op één telefoon en wordt alleen op die telefoon
 
 Tip: zet tijdens de wedstrijd het geluid aan. Bij een wisselmoment piept de app en knippert het scherm oranje (trillen kan niet vanuit een webapp op een iPhone). Het scherm blijft aan zolang de wedstrijd loopt.
 
+## Tijdens de wedstrijd
+
+- **Klok:** tik op de klok om te starten of te pauzeren. Blauw met een kloppende stip = loopt, oranje en knipperend = staat stil.
+- **Doelpunt:** tik op de stand en kies het eigen logo (daarna wie scoorde) of het logo van de tegenstander.
+- **Wisselen:** tik een speler voor het wisselvoorstel, of sleep: veld ↔ bank = direct wisselen, veld ↔ veld = plekken ruilen. De app rekent vanaf die situatie verder.
+- **Ongedaan maken:** de pijl bovenin, of "Ongedaan" in de melding.
+
 ## Hoe de app wisselt
 
+- **Wissels per kind:** in te stellen bij Team → Wisselen (bijv. 1× per helft), of de app kiest zelf.
+- **Dominante rol:** per speler in te stellen (achter pincode); vast of "mag afwijken".
 - **Eén wissel per moment.** De app kiest zelf hoeveel momenten nodig zijn: het kleinste aantal waarbij iedereen even vaak gewisseld wordt, de speeltijd binnen de marge blijft en niemand te lang achter elkaar op de bank zit.
 - **Wie erin:** wie het minst gespeeld heeft. **Wie eruit:** wie het minst vaak gewisseld is en het langst staat; bij gelijke keuze iemand met vergelijkbare speelkracht, zodat de linies in balans blijven.
 - **Plek op het veld:** de nieuwe speler neemt de plek over. Als de balans (eerst speelkracht, dan voorkeurspositie) daar duidelijk beter van wordt, schuift één speler door.

@@ -76,3 +76,21 @@ console.log('\nAlle tests geslaagd');
   console.log('dominant: speler 2 altijd voor; speler 1 achter in', onA.filter((l) => l === 'A').length, 'van', onA.length, 'momenten; ok =', r.ok);
 }
 console.log('Dominante-roltest geslaagd');
+
+// vast aantal wissels per kind (bijv. 1× per helft = 2 per wedstrijd)
+for (const [name, ids, lines, k] of [['6-tal 8 kids', [1, 2, 3, 4, 5, 7, 8, 9], { V: 2, M: 1, A: 2 }, 1], ['6-tal 8 kids', [1, 2, 3, 4, 5, 7, 8, 9], { V: 2, M: 1, A: 2 }, 2], ['11-tal 13 kids', [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14], { V: 3, M: 3, A: 4 }, 1]]) {
+  const ctx = { players, lines, periodLen: 1500, periods: 2, rules: { ...rules, maxBenchOn: true, maxBench: 10, turnsTarget: k * 2, minInterval: k > 1 ? 1 : 2 }, stand: 'balans' };
+  const start = initialState(ids.map(String), ctx);
+  const r = planRest(start, ctx, 0);
+  console.log(`${name}, ${k}× per helft: ${r.steps.filter((s) => s.type === 'swap').length} wissels, ${r.fair.minTurns}–${r.fair.maxTurns}× gewisseld, ${fmt(r.fair.minPlayed)}–${fmt(r.fair.maxPlayed)}, ok=${r.ok}`);
+  assert.equal(r.fair.minTurns, k * 2);
+  assert.equal(r.fair.maxTurns, k * 2);
+}
+{
+  // past niet: 2× per helft met minimaal 2 min tussen wissels
+  const ctx = { players, lines: { V: 2, M: 1, A: 2 }, periodLen: 1500, periods: 2, rules: { ...rules, turnsTarget: 4, minInterval: 2 }, stand: 'balans' };
+  const r = planRest(initialState(['1', '2', '3', '4', '5', '7', '8', '9'], ctx), ctx, 0);
+  assert.equal(r.ok, false);
+  assert.ok(r.why.indexOf('turns') !== -1);
+}
+console.log('Vast-aantal-test geslaagd');

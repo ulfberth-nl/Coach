@@ -139,6 +139,13 @@ export function derive(match, team, T) {
       delete st.disabled[ev.playerId];
     } else if (ev.type === 'periodEnd') {
       last = Math.max(last, (ev.period + 1) * L);
+    } else if (ev.type === 'move') {
+      const la = st.pos[ev.a], lb = st.pos[ev.b];
+      if (la && lb) {
+        st.pos = { ...st.pos, [ev.a]: lb, [ev.b]: la };
+        const sa = slotOf(st.slots, ev.a), sb = slotOf(st.slots, ev.b);
+        st.slots = { ...st.slots, [sa]: ev.b, [sb]: ev.a };
+      }
     } else if (ev.type === 'join') {
       if (!(ev.playerId in st.played)) init(ev.playerId);
       if (st.bench.indexOf(ev.playerId) === -1 && !(ev.playerId in st.pos)) st.bench.push(ev.playerId);
@@ -161,13 +168,19 @@ export function currentStand(match, team, score) {
   return d < 0 ? r.standAchter : d > 0 ? r.standVoor : r.standGelijk;
 }
 
+// Aantal keer gewisseld per kind voor de hele wedstrijd (null = de app kiest zelf).
+export function turnsTarget(team) {
+  const k = team.rules.turnsPerPeriod;
+  return k ? k * team.periods : null;
+}
+
 export function makeCtx(match, team, stand) {
   return {
     players: playersMap(team),
     lines: team.lines,
     periodLen: periodLen(team),
     periods: team.periods,
-    rules: { ...team.rules, priority: match.priority || team.rules.priority },
+    rules: { ...team.rules, priority: match.priority || team.rules.priority, turnsTarget: turnsTarget(team) },
     stand
   };
 }
@@ -201,12 +214,26 @@ export function replan(match, team, ms = Date.now()) {
   ctx.lineupPending = lineupPending(match, team);
   ctx.firstAt = match.firstAt && match.firstAt > anchor ? match.firstAt : null;
   ctx.excludeFair = d.late;
-  const r = planRest(st, ctx, anchor);
+  let r = planRest(st, ctx, anchor);
+  const swapsOf = (x) => x.steps.filter((s) => s.type === 'swap').length;
+  if (!match.started) {
+    match.baseline = swapsOf(r);
+  } else if (match.baseline != null) {
+    // na een afwijking (extra of vroege wissel) niet ineens veel meer wissels: dan mag het verschil 1 beurt zijn
+    const end = matchEnd(team);
+    const expected = Math.ceil(match.baseline * (end - anchor) / end) + 1;
+    if (!r.ok || swapsOf(r) > expected + 1) {
+      const r2 = planRest(st, { ...ctx, rules: { ...ctx.rules, turnsSlack: 1 } }, anchor);
+      if (r2.ok && swapsOf(r2) < swapsOf(r)) r = { ...r2, relaxed: true };
+    }
+  }
   match.plan = {
     at: anchor,
     stand,
     steps: r.steps,
     ok: r.ok,
+    why: r.why || [],
+    relaxed: !!r.relaxed,
     fair: r.fair,
     finalPlayed: r.final.played,
     finalTurns: r.final.turns
@@ -327,6 +354,12 @@ export function doSwap(match, team, out, inn, shift) {
   replan(match, team);
 }
 
+// Twee veldspelers ruilen van plek tijdens de wedstrijd.
+export function movePlayers(match, team, a, b) {
+  match.events.push({ id: uid(), type: 'move', t: gameTime(match, team), a, b });
+  replan(match, team);
+}
+
 export function delay(match, team, sec = 60) {
   match.firstAt = gameTime(match, team) + sec;
   replan(match, team);
@@ -365,7 +398,7 @@ export function setScorer(match, eventId, scorer) {
   if (ev) ev.scorer = scorer || null;
 }
 
-const UNDOABLE = ['swap', 'goal', 'oppgoal', 'disable', 'enable', 'join'];
+const UNDOABLE = ['swap', 'goal', 'oppgoal', 'disable', 'enable', 'join', 'move'];
 
 export function lastUndoable(match) {
   for (let i = match.events.length - 1; i >= 0; i--) {
@@ -476,6 +509,11 @@ export function timeline(match, team) {
       cards.push({ kind: 'swap', t: ev.t, out: ev.out, in: ev.in, shift: ev.shift, slots, pos, bench, past: true });
     } else if (ev.type === 'join' && bench) {
       bench = bench.concat([ev.playerId]);
+    } else if (ev.type === 'move' && pos && pos[ev.a] && pos[ev.b]) {
+      pos = { ...pos, [ev.a]: pos[ev.b], [ev.b]: pos[ev.a] };
+      const sa = slotOf(slots, ev.a), sb = slotOf(slots, ev.b);
+      slots = { ...slots, [sa]: ev.b, [sb]: ev.a };
+      if (cards.length) cards[cards.length - 1] = { ...cards[cards.length - 1], slots, pos };
     }
   }
   const nowIndex = cards.length - 1;
