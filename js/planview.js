@@ -85,7 +85,7 @@ function useScrub(ref, fns) {
   }, []);
 }
 
-export function PlanView({ match, team, editable = false, onSwap, initialIndex = 0, nowIndex = -1 }) {
+export function PlanView({ match, team, editable = false, onSwap, initialIndex = 0, nowIndex = -1, compact = false }) {
   const nick = (id) => M.nickOf(team, id);
   const END = M.matchEnd(team);
   const L = M.periodLen(team);
@@ -144,24 +144,27 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   const segs = cards.map((cc, k) => ({ a: cc.t, b: k + 1 < cards.length ? cards[k + 1].t : END, pos: cc.pos }));
   const status = i < nowIndex ? 'Gedaan' : i === nowIndex ? 'Nu' : nowIndex >= 0 ? 'Gepland' : null;
 
-  return html`<div class="planview col" style="gap:10px">
+  return html`<div class=${'planview col' + (compact ? ' compact' : '')} style="gap:8px">
     <div class="tl" ref=${track} aria-label="Tijdlijn">
       <span class="tl-line"></span>
       ${Array.from({ length: team.periods - 1 }, (_, p) => html`<span class="tl-break" style=${`left:${((p + 1) * L / END) * 100}%`}><b>${team.periods === 2 ? 'rust' : 'pauze'}</b></span>`)}
       ${cards.map((cc, k) => html`<span class=${'tl-dot' + (k < i ? ' past' : k === i ? ' cur' : '') + (cc.kind === 'lineup' ? ' lu' : '')} style=${`left:${(cc.t / END) * 100}%`}></span>`)}
       <span class="tl-head" style=${`left:${pct}%`}><span class="tl-time" style=${`transform:translateX(-${pct}%)`}>${label(t)}</span></span>
     </div>
-    <div class="between">
+    ${!compact && html`<div class="between">
       <button type="button" class="iconbtn" aria-label="Vorige" onClick=${() => setF(i - 1, true)} disabled=${i === 0}><span style="transform:rotate(180deg);display:inline-flex"><${Icon} name="chev" /></span></button>
       <div class="col" style="gap:0;align-items:center">
         <span class="h2">${title}</span>
         <span class="small">${label(c.t)}${status ? ' · ' + status : ''}</span>
       </div>
       <button type="button" class="iconbtn" aria-label="Volgende" onClick=${() => setF(i + 1, true)} disabled=${i === cards.length - 1}><${Icon} name="chev" /></button>
-    </div>
+    </div>`}
     <div ref=${zone} class="scrubzone">
-      <${Field} slots=${c.slots} lines=${team.lines} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${'clamp(380px, 56dvh, 560px)'}
-        onTap=${() => {}} neon=${ch.in} dashed=${ch.shift ? [ch.shift.id] : []} />
+      <div class="fieldbox">
+        <${Field} slots=${c.slots} lines=${team.lines} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
+          onTap=${() => {}} neon=${ch.in} dashed=${ch.shift ? [ch.shift.id] : []} />
+        ${compact && html`<span class="fieldtag">${title}${i > 0 && c.kind === 'swap' ? html` · <b>${nick(c.in)}</b> voor ${nick(c.out)}` : ''}</span>`}
+      </div>
       <div class="benchrow">
         <span class="label">Bank</span>
         <div class="scroll">
@@ -170,14 +173,14 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
         </div>
       </div>
     </div>
-    ${i === 0
+    ${!compact && (i === 0
       ? html`<span class="sub">${editable ? 'Sleep een speler naar een andere plek of naar de bank om te ruilen. Het plan rekent meteen mee.' : 'Startopstelling.'}</span>`
       : c.kind === 'lineup'
         ? html`<span class="sub" style="color:var(--ink)"><span class="chg in">Erin: ${ch.in.map(nick).join(', ') || '—'}</span> <span class="chg out">Eruit: ${ch.out.map(nick).join(', ') || '—'}</span></span>`
-        : html`<span class="sub" style="color:var(--ink)"><span class="chg in">↑ ${nick(c.in)}</span> erin voor <span class="chg out">↓ ${nick(c.out)}</span>${c.shift ? html`<br /><span class="chg sh">↔ ${nick(c.shift.id)}</span> schuift naar ${LINE_NAMES[c.shift.to]}` : ''}</span>`}
-    <span class="small">Veeg over het veld of sleep het oranje bolletje.</span>
+        : html`<span class="sub" style="color:var(--ink)"><span class="chg in">↑ ${nick(c.in)}</span> erin voor <span class="chg out">↓ ${nick(c.out)}</span>${c.shift ? html`<br /><span class="chg sh">↔ ${nick(c.shift.id)}</span> schuift naar ${LINE_NAMES[c.shift.to]}` : ''}</span>`)}
+    ${!compact && html`<span class="small">Veeg over het veld of sleep het oranje bolletje.</span>`}
 
-    <div class="rooster card" style="box-shadow:none;border:1px solid var(--line);gap:0;padding:0">
+    ${!compact && html`<div class="rooster card" style="box-shadow:none;border:1px solid var(--line);gap:0;padding:0">
       <button type="button" class="between" style="background:none;border:none;min-height:48px;padding:0 12px;width:100%" aria-expanded=${roster ? 'true' : 'false'} onClick=${() => setRoster(!roster)}>
         <span class="h2" style="font-size:15px">Hele wedstrijd per kind</span>
         <span class=${'chev' + (roster ? ' open' : '')}><${Icon} name="chev" size=${18} /></span>
@@ -198,6 +201,6 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
           </div>
         </div>
       </div></div>
-    </div>
+    </div>`}
   </div>`;
 }

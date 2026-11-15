@@ -4,7 +4,6 @@ import * as M from '../match.js';
 import { LINE_NAMES } from '../planner.js';
 import { Field, Neon, Sheet, Confirm, Seg, Switch, Icon, TeamBadge, OppBadge, useNow, useWakeLock, useDragSwap, justDragged, beep, flash, unlockAudio, toast, go, STANDS } from '../ui.js';
 
-const teamOf = (state, match) => state.teams.find((t) => t.id === match.teamId);
 
 // Pas de huidige wedstrijd aan (in één keer opgeslagen).
 export function mutate(fn) {
@@ -19,209 +18,10 @@ export function mutate(fn) {
 }
 
 const UNDO_TEXT = { swap: 'wissel', goal: 'goal', oppgoal: 'tegengoal', disable: 'uitschakelen', enable: 'weer inzetbaar', join: 'later gekomen', move: 'plekken ruilen', keeper: 'keeperwissel' };
-const undoAction = { label: 'Ongedaan', run: () => { const ev = mutate((m, t) => M.undo(m, t)); if (ev) toast('Ongedaan: ' + UNDO_TEXT[ev.type]); } };
-
-export function Live({ state }) {
-  const match = currentMatch(state);
-  if (!match) {
-    return html`<main class="screen"><div class="empty"><p>Er is geen wedstrijd bezig.</p><a class="btn primary" href="#/">Wedstrijd klaarzetten</a></div></main>`;
-  }
-  return html`<${LiveInner} match=${match} team=${teamOf(state, match)} />`;
-}
-
-function LiveInner({ match, team }) {
-  const now = useNow(match.clock.running ? 500 : 1000);
-  const L = M.periodLen(team);
-  const T = M.gameTime(match, team, now);
-  const el = M.elapsedInPeriod(match, now);
-  const tick = Math.floor(T);
-  const d = useMemo(() => M.derive(match, team, T), [match, team, tick]);
-  const nick = (id) => M.nickOf(team, id);
-  const next = M.nextSwap(match, team);
-  const countdown = next ? next.t - T : null;
-  const pending = M.lineupPending(match, team);
-  const timeUp = match.started && !match.finished && el >= L;
-  const counts = M.swapCounts(match);
-  const stand = M.currentStand(match, team, d.score);
-  const running = match.clock.running;
-  const [sheet, setSheet] = useState(null);
-  const zone = useRef(null);
-
-  useWakeLock(match.started && !match.finished);
-
-  // signaal: korte piep een minuut van tevoren, dan piep + flits op het moment zelf
-  const alerted = useRef({});
-  useEffect(() => {
-    if (!running) return;
-    if (next) {
-      const key = next.t + ':' + next.out + ':' + next.in;
-      if (countdown <= 60 && countdown > 1 && !alerted.current[key + 'a']) { alerted.current[key + 'a'] = 1; beep(1, 660); }
-      if (countdown <= 0 && !alerted.current[key + 'b']) { alerted.current[key + 'b'] = 1; beep(3); flash(); }
-    }
-    if (timeUp && !alerted.current['end' + match.clock.period]) { alerted.current['end' + match.clock.period] = 1; beep(2, 520); flash(); }
-  }, [tick, running]);
-
-  const toggleClock = () => {
-    unlockAudio();
-    if (match.finished) return;
-    if (running) { mutate((m) => M.pauseClock(m)); return; }
-    if (pending) { setSheet({ type: 'break' }); return; }
-    mutate((m) => M.startClock(m));
-  };
-
-  // slepen: veld↔bank = wissel nu, veld↔veld = plekken ruilen; voor de aftrap = startopstelling
-  const onDrag = (a, b) => {
-    if (!match.started) { mutate((m, t) => M.swapInStartLineup(m, t, a, b)); toast(`${nick(a)} ↔ ${nick(b)} · plan opnieuw berekend`); return; }
-    const aF = a in d.state.pos, bF = b in d.state.pos;
-    if (aF && bF) { mutate((m, t) => M.movePlayers(m, t, a, b)); toast(`${nick(a)} ↔ ${nick(b)} van plek gewisseld`, undoAction); return; }
-    if (aF === bF) return;
-    const out = aF ? a : b, inn = aF ? b : a;
-    if (d.state.disabled[inn]) { toast(nick(inn) + ' is nu niet inzetbaar'); return; }
-    mutate((m, t) => M.doSwap(m, t, out, inn, null));
-    toast(`${nick(inn)} erin voor ${nick(out)}`, undoAction);
-  };
-  useDragSwap(zone, !match.finished && !pending, onDrag);
-
-  const tapField = (id) => {
-    if (match.finished || justDragged(zone)) return;
-    if (!match.started) { toast('Sleep spelers om de startopstelling te wijzigen'); return; }
-    if (pending) { setSheet({ type: 'break' }); return; }
-    const inn = next && next.out === id ? next.in : M.suggestIn(match, team, id);
-    if (!inn) { toast('Er zit niemand inzetbaar op de bank'); return; }
-    setSheet({ type: 'swap', out: id, in: inn, planned: !!(next && next.out === id && next.in === inn) });
-  };
-
-  const tapBench = (id) => {
-    if (match.finished || justDragged(zone)) return;
-    if (!match.started) { toast('Sleep spelers om de startopstelling te wijzigen'); return; }
-    setSheet({ type: 'bench', id });
-  };
-
-  const openPlanned = () => {
-    if (pending) { setSheet({ type: 'break' }); return; }
-    if (next) setSheet({ type: 'swap', out: next.out, in: next.in, planned: true });
-  };
-
-  const canUndo = !!M.lastUndoable(match);
-
-  // ---------- banner ----------
-  let banner;
-  const bannerBtn = (inner, onClick, neon) => html`<button type="button" class="banner" style="border:none;padding:0;background:none;text-align:left;width:100%" onClick=${onClick}>
-    ${neon ? html`<${Neon} box>${inner}</${Neon}>` : html`<span style="display:block;border-radius:20px">${inner}</span>`}
-  </button>`;
-  if (match.finished) {
-    banner = html`<a class="banner calm" href=${'#/afloop/' + match.id}><span class="bin"><span class="h2">Wedstrijd afgelopen</span><span class="sub">Bekijk het overzicht →</span></span></a>`;
-  } else if (!match.started) {
-    banner = html`<div class="banner calm"><span class="bin">
-      <span class="h2">Klaar voor de aftrap</span>
-      <span class="sub">Sleep spelers om de opstelling te wijzigen. Tik op de klok bij de aftrap.${counts.planned ? ` ${counts.planned} wissels gepland${next ? ', de eerste na ' + M.fmt(next.t) : ''}.` : ''}</span>
-    </span></div>`;
-  } else if (pending) {
-    banner = bannerBtn(html`<span class="bin"><span class="h2">Rust · opstelling voor de ${M.periodLabel(team, match.clock.period)}</span><span class="sub" style="color:var(--ink)">Tik om de nieuwe opstelling te bekijken</span></span>`, () => setSheet({ type: 'break' }), true);
-  } else if (timeUp) {
-    banner = bannerBtn(html`<span class="bin"><span class="h2">Tijd! Einde ${M.periodLabel(team, match.clock.period)}</span><span class="sub" style="color:var(--ink)">Tik om af te sluiten</span></span>`, () => setSheet({ type: 'end' }), true);
-  } else if (next) {
-    const due = countdown <= 0;
-    const at = match.plan ? match.plan.at : 0;
-    const progress = Math.max(0, Math.min(1, (T - at) / Math.max(1, next.t - at)));
-    banner = bannerBtn(html`<span class="bin">
-      <span class="between"><span class="h2">${due ? 'Nu wisselen' : 'Volgende wissel over ' + M.fmt(countdown)}</span><span class="small" style="color:var(--ink);font-weight:800">${counts.done + 1} van ${counts.total}</span></span>
-      <span class="sub" style="color:var(--ink);font-weight:700">Klaarmaken: ${nick(next.in)} (voor ${nick(next.out)})</span>
-      <span class="progress"><div style=${`width:${progress * 100}%`}></div></span>
-    </span>`, openPlanned, countdown <= 60);
-  } else {
-    banner = html`<div class="banner calm"><span class="bin"><span class="h2">Geen wissels meer deze ${M.periodWord(team)}</span></span></div>`;
-  }
-
-  return html`<main class="screen">
-    <div class="topbar">
-      <a class="iconbtn" href="#/" aria-label="Terug"><${Icon} name="back" /></a>
-      <span class="h2 grow" style="text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${match.opponent ? 'tegen ' + match.opponent : team.name}</span>
-      <button type="button" class="iconbtn" aria-label="Laatste actie ongedaan maken" disabled=${!canUndo} onClick=${undoAction.run}><${Icon} name="undo" size=${20} /></button>
-      <a class="link" href="#/plan">Plan</a>
-      <button type="button" class="iconbtn" aria-label="Wedstrijdmenu: tijd, afsluiten" onClick=${() => setSheet({ type: 'menu' })}><${Icon} name="more" size=${22} /></button>
-    </div>
-
-    <section class="card" style="gap:8px">
-      <div class="clockrow">
-        <button type="button" class=${'clockbtn ' + (match.finished ? 'done' : running ? 'running' : 'stopped')} onClick=${toggleClock}
-          aria-label=${running ? 'Klok loopt, tik om te pauzeren' : 'Klok staat stil, tik om te starten'}>
-          <span class="num clock" style=${el > L ? 'color:#B26A00' : ''}>${M.fmt(el)}</span>
-          <span class="clockstate">${match.finished ? 'afgelopen'
-            : running ? html`<span class="rundot"></span>loopt`
-            : html`<span class="stopdot"></span>${match.started ? 'stil' : 'start bij de aftrap'}`}</span>
-        </button>
-        <button type="button" class=${'scorebtn ' + (d.score.us > d.score.them ? 'ahead' : d.score.us < d.score.them ? 'behind' : 'level')}
-          disabled=${!match.started || match.finished} onClick=${() => setSheet({ type: 'goal' })} aria-label=${`Stand ${d.score.us} tegen ${d.score.them}, tik bij een doelpunt`}>
-          <span class="num score bump" key=${d.score.us + '-' + d.score.them}>${d.score.us}<span class="dash">–</span>${d.score.them}</span>
-        </button>
-      </div>
-      <div class="between">
-        <span class="small">${M.periodLabel(team, match.clock.period)} · ${team.periodMin} min</span>
-        ${match.started && !match.finished && !pending && html`<button type="button" class="link" onClick=${() => setSheet({ type: 'end' })}>Einde ${M.periodLabel(team, match.clock.period)}</button>`}
-      </div>
-    </section>
-
-    ${banner}
-
-    ${!match.finished && html`<div class="between" style="gap:10px">
-      <div class="col" style="gap:0"><span class="label">Opstelling</span><span class="small">geldt vanaf de volgende wissel</span></div>
-      ${team.rules.autoStand && html`<div class="row"><span class="small" style="font-weight:700">Auto</span><${Switch} label="Automatisch op stand" on=${match.standMode !== 'manual'} onChange=${(v) => mutate((m, t) => M.setStand(m, t, v ? 'auto' : 'manual', stand))} /></div>`}
-    </div>`}
-    ${!match.finished && html`<${Seg} label="Opstellingsstand" value=${stand} options=${STANDS} onChange=${(v) => mutate((m, t) => M.setStand(m, t, 'manual', v))} />`}
-
-    <div ref=${zone} class="col" style="gap:10px">
-      <${Field} slots=${d.state.slots} lines=${team.lines} keeperId=${d.state.keeper} nick=${nick} height=${'clamp(400px, 60dvh, 600px)'}
-        onTap=${match.finished ? null : tapField}
-        onKeeper=${match.started && !match.finished && !pending ? () => setSheet({ type: 'keeper' }) : null}
-        neon=${match.started && next && !pending ? [next.out] : []}
-        sub=${(id) => M.fmt(d.state.played[id])} />
-      <div class="benchrow">
-        <span class="label">Bank</span>
-        <div class="scroll">
-          ${d.state.bench.map((id) => {
-            const dis = d.state.disabled[id];
-            const isNext = match.started && next && next.in === id && !pending;
-            const pill = html`<button type="button" key=${id} data-pid=${id} class=${'benchpill' + (dis ? ' off' : '')} onClick=${() => tapBench(id)}>
-              ${nick(id)}<span class="t">${dis ? (dis === 'wedstrijd' ? 'klaar' : 'rust') : isNext ? 'klaarmaken' : M.mins(d.state.played[id]) + ' min'}</span>
-            </button>`;
-            return isNext ? html`<${Neon} key=${'n' + id}>${pill}</${Neon}>` : pill;
-          })}
-          ${!d.state.bench.length && html`<span class="small">Niemand</span>`}
-        </div>
-        ${match.started && !match.finished && html`<button type="button" class="iconbtn" aria-label="Speler later gekomen" onClick=${() => setSheet({ type: 'join' })}><${Icon} name="plus" size=${18} /></button>`}
-      </div>
-    </div>
-    ${!match.finished && html`<span class="small" style="text-align:center">Tik een speler om te wisselen · sleep om direct te ruilen</span>`}
-    ${match.finished && html`<a class="btn primary block" href=${'#/afloop/' + match.id}>Overzicht van de wedstrijd</a>`}
-
-    ${sheet && sheet.type === 'swap' && html`<${SwapSheet} match=${match} team=${team} d=${d} init=${sheet} counts=${counts} onClose=${() => setSheet(null)} />`}
-    ${sheet && sheet.type === 'bench' && html`<${BenchSheet} match=${match} team=${team} d=${d} id=${sheet.id} onClose=${() => setSheet(null)}
-      openSwap=${(s) => setSheet({ type: 'swap', ...s, planned: false })} />`}
-    ${sheet && sheet.type === 'goal' && html`<${GoalSheet} match=${match} team=${team} d=${d} onClose=${() => setSheet(null)} />`}
-    ${sheet && sheet.type === 'break' && html`<${BreakSheet} match=${match} team=${team} d=${d} onClose=${() => setSheet(null)} />`}
-    ${sheet && sheet.type === 'join' && html`<${JoinSheet} match=${match} team=${team} onClose=${() => setSheet(null)} />`}
-    ${sheet && sheet.type === 'keeper' && html`<${KeeperSheet} match=${match} team=${team} d=${d} onClose=${() => setSheet(null)} />`}
-    ${sheet && sheet.type === 'menu' && html`<${MatchMenu} match=${match} team=${team} onClose=${() => setSheet(null)}
-      onEnd=${() => setSheet({ type: 'end' })} onFinish=${() => setSheet({ type: 'finish' })} onDelete=${() => setSheet({ type: 'delete' })} />`}
-    ${sheet && sheet.type === 'finish' && html`<${Confirm} title="Wedstrijd nu afsluiten?" text="Bijvoorbeeld als hij eerder stopt. De tijd die niet gespeeld is telt niet mee. Daarna zie je het overzicht."
-      yes="Afsluiten" onYes=${() => { mutate((m, t) => M.finishNow(m, t)); setTimeout(() => go('/afloop/' + match.id), 0); }} onClose=${() => setSheet(null)} />`}
-    ${sheet && sheet.type === 'delete' && html`<${Confirm} title="Wedstrijd stoppen en weggooien?" text="Alles van deze wedstrijd verdwijnt (tijd, wissels, doelpunten). Handig na een test of een verkeerde start." yes="Weggooien" danger
-      onYes=${() => { update((dd) => { dd.matches = dd.matches.filter((x) => x.id !== match.id); if (dd.currentMatchId === match.id) dd.currentMatchId = null; }); toast('Wedstrijd weggegooid'); setTimeout(() => go('/'), 0); }} onClose=${() => setSheet(null)} />`}
-    ${sheet && sheet.type === 'end' && html`<${Confirm} title=${'Einde ' + M.periodLabel(team, match.clock.period) + '?'}
-      text=${match.clock.period + 1 >= team.periods ? 'Daarna zie je het overzicht van de wedstrijd.' : 'De klok stopt. Daarna zet je de opstelling voor de volgende ' + M.periodWord(team) + ' klaar.'}
-      yes=${match.clock.period + 1 >= team.periods ? 'Wedstrijd afsluiten' : 'Einde ' + M.periodLabel(team, match.clock.period)}
-      onYes=${() => {
-        const fin = mutate((m, t) => { M.endPeriod(m, t); return m.finished; });
-        if (fin) setTimeout(() => go('/afloop/' + match.id), 0);
-        else if (team.rules.newLineupAtBreak) setTimeout(() => setSheet({ type: 'break' }), 0);
-      }}
-      onClose=${() => setSheet((s) => (s && s.type === 'end' ? null : s))} />`}
-  </main>`;
-}
+export const undoAction = { label: 'Ongedaan', run: () => { const ev = mutate((m, t) => M.undo(m, t)); if (ev) toast('Ongedaan: ' + UNDO_TEXT[ev.type]); } };
 
 // ---------- wissel: groot en leesbaar ----------
-function SwapSheet({ match, team, d, init, counts, onClose }) {
+export function SwapSheet({ match, team, d, init, counts, onClose }) {
   const [out, setOut] = useState(init.out);
   const [inn, setIn] = useState(init.in);
   const [after, setAfter] = useState('terug');
@@ -302,7 +102,7 @@ function SwapSheet({ match, team, d, init, counts, onClose }) {
 }
 
 // ---------- bankspeler ----------
-function BenchSheet({ match, team, d, id, onClose, openSwap }) {
+export function BenchSheet({ match, team, d, id, onClose, openSwap }) {
   const nick = M.nickOf(team, id);
   const dis = d.state.disabled[id];
   const pw = M.periodWord(team);
@@ -324,7 +124,7 @@ function BenchSheet({ match, team, d, id, onClose, openSwap }) {
 }
 
 // ---------- doelpunt: tik op ons logo of dat van de tegenstander ----------
-function GoalSheet({ match, team, d, onClose }) {
+export function GoalSheet({ match, team, d, onClose }) {
   const [step, setStep] = useState('who');
   const nick = (id) => M.nickOf(team, id);
   const order = ['V', 'M', 'A'];
@@ -360,7 +160,7 @@ function GoalSheet({ match, team, d, onClose }) {
 }
 
 // ---------- rust: nieuwe opstelling ----------
-function BreakSheet({ match, team, d, onClose }) {
+export function BreakSheet({ match, team, d, onClose }) {
   const nick = (id) => M.nickOf(team, id);
   const current = { pos: d.state.pos, bench: d.state.bench, slots: d.state.slots };
   const proposal = useMemo(() => M.breakProposal(match, team), []);
@@ -392,7 +192,7 @@ function BreakSheet({ match, team, d, onClose }) {
 }
 
 // ---------- speler komt later ----------
-function JoinSheet({ match, team, onClose }) {
+export function JoinSheet({ match, team, onClose }) {
   const missing = team.players.filter((p) => p.active !== false && match.present.indexOf(p.id) === -1);
   return html`<${Sheet} onClose=${onClose} label="Later gekomen">
     <span class="h2" style="font-size:22px">Wie is er later gekomen?</span>
@@ -404,33 +204,8 @@ function JoinSheet({ match, team, onClose }) {
   </${Sheet}>`;
 }
 
-// ---------- wedstrijdmenu: tijd aanpassen, afsluiten, weggooien ----------
-function MatchMenu({ match, team, onClose, onEnd, onFinish, onDelete }) {
-  const now = useNow(500);
-  const el = M.elapsedInPeriod(match, now);
-  const adj = (delta) => mutate((m, t) => M.adjustClock(m, t, delta));
-  return html`<${Sheet} onClose=${onClose} label="Wedstrijdmenu">
-    <span class="h2" style="font-size:22px">Wedstrijd</span>
-    <div class="card" style="box-shadow:none;border:1px solid var(--line);align-items:center;gap:10px">
-      <span class="label">Tijd ${M.periodLabel(team, match.clock.period)}</span>
-      <span class="num" style="font-size:44px;line-height:1">${M.fmt(el)}</span>
-      <div class="timeadj">
-        <button type="button" class="btn plain" onClick=${() => adj(-60)}>−1:00</button>
-        <button type="button" class="btn plain" onClick=${() => adj(-10)}>−0:10</button>
-        <button type="button" class="btn plain" onClick=${() => adj(10)}>+0:10</button>
-        <button type="button" class="btn plain" onClick=${() => adj(60)}>+1:00</button>
-      </div>
-      <button type="button" class="link" onClick=${() => { mutate((m, t) => M.setClock(m, t, 0)); toast('Klok op 0:00'); }}>Klok op 0:00 zetten</button>
-    </div>
-    ${match.started && !match.finished && html`<button type="button" class="choice" onClick=${onEnd}><span style="font-weight:800;font-size:16px">Einde ${M.periodLabel(team, match.clock.period)}</span></button>`}
-    ${!match.finished && html`<button type="button" class="choice" onClick=${onFinish}><span class="col" style="gap:1px"><span style="font-weight:800;font-size:16px">Wedstrijd nu afsluiten</span><span class="sub">Bewaren en naar het overzicht</span></span></button>`}
-    <button type="button" class="choice" style="border-color:#F0C2B4" onClick=${onDelete}><span class="col" style="gap:1px"><span style="font-weight:800;font-size:16px;color:var(--danger)">Wedstrijd stoppen en weggooien</span><span class="sub">Niets bewaren</span></span></button>
-    <button type="button" class="btn plain block" onClick=${onClose}>Sluiten</button>
-  </${Sheet}>`;
-}
-
 // ---------- keeper wisselen (bijvoorbeeld bij een blessure) ----------
-function KeeperSheet({ match, team, d, onClose }) {
+export function KeeperSheet({ match, team, d, onClose }) {
   const nick = (id) => M.nickOf(team, id);
   const keeper = d.state.keeper;
   const [to, setTo] = useState(null);
