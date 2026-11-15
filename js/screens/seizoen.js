@@ -40,6 +40,8 @@ export function buildMessage(team, e) {
   const lines = [`🏑 ${title}`, `📅 ${longDate(e.date)}`];
   if (e.time || e.meet) lines.push(`⏰ ${e.time ? 'Aanvang ' + e.time : ''}${e.time && e.meet ? ' · ' : ''}${e.meet ? 'verzamelen ' + e.meet : ''}`);
   lines.push(`📍 ${e.home === false ? 'Uit' : 'Thuis'}${e.field ? ' · ' + e.field : ''}`);
+  if (e.keeperId) lines.push(`🧤 Keeper: ${firstName(team, e.keeperId)}`);
+  if ((e.absent || []).length) lines.push(`🙋 Afgemeld: ${names(e.absent)}`);
   const tasks = TASKS.filter((t) => (e.tasks && e.tasks[t.key] || []).filter(Boolean).length);
   if (tasks.length) {
     lines.push('', '📋 Taken');
@@ -49,8 +51,58 @@ export function buildMessage(team, e) {
   return lines.join('\n');
 }
 
-export async function copyText(text) {
-  try { await navigator.clipboard.writeText(text); toast('Bericht gekopieerd · plak het in de teamapp'); return true; }
+// Overzicht van alle taken per wedstrijd, voor WhatsApp (WhatsApp kent geen tabellen: per wedstrijd een blokje)
+export function buildTaskOverview(team, entries, season) {
+  const short = (iso) => { const s = new Date(iso + 'T12:00:00').toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' }).replace('.', ''); return s.charAt(0).toUpperCase() + s.slice(1); };
+  const list = (ids) => (ids || []).filter(Boolean).map((id) => firstName(team, id)).join(', ');
+  const out = [`🏑 ${team.name} · taken ${seasonLabel(season).replace('Seizoen ', 'seizoen ')}`];
+  for (const e of entries) {
+    out.push('', `📅 ${short(e.date)}${e.time ? ' · ' + e.time : ''} · ${e.opponent || 'Tegenstander'} (${e.home === false ? 'uit' : 'thuis'})`);
+    if (e.keeperId) out.push(`🧤 Keeper: ${firstName(team, e.keeperId)}`);
+    for (const t of TASKS) { const l = list(e.tasks && e.tasks[t.key]); if (l) out.push(`${t.emoji} ${t.label}: ${l}`); }
+  }
+  out.push('', 'Kun je niet? Ruil zelf en laat het even weten 🙏');
+  return out.join('\n');
+}
+
+// Agenda-bestand (.ics), op de telefoon gemaakt; tijden zonder tijdzone = lokale tijd
+export function buildICS(team, entries) {
+  const esc = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
+  const fold = (line) => { const ch = Array.from(line); const parts = []; for (let i = 0; i < ch.length; i += 60) parts.push(ch.slice(i, i + 60).join('')); return parts.join('\r\n '); };
+  const dt = (date, time) => date.replace(/-/g, '') + 'T' + time.replace(':', '') + '00';
+  const addMin = (time, min) => { const [h, m] = time.split(':').map(Number); const t = h * 60 + m + min; return String(Math.floor(t / 60) % 24).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); };
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const dur = team.periods * team.periodMin + 15;
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//SpaBo Coach//NL', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:' + esc('Hockey ' + team.name)];
+  for (const e of entries) {
+    const title = e.home === false ? `${e.opponent || 'Tegenstander'} – ${team.name}` : `${team.name} – ${e.opponent || 'Tegenstander'}`;
+    const desc = [e.time ? 'Aanvang ' + e.time : '', e.meet ? 'Verzamelen ' + e.meet : '', e.keeperId ? 'Keeper: ' + firstName(team, e.keeperId) : '']
+      .concat(TASKS.map((t) => { const l = ((e.tasks && e.tasks[t.key]) || []).filter(Boolean).map((id) => firstName(team, id)).join(', '); return l ? `${t.label}: ouders van ${l}` : ''; })).filter(Boolean).join('\n');
+    lines.push('BEGIN:VEVENT', 'UID:' + e.id + '@spabo-coach', 'DTSTAMP:' + stamp);
+    const start = e.meet || e.time;
+    if (start) { lines.push('DTSTART:' + dt(e.date, start), 'DTEND:' + dt(e.date, addMin(e.time || start, dur))); }
+    else { const d = e.date.replace(/-/g, ''); lines.push('DTSTART;VALUE=DATE:' + d); }
+    lines.push(fold('SUMMARY:' + esc('🏑 ' + title)), fold('LOCATION:' + esc((e.home === false ? 'Uit' : 'Thuis') + (e.field ? ', ' + e.field : ''))), fold('DESCRIPTION:' + esc(desc)), 'END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n') + '\r\n';
+}
+
+export async function shareFile(name, text, type) {
+  const file = new File([text], name, { type });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: name }); return; }
+  } catch (err) { if (err && err.name === 'AbortError') return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+export async function copyText(text, what = 'Bericht gekopieerd · plak het in de teamapp') {
+  try { await navigator.clipboard.writeText(text); toast(what); return true; }
   catch (e) { return false; }
 }
 
@@ -96,7 +148,7 @@ export function Seizoen({ state }) {
   // nieuwste bovenaan
   const list = rows.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
   void linked; void today;
-  const newEntry = () => setEdit({ id: null, opponent: '', home: true, date: todayISO(), time: '', meet: '', field: '', season, tasks: { fluiten: [], fruit: [], bar: [] } });
+  const newEntry = () => setEdit({ id: null, opponent: '', home: true, date: todayISO(), time: '', meet: '', field: '', season, keeperId: '', absent: [], tasks: { fluiten: [], fruit: [], bar: [] } });
 
   const players = team.players.filter((p) => data.per[p.id] || p.active !== false);
   const avgs = players.map((p) => (data.per[p.id] && data.per[p.id].matches ? data.per[p.id].sec / data.per[p.id].matches : 0));
@@ -135,6 +187,10 @@ export function Seizoen({ state }) {
 
     <section class="card" style="gap:4px">
       <div class="between"><span class="h2">Wedstrijden</span><span class="small">${seasonLabel(season)}</span></div>
+      ${schedule.length > 0 && html`<div class="row" style="margin:4px 0 6px">
+        <button type="button" class="btn plain grow" style="min-height:40px;font-size:14px" onClick=${() => { const entries = schedule.filter((x) => season !== current || x.date >= todayISO()).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || ''))); copyText(buildTaskOverview(team, entries.length ? entries : schedule, season), 'Takenoverzicht gekopieerd · plak het in WhatsApp'); }}><${Icon} name="copy" size=${16} /> Takenoverzicht</button>
+        <button type="button" class="btn plain grow" style="min-height:40px;font-size:14px" onClick=${() => shareFile(`hockey-${team.name.replace(/[^A-Za-z0-9]+/g, '-')}-${season}.ics`, buildICS(team, schedule.slice().sort((a, b) => a.date.localeCompare(b.date))), 'text/calendar')}><${Icon} name="calendar" size=${16} /> Agenda-bestand</button>
+      </div>`}
       ${list.map(row)}
       <button type="button" class="addtile" onClick=${newEntry}><${Icon} name="plus" size=${20} /> Wedstrijd toevoegen</button>
     </section>
@@ -160,11 +216,11 @@ export function Seizoen({ state }) {
       <div class="legend" style="margin-top:6px"><span><i style="background:var(--pos-A)"></i>Achter</span><span><i style="background:var(--pos-M)"></i>Midden</span><span><i style="background:var(--pos-V)"></i>Voor</span></div>
     </section>
 
-    ${edit && html`<${ScheduleSheet} team=${team} entry=${edit} onClose=${() => setEdit(null)} />`}
+    ${edit && html`<${ScheduleSheet} team=${team} matches=${state.matches} entry=${edit} onClose=${() => setEdit(null)} />`}
   </main>`;
 }
 
-function ScheduleSheet({ team, entry, onClose }) {
+function ScheduleSheet({ team, matches, entry, onClose }) {
   const [e, setE] = useState(entry);
   const [confirm, setConfirm] = useState(false);
   const [showText, setShowText] = useState(!!entry.showText);
@@ -186,19 +242,35 @@ function ScheduleSheet({ team, entry, onClose }) {
     cur[i] = id;
     return { ...x, tasks: { ...(x.tasks || {}), [key]: cur } };
   });
+  const absent = e.absent || [];
+  const toggleAbsent = (id) => setE((x) => { const a = x.absent || []; return { ...x, absent: a.indexOf(id) !== -1 ? a.filter((y) => y !== id) : a.concat([id]), keeperId: x.keeperId === id ? '' : x.keeperId }; });
+  const keeperCount = (() => {
+    const c = {};
+    for (const x of team.schedule || []) if (x.id !== e.id && x.keeperId && seasonOf(x.date) === seasonOf(e.date)) c[x.keeperId] = (c[x.keeperId] || 0) + 1;
+    for (const m of matches) if (m.teamId === team.id && m.finished && m.keeperId && !m.scheduleId && seasonOf(m.date) === seasonOf(e.date)) c[m.keeperId] = (c[m.keeperId] || 0) + 1;
+    return c;
+  })();
   const fairFill = () => {
     const tasks = { ...(e.tasks || {}) };
-    const used = new Set(Object.values(tasks).flat().filter(Boolean));
+    const used = new Set(Object.values(tasks).flat().filter(Boolean).concat(absent));
+    let keeperId = e.keeperId;
+    if (team.keeper && !keeperId) {
+      const pool = active.filter((p) => absent.indexOf(p.id) === -1);
+      const wants = pool.filter((p) => p.main === 'K' || (p.prefs || []).indexOf('K') !== -1);
+      const pick = (wants.length ? wants : pool).slice().sort((a, b) => (keeperCount[a.id] || 0) - (keeperCount[b.id] || 0))[0];
+      keeperId = pick ? pick.id : '';
+    }
     for (const t of TASKS) {
       const c = taskCounts(t.key);
       tasks[t.key] = ((tasks[t.key]) || []).map((id) => {
         if (id) return id;
         const pick = active.map((p) => p.id).filter((pid) => !used.has(pid)).sort((a, b) => (c[a] || 0) - (c[b] || 0))[0] || '';
+        // ouders van afgemelde kinderen krijgen geen taak
         if (pick) used.add(pick);
         return pick;
       });
     }
-    setE({ ...e, tasks });
+    setE({ ...e, tasks, keeperId });
   };
   const save = (close = true) => {
     const clean = { ...e, opponent: (e.opponent || '').trim(), field: (e.field || '').trim(), season: e.season || seasonOf(e.date) };
@@ -239,6 +311,17 @@ function ScheduleSheet({ team, entry, onClose }) {
       <div class="col grow"><label class="label" for="s-field">Veld / locatie</label><input id="s-field" class="input" value=${e.field} placeholder="Bijv. veld 3" onInput=${(ev) => set('field', ev.target.value)} /></div>
     </div>
 
+    <div class="col">
+      <span class="label">Wie is er niet? ${absent.length ? `(${absent.length})` : ''}</span>
+      <div class="wrap">${active.map((p) => html`<button type="button" class="chip warm" aria-pressed=${absent.indexOf(p.id) !== -1 ? 'true' : 'false'} onClick=${() => toggleAbsent(p.id)}>${p.nick || p.name}</button>`)}</div>
+    </div>
+    ${team.keeper && html`<div class="col">
+      <label class="label" for="s-keeper">Keeper</label>
+      <select id="s-keeper" class="input" value=${e.keeperId || ''} onChange=${(ev) => set('keeperId', ev.target.value)}>
+        <option value="">Nog niet gekozen</option>
+        ${active.filter((p) => absent.indexOf(p.id) === -1).map((p) => html`<option value=${p.id}>${p.nick || p.name} · ${keeperCount[p.id] || 0}× dit seizoen</option>`)}
+      </select>
+    </div>`}
     <div class="between"><span class="h2">Taken voor ouders</span><button type="button" class="link" onClick=${fairFill}>Eerlijk verdelen</button></div>
     ${TASKS.map((t) => {
       const n = (tasks[t.key] || []).length;
@@ -255,7 +338,10 @@ function ScheduleSheet({ team, entry, onClose }) {
 
     ${showText && html`<textarea class="input" style="height:180px;padding:10px;font-size:14px;font-weight:600" readonly value=${buildMessage(team, e)} onFocus=${(ev) => ev.target.select()}></textarea>
       <span class="small">Kopiëren lukte niet automatisch: houd de tekst vast en kies Kopieer.</span>`}
-    <button type="button" class="btn soft block" onClick=${copy}><${Icon} name="copy" size=${18} /> Bericht voor de teamapp kopiëren</button>
+    <div class="row">
+      <button type="button" class="btn soft grow" onClick=${copy}><${Icon} name="copy" size=${18} /> Bericht</button>
+      <button type="button" class="btn soft grow" onClick=${() => { const saved = save(false); setE(saved); shareFile('hockey-' + (saved.opponent || 'wedstrijd').replace(/[^A-Za-z0-9]+/g, '-') + '.ics', buildICS(team, [saved]), 'text/calendar'); }}><${Icon} name="calendar" size=${18} /> In agenda</button>
+    </div>
     <button type="button" class="btn primary block" onClick=${() => save(true)}>Opslaan</button>
     <div class="row">
       ${e.id && html`<button type="button" class="btn danger grow" onClick=${() => setConfirm(true)}>Verwijderen</button>`}

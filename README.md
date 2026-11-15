@@ -29,7 +29,10 @@ Klaarzetten en spelen gebeuren op hetzelfde scherm, dat altijd in één beeld pa
 ## Seizoen en programma
 
 - **+ Wedstrijd:** tegenstander, thuis/uit, datum, aanvang, verzameltijd, veld en taken voor ouders (fluiten 0–2, fruit 0–1, bar/wedstrijdtafel 0–2). *Eerlijk verdelen* kiest wie het minst aan de beurt was.
+- **Keeper en afmeldingen per wedstrijd:** vooraf in te vullen (met keepbeurten dit seizoen); de klaargezette wedstrijd neemt ze over.
 - **Bericht kopiëren:** een overzicht met emoji's om in de teamapp te plakken.
+- **Takenoverzicht:** alle komende wedstrijden met keeper en taken in één bericht voor WhatsApp.
+- **Agenda-bestand (.ics):** alle wedstrijden of één wedstrijd, op de telefoon gemaakt, om in de agenda te zetten of te delen.
 - Het Wedstrijd-scherm zet automatisch de eerstvolgende wedstrijd uit het programma klaar; via het affiche kies je een andere.
 - **Seizoenen:** elke wedstrijd hoort bij een seizoen (aug–jul). Bovenin Seizoen kies je een eerder seizoen als archief, met uitslagen, minuten, posities en doelpunten.
 
