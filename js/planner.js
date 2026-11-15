@@ -63,9 +63,28 @@ function scoreAgg(ag, tg) {
   return score + ag.miss;
 }
 
+// Dragende speler: vanaf dit niveau (op de schaal 0–100; stap 6 van 8 op de schuifbalk)
+export const KEY_KRACHT = 75;
+const STAND_LINE = { verdedigen: 'A', aanvallen: 'V' };
+
+// Bij verdedigen minstens één dragende speler achterin (of de sterkste als er geen dragende speler staat);
+// bij aanvallen hetzelfde voorin. Spelers met die voorkeurspositie krijgen voorrang via de voorkeursstraf.
+export function standPenalty(pos, players, stand) {
+  const line = STAND_LINE[stand];
+  if (!line) return 0;
+  const ids = Object.keys(pos);
+  if (!ids.length) return 0;
+  let keys = ids.filter((id) => players[id].kracht >= KEY_KRACHT);
+  if (!keys.length) {
+    const top = Math.max(...ids.map((id) => players[id].kracht));
+    keys = ids.filter((id) => players[id].kracht === top);
+  }
+  return keys.some((id) => pos[id] === line) ? 0 : 60;
+}
+
 // Hoe goed is een opstelling? Lager is beter. Eerst kracht (balans per linie), dan voorkeurspositie.
 export function lineupScore(pos, players, stand = 'balans') {
-  return scoreAgg(aggregate(pos, players), TARGETS[stand] || TARGETS.balans);
+  return scoreAgg(aggregate(pos, players), TARGETS[stand] || TARGETS.balans) + standPenalty(pos, players, stand);
 }
 
 // Opstelling bij de start of na de rust: sterkste spelers eerst op hun voorkeurslinie, daarna verbeteren door te ruilen.
@@ -93,11 +112,12 @@ export function assignLines(ids, lines, players, stand = 'balans') {
         const a = keys[i], b = keys[j];
         const la = pos[a], lb = pos[b];
         if (la === lb) continue;
-        const cur = scoreAgg(ag, tg);
+        const cur = scoreAgg(ag, tg) + standPenalty(pos, players, stand);
         addTo(ag, players[a], la, -1); addTo(ag, players[b], lb, -1);
         addTo(ag, players[a], lb, 1); addTo(ag, players[b], la, 1);
-        if (scoreAgg(ag, tg) < cur - 0.5) { pos[a] = lb; pos[b] = la; improved = true; }
-        else { addTo(ag, players[a], lb, -1); addTo(ag, players[b], la, -1); addTo(ag, players[a], la, 1); addTo(ag, players[b], lb, 1); }
+        pos[a] = lb; pos[b] = la;
+        if (scoreAgg(ag, tg) + standPenalty(pos, players, stand) < cur - 0.5) { improved = true; }
+        else { pos[a] = la; pos[b] = lb; addTo(ag, players[a], lb, -1); addTo(ag, players[b], la, -1); addTo(ag, players[a], la, 1); addTo(ag, players[b], lb, 1); }
       }
     }
     if (!improved) break;
@@ -112,14 +132,19 @@ export function placeIn(pos, out, kin, players, stand = 'balans') {
   const ag = aggregate(pos, players);
   addTo(ag, players[out], spot, -1);
   addTo(ag, players[kin], spot, 1);
-  let bestScore = scoreAgg(ag, tg);
+  const withStand = !!STAND_LINE[stand];
+  const tmp = withStand ? { ...pos } : null;
+  if (withStand) { delete tmp[out]; tmp[kin] = spot; }
+  let bestScore = scoreAgg(ag, tg) + (withStand ? standPenalty(tmp, players, stand) : 0);
   let shiftId = null;
   for (const id in pos) {
     const from = pos[id];
     if (id === out || from === spot) continue;
     addTo(ag, players[id], from, -1); addTo(ag, players[id], spot, 1);
     addTo(ag, players[kin], spot, -1); addTo(ag, players[kin], from, 1);
-    const sc = scoreAgg(ag, tg) + 3; // doorschuiven kost onrust op het veld
+    let sp = 0;
+    if (withStand) { tmp[id] = spot; tmp[kin] = from; sp = standPenalty(tmp, players, stand); tmp[id] = from; tmp[kin] = spot; }
+    const sc = scoreAgg(ag, tg) + 3 + sp; // doorschuiven kost onrust op het veld
     addTo(ag, players[kin], from, -1); addTo(ag, players[kin], spot, 1);
     addTo(ag, players[id], spot, -1); addTo(ag, players[id], from, 1);
     if (sc < bestScore - 0.01) { bestScore = sc; shiftId = id; }
