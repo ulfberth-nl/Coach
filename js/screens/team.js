@@ -1,9 +1,10 @@
 import { html, useState } from '../../vendor/preact-htm.js';
 import { update, activeTeam, currentMatch, newTeam, exportData, importData } from '../store.js';
 import { replan, periodWord } from '../match.js';
+import { rebuildConcept } from './wedstrijd.js';
 import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, toast, STANDS } from '../ui.js';
 
-export const APP_VERSION = '0.4.1';
+export const APP_VERSION = '0.5.0';
 
 // logo verkleinen tot 256 px zodat het licht blijft in de opslag
 function readLogo(file) {
@@ -30,7 +31,7 @@ export function Team({ state }) {
   const team = activeTeam(state);
   const r = team.rules;
   const running = currentMatch(state);
-  const locked = !!(running && !running.finished && running.teamId === team.id);
+  const locked = !!(running && running.started && !running.finished && running.teamId === team.id);
   const [confirm, setConfirm] = useState(null);
   const pw = periodWord(team);
 
@@ -38,7 +39,9 @@ export function Team({ state }) {
     const t = activeTeam(draft);
     fn(t);
     const m = currentMatch(draft);
-    if (m && !m.finished && m.teamId === t.id) { try { replan(m, t); } catch (e) { /* plan volgt bij de volgende actie */ } }
+    if (m && !m.finished && m.teamId === t.id) {
+      try { if (m.started) replan(m, t); else rebuildConcept(draft); } catch (e) { /* plan volgt bij de volgende actie */ }
+    }
   });
   const setRule = (k, v) => set((t) => { t.rules[k] = v; });
   const setLines = (k, v) => set((t) => {
@@ -110,10 +113,7 @@ export function Team({ state }) {
 
     <section class="card">
       <span class="h2">Spelvorm</span>
-      ${locked && html`<div class="col" style="gap:6px">
-        <span class="small" style="color:var(--ink)">${running.started ? 'Tijdens een wedstrijd kun je de spelvorm niet aanpassen.' : 'Er staat een wedstrijd klaar. Gooi die weg om de spelvorm aan te passen.'}</span>
-        ${!running.started && html`<button type="button" class="btn plain" onClick=${() => update((d) => { d.matches = d.matches.filter((m) => m.id !== d.currentMatchId); d.currentMatchId = null; })}>Klaargezette wedstrijd weggooien</button>`}
-      </div>`}
+      ${locked && html`<span class="small" style="color:var(--ink)">Tijdens een wedstrijd kun je de spelvorm niet aanpassen.</span>`}
       <fieldset disabled=${locked} style="border:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px">
         <${Seg} label="Veld of zaal" value=${team.type} onChange=${(v) => set((t) => { t.type = v; })} options=${[['veld', 'Veld'], ['zaal', 'Zaal']]} />
         <${Setting} title="Met keeper"><${Switch} label="Met keeper" on=${team.keeper} onChange=${(v) => set((t) => { t.keeper = v; })} /></${Setting}>

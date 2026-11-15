@@ -27,6 +27,12 @@ export function toast(text, action) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { toastState = null; toastSubs.forEach((f) => f(null)); }, action ? 5000 : 2600);
 }
+export function dismissToast() {
+  if (!toastState) return;
+  toastState = null;
+  clearTimeout(toastTimer);
+  toastSubs.forEach((f) => f(null));
+}
 export function ToastHost() {
   const [t, setT] = useState(toastState);
   useEffect(() => { toastSubs.add(setT); return () => toastSubs.delete(setT); }, []);
@@ -144,6 +150,7 @@ export function Stepper({ value, min = 0, max = 99, step = 1, onChange, suffix =
 export function Sheet({ onClose, children, label }) {
   const [closing, setClosing] = useState(false);
   const close = () => { if (closing) return; setClosing(true); setTimeout(onClose, 220); };
+  useEffect(() => { dismissToast(); }, []);
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') close(); };
     document.addEventListener('keydown', onKey);

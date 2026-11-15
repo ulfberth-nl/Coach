@@ -96,7 +96,8 @@ export function subscribe(fn) {
 
 export function useStore() {
   const [s, set] = useState(state);
-  useEffect(() => subscribe(set), []);
+  // na het aanmelden de laatste stand overnemen: een kind kan in zijn effect al iets hebben aangepast
+  useEffect(() => { const off = subscribe(set); set(state); return off; }, []);
   return s;
 }
 

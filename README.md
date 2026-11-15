@@ -19,11 +19,21 @@ Dit is **stap 1**: alles werkt op één telefoon en wordt alleen op die telefoon
 
 Tip: zet tijdens de wedstrijd het geluid aan. Bij een wisselmoment piept de app en knippert het scherm oranje (trillen kan niet vanuit een webapp op een iPhone). Het scherm blijft aan zolang de wedstrijd loopt.
 
+## Eén Wedstrijd-scherm
+
+Klaarzetten en spelen gebeuren op hetzelfde scherm, dat altijd in één beeld past (geen scrollen):
+- **Voorbereiden:** bovenin het affiche; de knoppen *spelers*, *keeper* en *tegenstander* lichten op tot je ze hebt bevestigd. Daaronder de tijdlijn en het veld: sleep spelers voor de startopstelling, veeg door het plan. Onderin **Start · tik bij de aftrap**.
+- **Live:** klok en stand bovenin, de balk met de volgende wissel, het veld en de bank. De menubalk verdwijnt; Seizoen en Team zitten dan in het ⋯-menu.
+- **Afgelopen:** de uitslag, het overzicht en *Nieuwe wedstrijd klaarzetten*.
+
 ## Tijdens de wedstrijd
 
 - **Klok:** tik op de klok om te starten of te pauzeren. Blauw met een kloppende stip = loopt, oranje en knipperend = staat stil.
 - **Doelpunt:** tik op de stand en kies het eigen logo (daarna wie scoorde) of het logo van de tegenstander.
 - **Wisselen:** tik een speler voor het wisselvoorstel, of sleep: veld ↔ bank = direct wisselen, veld ↔ veld = plekken ruilen. De app rekent vanaf die situatie verder.
+- **Keeper wisselen:** tik op de keeper.
+- **Stand van de opstelling** (verdedigen/balans/aanvallen): het label rechtsonder op het veld.
+- **Tijd aanpassen, einde periode, afsluiten of weggooien:** het ⋯-menu.
 - **Ongedaan maken:** de pijl bovenin, of "Ongedaan" in de melding.
 
 ## Hoe de app wisselt

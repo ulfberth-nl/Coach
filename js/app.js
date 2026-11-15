@@ -1,8 +1,7 @@
 import { html, render, useEffect, useState } from '../vendor/preact-htm.js';
 import { useStore } from './store.js';
 import { ToastHost, FlashHost, Icon, toast } from './ui.js';
-import { Home } from './screens/home.js';
-import { Live } from './screens/live.js';
+import { Wedstrijd } from './screens/wedstrijd.js';
 import { Plan } from './screens/plan.js';
 import { Afloop } from './screens/afloop.js';
 import { Seizoen } from './screens/seizoen.js';
@@ -25,7 +24,7 @@ function TabBar({ current, live }) {
   const i = ['wedstrijd', 'seizoen', 'team'].indexOf(current);
   return html`<nav class="tabbar" aria-label="Menu" style=${'--i:' + i}>
     <span class="tab-ind" aria-hidden="true"></span>
-    ${tab(live && current !== 'wedstrijd' ? '#/live' : '#/', 'wedstrijd', live && current !== 'wedstrijd' ? 'Live' : 'Wedstrijd', 'field', live && current !== 'wedstrijd')}
+    ${tab('#/', 'wedstrijd', live && current !== 'wedstrijd' ? 'Live' : 'Wedstrijd', 'field', live && current !== 'wedstrijd')}
     ${tab('#/seizoen', 'seizoen', 'Seizoen', 'chart')}
     ${tab('#/team', 'team', 'Team', 'team')}
   </nav>`;
@@ -34,19 +33,20 @@ function TabBar({ current, live }) {
 function App() {
   const state = useStore();
   const [r0, r1] = useRoute();
+  const cur = state.matches.find((x) => x.id === state.currentMatchId);
+  const liveNow = !!(cur && cur.started && !cur.finished);
   let screen, tab = null;
   switch (r0) {
-    case 'live': screen = html`<${Live} state=${state} />`; break;
     case 'plan': screen = html`<${Plan} state=${state} />`; break;
     case 'afloop': screen = html`<${Afloop} state=${state} matchId=${r1} />`; break;
     case 'seizoen': screen = html`<${Seizoen} state=${state} />`; tab = 'seizoen'; break;
     case 'team': screen = html`<${Team} state=${state} />`; tab = 'team'; break;
     case 'spelers': screen = html`<${Spelers} state=${state} />`; break;
-    default: screen = html`<${Home} state=${state} key=${state.activeTeamId} />`; tab = 'wedstrijd';
+    default: screen = html`<${Wedstrijd} state=${state} />`; tab = liveNow ? null : 'wedstrijd';
   }
   return html`
     ${screen}
-    ${tab && html`<${TabBar} current=${tab} live=${(() => { const m = state.matches.find((x) => x.id === state.currentMatchId); return !!(m && m.started && !m.finished); })()} />`}
+    ${tab && html`<${TabBar} current=${tab} live=${liveNow} />`}
     <${ToastHost} />
     <${FlashHost} />
   `;

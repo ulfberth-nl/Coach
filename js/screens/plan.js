@@ -18,7 +18,7 @@ function PlanInner({ match, team }) {
   const editable = !match.started;
   return html`<main class="screen">
     <div class="topbar">
-      <a class="iconbtn" href="#/live" aria-label="Terug"><${Icon} name="back" /></a>
+      <a class="iconbtn" href="#/" aria-label="Terug"><${Icon} name="back" /></a>
       <span class="h2 grow" style="text-align:center">Wedstrijdplan</span>
       <span style="width:44px"></span>
     </div>

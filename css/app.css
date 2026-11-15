@@ -366,3 +366,55 @@ input.kracht::-moz-range-thumb { width: 26px; height: 26px; border-radius: 999px
 .draggable, .draggable .field, .draggable .benchrow, .draggable .scroll, .draggable [data-pid], .scrubzone, .scrubzone * { touch-action: none !important; }
 .pill, .benchpill { -webkit-user-drag: none; }
 .keeperspot { background: none; border: none; padding: 0; }
+
+/* ================= één Wedstrijd-scherm (past zonder scrollen) ================= */
+.matchscreen { height: 100dvh; display: flex; flex-direction: column; gap: 8px; padding: calc(6px + var(--safe-t)) 12px calc(10px + var(--safe-b)); overflow: hidden; }
+.matchscreen.with-tabs { padding-bottom: calc(86px + var(--safe-b)); }
+.matchscreen > * { flex: 0 0 auto; }
+.mhead { display: flex; align-items: center; gap: 4px; min-height: 48px; }
+.affiche { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 18px; border: none; background: #fff; box-shadow: var(--shadow); text-align: left; }
+.aff-title { font-weight: 900; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aff-sub { font-size: 12px; font-weight: 700; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@keyframes chipPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(245,165,36,.0); background: #fff; } 50% { box-shadow: 0 0 0 4px rgba(245,165,36,.35); background: var(--orange-tint); } }
+.setchips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px; }
+.setchips::-webkit-scrollbar { display: none; }
+.setchip { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 12px; border-radius: 999px; border: 1.5px solid var(--line-2); background: #fff; font-size: 14px; font-weight: 800; white-space: nowrap; transition: transform .18s var(--ease-out); }
+.setchip:active { transform: scale(.95); }
+.setchip.todo { border-color: var(--orange); animation: chipPulse 1.8s ease-in-out infinite; }
+.kbadge { font-size: 11px; font-weight: 900; padding: 1px 6px; border-radius: 6px; background: var(--orange); color: var(--ink); }
+.planline { display: flex; align-items: center; gap: 8px; border: none; background: none; padding: 0 4px; font-size: 13px; font-weight: 800; color: var(--ink); text-align: left; min-height: 24px; }
+.planline > span:first-child { flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.warnicon { width: 20px; height: 20px; border-radius: 999px; background: var(--orange); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 900; }
+.grow-field { flex: 1 1 auto !important; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.planview.compact { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+.planview.compact .tl { height: 46px; flex: 0 0 auto; }
+.planview.compact .tl-line { top: 30px; } .planview.compact .tl-dot { top: 27px; } .planview.compact .tl-head { top: 21px; } .planview.compact .tl-break { top: 20px; height: 22px; } .planview.compact .tl-break b { display: none; }
+.planview.compact .scrubzone { flex: 1 1 auto; min-height: 0; }
+.fieldbox { position: relative; flex: 1 1 auto; min-height: 240px; }
+.fieldbox > .field { position: absolute; inset: 0; height: auto !important; }
+.fieldtag { position: absolute; top: 10px; left: 10px; z-index: 2; max-width: calc(100% - 20px); padding: 4px 10px; border-radius: 999px; background: rgba(17,24,39,.55); color: #fff; font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: none; pointer-events: none; }
+.fieldtag.right { left: auto; right: 10px; top: auto; bottom: 12px; pointer-events: auto; background: rgba(255,255,255,.18); }
+.startbtn { min-height: 58px; font-size: 18px; }
+.matchscreen .clockrow { gap: 10px; }
+.matchscreen .clock { font-size: 40px; }
+.matchscreen .clockbtn { padding: 8px 12px; }
+.nextbtn { border: none; background: none; padding: 0; width: 100%; text-align: left; }
+.nextbtn:disabled { opacity: 1; }
+.nextbar { position: relative; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 6px 14px 10px; border-radius: 16px; background: var(--orange); overflow: hidden; }
+.neon.box > .in > .nextbar { border-radius: 13px; }
+.nextbar.calm { background: #fff; border: 1.5px solid var(--line); }
+.nb-title { font-size: 16px; font-weight: 900; }
+.nb-sub { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nb-n { font-size: 12px; font-weight: 800; }
+.nb-prog { position: absolute; left: 14px; right: 14px; bottom: 5px; height: 4px; border-radius: 999px; background: rgba(17,24,39,.15); }
+.nb-prog > span { display: block; height: 100%; border-radius: 999px; background: var(--ink); transition: width 1s linear; }
+.matchscreen .benchrow { flex: 0 0 auto; }
+@media (max-height: 700px) { .matchscreen .clock { font-size: 32px; } .scorebtn .score { font-size: 46px; } .fieldbox { min-height: 200px; } }
+/* melding laat tikken erdoorheen toe (alleen de knop in de melding is aanklikbaar) */
+.toast { pointer-events: none; }
+.toast button { pointer-events: auto; }
+
+/* melding onderin: boven de bank, of boven de menubalk als die er is */
+.toast { top: auto !important; bottom: calc(14px + var(--safe-b)); }
+body:has(.tabbar) .toast { bottom: calc(94px + var(--safe-b)); }
+@keyframes toastIn { from { opacity: 0; transform: translate(-50%, 20px) scale(.96); } to { opacity: 1; transform: translate(-50%, 0); } }
