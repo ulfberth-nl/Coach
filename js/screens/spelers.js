@@ -1,6 +1,6 @@
 import { html, useState } from '../../vendor/preact-htm.js';
 import { update, activeTeam, hashPin, uid } from '../store.js';
-import { Icon, Sheet, Confirm, Switch, toast, POS_COLORS, POS_NAMES, KRACHT_BG } from '../ui.js';
+import { Icon, Sheet, Confirm, Switch, Seg, toast, POS_COLORS, POS_NAMES, KRACHT_BG } from '../ui.js';
 
 const STRENGTHS = ['Snel', 'Overzicht', 'Techniek', 'Inzet', 'Verdedigen', 'Passen', 'Scoren', 'Samenspel', 'Leiderschap', 'Vrolijk'];
 let unlockedUntil = 0;
@@ -82,7 +82,10 @@ export function Spelers({ state }) {
       <span class="between"><span style="font-weight:800">${p.nick || p.name}</span><span class="small" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name !== p.nick ? p.name : ''}</span></span>
       <span class="row" style="gap:8px">
         <span class="minibar" style=${`background:linear-gradient(90deg, transparent ${p.kracht}%, var(--line) ${p.kracht}%), ${KRACHT_BG}`}></span>
-        <span class="row" style="gap:4px">${(p.prefs || []).map((k) => html`<span class="badge" style=${`background:${POS_COLORS[k]};color:#fff;padding:2px 8px`}>${POS_NAMES[k]}</span>`)}</span>
+        <span class="row" style="gap:4px;flex-wrap:wrap">
+          ${p.main && html`<span class="badge" style=${`background:${POS_COLORS[p.main]};color:#fff;padding:2px 8px;box-shadow:0 0 0 2px #fff,0 0 0 3px ${POS_COLORS[p.main]}`}>${POS_NAMES[p.main]}${p.flex === false ? ' · vast' : ''}</span>`}
+          ${(p.prefs || []).filter((k) => k !== p.main).map((k) => html`<span class="badge" style=${`background:${POS_COLORS[k]};color:#fff;padding:2px 8px;opacity:.75`}>${POS_NAMES[k]}</span>`)}
+        </span>
       </span>
     </span>
     <${Icon} name="chev" size=${18} />
@@ -98,7 +101,7 @@ export function Spelers({ state }) {
     <section class="card" style="gap:8px">
       ${active.map(row)}
       ${!active.length && html`<p class="sub" style="margin:0">Nog geen spelers.</p>`}
-      <button type="button" class="btn soft block" onClick=${() => setEdit({ id: null, name: '', nick: '', kracht: 50, prefs: [], strengths: [], active: true })}><${Icon} name="plus" size=${18} /> Speler toevoegen</button>
+      <button type="button" class="btn soft block" onClick=${() => setEdit({ id: null, name: '', nick: '', kracht: 50, main: null, flex: true, prefs: [], strengths: [], active: true })}><${Icon} name="plus" size=${18} /> Speler toevoegen</button>
     </section>
     ${archived.length > 0 && html`<section class="card" style="gap:8px"><span class="label">Niet meer in de selectie</span>${archived.map(row)}</section>`}
     <button type="button" class="link" style="align-self:center" onClick=${() => { setStage({ change: true }); setError(''); }}>Pincode wijzigen</button>
@@ -129,7 +132,7 @@ function PlayerEditor({ player, onClose, onSave, onDelete }) {
   const save = () => {
     const name = p.name.trim();
     if (!name) { toast('Vul een naam in'); return; }
-    if (!(p.prefs || []).filter((x) => x !== 'K').length) { toast('Kies minstens één veldpositie'); return; }
+    if (!(p.prefs || []).filter((x) => x !== 'K').length && !(p.main && p.main !== 'K')) { toast('Kies minstens één veldpositie'); return; }
     onSave({ ...p, name, nick: (p.nick || '').trim().slice(0, 8) || nickDefault });
   };
   return html`<${Sheet} onClose=${onClose} label="Speler">
@@ -146,6 +149,15 @@ function PlayerEditor({ player, onClose, onSave, onDelete }) {
       <span class="label">Speelkracht</span>
       <input type="range" class="kracht" min="0" max="100" value=${p.kracht} style=${'background:' + KRACHT_BG} aria-label="Speelkracht" onInput=${(e) => set('kracht', Number(e.target.value))} />
       <div class="between small"><span>groeit nog</span><span>draagt het spel</span></div>
+    </div>
+    <div class="col">
+      <span class="label">Dominante rol</span>
+      <${Seg} label="Dominante rol" value=${p.main || ''} onChange=${(v) => set('main', v || null)} options=${[['', 'Geen'], ['K', 'Keeper'], ['A', 'Achter'], ['M', 'Midden'], ['V', 'Voor']]} />
+      ${p.main && html`<div class="setting">
+        <div class="col" style="gap:1px"><span class="t">App mag afwijken als het moet</span>
+          <span class="small">${p.flex !== false ? 'Krijgt voorrang op ' + POS_NAMES[p.main].toLowerCase() + ', maar de app mag schuiven voor de balans.' : (p.main === 'K' ? 'Wordt bij het klaarzetten als keeper voorgesteld.' : 'Staat altijd ' + POS_NAMES[p.main].toLowerCase() + '.')}</span></div>
+        <${Switch} label="App mag afwijken" on=${p.flex !== false} onChange=${(v) => set('flex', v)} />
+      </div>`}
     </div>
     <div class="col">
       <span class="label">Voorkeursposities</span>

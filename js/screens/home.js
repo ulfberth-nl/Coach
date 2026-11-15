@@ -1,7 +1,7 @@
 import { html, useMemo, useState } from '../../vendor/preact-htm.js';
 import { update, activeTeam, currentMatch } from '../store.js';
 import { createMatch, previewPlan, periodLabel, elapsedInPeriod, fmt, summary, matchEnd } from '../match.js';
-import { Seg, go, Icon } from '../ui.js';
+import { Seg, go, Icon, Neon, useNow } from '../ui.js';
 
 export function keeperCounts(state, team) {
   const counts = {};
@@ -12,9 +12,35 @@ export function keeperCounts(state, team) {
 function suggestKeeper(team, present, counts) {
   const pool = team.players.filter((p) => present.indexOf(p.id) !== -1);
   if (!pool.length) return null;
+  const dominant = pool.filter((p) => p.main === 'K');
+  if (dominant.length) return dominant.slice().sort((a, b) => (counts[a.id] || 0) - (counts[b.id] || 0))[0].id;
   const wants = pool.filter((p) => (p.prefs || []).indexOf('K') !== -1);
   const list = (wants.length ? wants : pool).slice().sort((a, b) => (counts[a.id] || 0) - (counts[b.id] || 0) || a.kracht - b.kracht);
   return list[0].id;
+}
+
+function LiveCard({ match, team }) {
+  const now = useNow(1000);
+  const s = summary(match, team).score;
+  const el = elapsedInPeriod(match, now);
+  return html`<a class="livecard" href="#/live" aria-label="Naar de wedstrijd die bezig is">
+    <${Neon} box><span class="lc">
+      <span class="between">
+        <span class="row" style="gap:8px;font-weight:900;font-size:13px;letter-spacing:.08em">${match.started ? html`<span class="livedot"></span>LIVE` : 'KLAAR VOOR DE AFTRAP'}</span>
+        <span class="row" style="gap:4px;font-weight:800;font-size:14px">Naar wedstrijd <${Icon} name="chev" size=${18} /></span>
+      </span>
+      <span class="between" style="align-items:flex-end">
+        <span class="col" style="gap:0">
+          <span class="big" style="font-size:40px;line-height:1">${fmt(el)}</span>
+          <span style="font-weight:800">${match.started ? periodLabel(team, match.clock.period) + (match.clock.running ? '' : ' · klok stil') : 'Nog niet begonnen'}</span>
+        </span>
+        <span class="col" style="gap:0;align-items:flex-end">
+          <span class="big bump" key=${s.us + '-' + s.them} style="font-size:40px;line-height:1">${s.us}–${s.them}</span>
+          <span style="font-weight:800;max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${match.opponent ? 'tegen ' + match.opponent : team.name}</span>
+        </span>
+      </span>
+    </span></${Neon}>
+  </a>`;
 }
 
 export function Home({ state }) {
@@ -28,6 +54,7 @@ export function Home({ state }) {
   const [present, setPresent] = useState(active.map((p) => p.id));
   const [keeperId, setKeeperId] = useState(() => (team.keeper ? suggestKeeper(team, active.map((p) => p.id), counts) : null));
   const [priority, setPriority] = useState(team.rules.priority);
+  const [keeperOpen, setKeeperOpen] = useState(false);
 
   const F = Object.values(team.lines).reduce((a, b) => a + b, 0);
   const presentIds = present.filter((id) => team.players.some((p) => p.id === id));
@@ -66,15 +93,7 @@ export function Home({ state }) {
     </div>
     <h1 class="h1">Wedstrijd</h1>
 
-    ${running && !running.finished && html`<a class="card accent" href="#/live" style="text-decoration:none;color:inherit">
-      <div class="between">
-        <div class="col" style="gap:2px">
-          <span class="h2">Bezig${running.opponent ? ' tegen ' + running.opponent : ''}</span>
-          <span class="sub">${running.started ? periodLabel(team, running.clock.period) + ' · ' + fmt(elapsedInPeriod(running)) : 'Nog niet begonnen'} · ${(() => { const s = summary(running, team).score; return s.us + '–' + s.them; })()}</span>
-        </div>
-        <span class="btn soft">Verder <${Icon} name="chev" size=${18} /></span>
-      </div>
-    </a>`}
+    ${running && !running.finished && html`<${LiveCard} match=${running} team=${state.teams.find((t) => t.id === running.teamId) || team} />`}
 
     <section class="card">
       <span class="h2">Klaarzetten</span>
@@ -96,14 +115,20 @@ export function Home({ state }) {
       ${!active.length && html`<p class="small" style="margin:0">Nog geen spelers. Voeg ze toe bij Team → Spelers.</p>`}
     </section>
 
-    ${team.keeper && html`<section class="card">
-      <div class="between"><span class="h2">Keeper</span><a class="link" href="#/seizoen">Keepbeurten</a></div>
+    ${team.keeper && html`<section class="card" style="gap:0">
+      <button type="button" class="between" style="background:none;border:none;padding:0;min-height:44px;width:100%;text-align:left" aria-expanded=${keeperOpen ? 'true' : 'false'} onClick=${() => setKeeperOpen(!keeperOpen)}>
+        <span class="col" style="gap:0"><span class="h2">Keeper</span>
+          <span class="sub">${keeper ? (team.players.find((p) => p.id === keeper) || {}).nick + ' · ' + (counts[keeper] ? counts[keeper] + '× gekeept' : 'nog niet gekeept') : 'Kies een keeper'}</span></span>
+        <span class=${'chev' + (keeperOpen ? ' open' : '')}><${Icon} name="chev" size=${20} /></span>
+      </button>
+      <div class=${'collapse' + (keeperOpen ? ' open' : '')}><div><div class="col" style="padding-top:10px">
       <div class="wrap">
         ${active.filter((p) => present.indexOf(p.id) !== -1).map((p) => html`<button type="button" class="chip warm" aria-pressed=${keeperId === p.id ? 'true' : 'false'} onClick=${() => setKeeperId(p.id)}>
           ${p.nick || p.name}<span class="small" style="margin-left:6px">${counts[p.id] ? counts[p.id] + '×' : 'nog niet'}</span>
         </button>`)}
       </div>
-      <span class="small">Voorstel: wie het minst gekeept heeft${team.players.some((p) => (p.prefs || []).indexOf('K') !== -1) ? ' en graag keept' : ''}.</span>
+      <span class="small">Voorstel: wie het minst gekeept heeft${team.players.some((p) => p.main === 'K' || (p.prefs || []).indexOf('K') !== -1) ? ' en graag keept' : ''}.</span>
+      </div></div></div>
     </section>`}
 
     <section class="card">

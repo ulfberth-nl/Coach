@@ -3,7 +3,7 @@ import { update, activeTeam, currentMatch, newTeam, exportData, importData } fro
 import { replan } from '../match.js';
 import { Seg, Switch, Setting, Stepper, Icon, Confirm, toast, STANDS } from '../ui.js';
 
-export const APP_VERSION = '0.1.0';
+export const APP_VERSION = '0.2.0';
 
 export function Team({ state }) {
   const team = activeTeam(state);

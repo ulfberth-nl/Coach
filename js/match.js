@@ -7,7 +7,7 @@ export const matchEnd = (team) => team.periods * periodLen(team);
 
 export function playersMap(team) {
   const map = {};
-  for (const p of team.players) map[p.id] = { kracht: p.kracht, prefs: p.prefs || [], nick: p.nick || p.name, name: p.name };
+  for (const p of team.players) map[p.id] = { kracht: p.kracht, prefs: p.prefs || [], main: p.main || null, flex: p.flex !== false, nick: p.nick || p.name, name: p.name };
   return map;
 }
 

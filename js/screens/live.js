@@ -161,7 +161,7 @@ function LiveInner({ match, team }) {
           <span class="num clock" style=${el > L ? 'color:#B26A00' : ''}>${M.fmt(el)}</span>
           <span class="small">${M.periodLabel(team, match.clock.period)} · ${team.periodMin} min</span>
         </div>
-        <span class="num score" aria-label=${`Stand ${d.score.us} tegen ${d.score.them}`}>${d.score.us}–${d.score.them}</span>
+        <span class="num score bump" key=${d.score.us + '-' + d.score.them} aria-label=${`Stand ${d.score.us} tegen ${d.score.them}`}>${d.score.us}–${d.score.them}</span>
         ${!match.finished && html`<button type="button" class=${'playbtn' + (match.clock.running ? '' : ' go')} onClick=${toggleClock} aria-label=${match.clock.running ? 'Klok pauzeren' : 'Klok starten'}>
           <${Icon} name=${match.clock.running ? 'pause' : 'play'} size=${24} />
         </button>`}
