@@ -301,7 +301,10 @@ export function fairness(final, ctx, ids) {
   const counted = ids.filter((id) => !(final.disabled && final.disabled[id] === 'wedstrijd') && skip.indexOf(id) === -1);
   const pv = counted.map((id) => final.played[id] || 0);
   const tv = counted.map((id) => final.turns[id] || 0);
+  const target = ctx.rules.turnsTarget;
+  const dev = target == null ? 0 : tv.reduce((a, x) => a + Math.abs(x - target), 0);
   return {
+    dev,
     spread: pv.length ? Math.max(...pv) - Math.min(...pv) : 0,
     turnsDiff: tv.length ? Math.max(...tv) - Math.min(...tv) : 0,
     minPlayed: pv.length ? Math.min(...pv) : 0,
@@ -341,12 +344,20 @@ export function planRest(start, ctx, T) {
         const sim = simulate(start, ctx, T, m, v);
         const f = fairness(sim.final, ctx, ids);
         const okTime = !ctx.rules.equalTime || f.spread <= marge;
-        const okTurns = !ctx.rules.evenOften || f.turnsDiff <= 0;
+        const fixed = ctx.rules.turnsTarget != null;
+        const slack = ctx.rules.turnsSlack || 0;
+        const okTurns = fixed
+          ? (slack ? f.minTurns >= ctx.rules.turnsTarget && f.maxTurns <= ctx.rules.turnsTarget + slack : f.dev === 0)
+          : (!ctx.rules.evenOften || f.turnsDiff <= slack);
         const okBench = !maxBench || f.maxStint <= maxBench + 1;
         const cost = (ctx.rules.equalTime ? Math.max(0, f.spread - marge) / 30 : 0) * 10 +
-          (ctx.rules.evenOften ? f.turnsDiff : 0) * 5 +
+          (fixed ? f.dev * 20 : (ctx.rules.evenOften ? f.turnsDiff : 0) * 5) +
           (maxBench ? Math.max(0, f.maxStint - maxBench) / 60 : 0) * 3 + m * 0.05 + f.spread / 600;
-        const cand = { ...sim, fair: f, m, ok: okTime && okTurns && okBench, cost };
+        const why = [];
+        if (!okTurns) why.push(fixed ? 'turns' : 'even');
+        if (!okTime) why.push('time');
+        if (!okBench) why.push('bench');
+        const cand = { ...sim, fair: f, m, ok: okTime && okTurns && okBench, cost, why };
         if (cand.ok) { bestOkM = cand; break; }
         if (!best || cand.cost < best.cost) best = cand;
       }
