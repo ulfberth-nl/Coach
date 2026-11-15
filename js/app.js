@@ -20,12 +20,12 @@ function useRoute() {
   return route;
 }
 
-function TabBar({ current }) {
-  const tab = (href, key, label, icon) => html`<a href=${href} aria-current=${current === key ? 'page' : undefined}><${Icon} name=${icon} /><span>${label}</span></a>`;
+function TabBar({ current, live }) {
+  const tab = (href, key, label, icon, isLive) => html`<a href=${href} class=${isLive ? 'live' : ''} aria-current=${current === key ? 'page' : undefined}><${Icon} name=${icon} /><span>${label}</span></a>`;
   const i = ['wedstrijd', 'seizoen', 'team'].indexOf(current);
   return html`<nav class="tabbar" aria-label="Menu" style=${'--i:' + i}>
     <span class="tab-ind" aria-hidden="true"></span>
-    ${tab('#/', 'wedstrijd', 'Wedstrijd', 'field')}
+    ${tab(live && current !== 'wedstrijd' ? '#/live' : '#/', 'wedstrijd', live && current !== 'wedstrijd' ? 'Live' : 'Wedstrijd', 'field', live && current !== 'wedstrijd')}
     ${tab('#/seizoen', 'seizoen', 'Seizoen', 'chart')}
     ${tab('#/team', 'team', 'Team', 'team')}
   </nav>`;
@@ -46,7 +46,7 @@ function App() {
   }
   return html`
     ${screen}
-    ${tab && html`<${TabBar} current=${tab} />`}
+    ${tab && html`<${TabBar} current=${tab} live=${(() => { const m = state.matches.find((x) => x.id === state.currentMatchId); return !!(m && m.started && !m.finished); })()} />`}
     <${ToastHost} />
     <${FlashHost} />
   `;

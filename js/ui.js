@@ -180,10 +180,12 @@ export function Icon({ name, size = 22 }) {
     team: 'M9 11a3 3 0 100-6 3 3 0 000 6zM17 11a3 3 0 100-6M3 20a6 6 0 0112 0M15 14a6 6 0 016 6',
     lock: 'M6 11h12v9H6zM9 11V8a3 3 0 016 0v3',
     x: 'M6 6l12 12M18 6L6 18',
-    chev: 'M9 6l6 6-6 6'
+    chev: 'M9 6l6 6-6 6',
+    more: 'M5 12h.01M12 12h.01M19 12h.01',
+    clock: 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2'
   };
   const filled = name === 'play' || name === 'pause';
-  return html`<svg width=${size} height=${size} viewBox="0 0 24 24" fill=${filled ? 'currentColor' : 'none'} stroke=${filled ? 'none' : 'currentColor'} stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${paths[name]} /></svg>`;
+  return html`<svg width=${size} height=${size} viewBox="0 0 24 24" fill=${filled ? 'currentColor' : 'none'} stroke=${filled ? 'none' : 'currentColor'} stroke-width=${name === 'more' ? 3.6 : 2.2} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${paths[name]} /></svg>`;
 }
 
 // ---------- het veld ----------

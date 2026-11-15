@@ -3,7 +3,7 @@ import { update, activeTeam, currentMatch, newTeam, exportData, importData } fro
 import { replan, periodWord } from '../match.js';
 import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, toast, STANDS } from '../ui.js';
 
-export const APP_VERSION = '0.3.0';
+export const APP_VERSION = '0.4.0';
 
 // logo verkleinen tot 256 px zodat het licht blijft in de opslag
 function readLogo(file) {
