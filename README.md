@@ -34,13 +34,14 @@ Klaarzetten en spelen gebeuren op hetzelfde scherm, dat altijd in één beeld pa
 - **Bericht kopiëren:** wedstrijd en taken voor de teamapp of WhatsApp (vet met *sterretjes*).
 - **Takenoverzicht:** alle komende wedstrijden met keeper en taken in één bericht voor WhatsApp.
 - **Agenda-bestand (.ics):** alle wedstrijden of één wedstrijd, op de telefoon gemaakt, om in de agenda te zetten of te delen.
-- Het Wedstrijd-scherm zet automatisch de eerstvolgende wedstrijd uit het programma klaar; via het affiche kies je een andere.
+- Het Wedstrijd-scherm zet automatisch de eerstvolgende wedstrijd uit het programma klaar. Via het affiche zie je de wedstrijd die het dichtst bij ligt; tik erop voor een lijst met de andere wedstrijden.
 - **Seizoenen:** elke wedstrijd hoort bij een seizoen (aug–jul). Bovenin Seizoen kies je een eerder seizoen als archief, met uitslagen, minuten, posities en doelpunten.
 
 ## Tijdens de wedstrijd
 
 - **Klok:** tik op de klok om te starten of te pauzeren. Blauw = loopt, oranje en knipperend = staat stil. Rechts zie je welke helft/welk kwart en hoeveel tijd er nog is.
-- **Wisselbalk:** vanaf 1 minuut voor de wissel gloeit hij in alle kleuren; ben je te laat, dan staat er hoeveel (bijv. −1:33).
+- **Wisselbalk:** SpaBo-blauw met een oranje voortgangspil. Vanaf 1 minuut voor de wissel knippert de pil, steeds sneller tot de wissel gedaan is; ben je te laat, dan staat er hoeveel (bijv. −1:33).
+- **Meerdere spelers tegelijk:** stel bij Team → Wisselen in hoeveel kinderen per wisselmoment wisselen (1–5; in de zaal standaard de hele veldploeg). Het wisselvenster toont dan alle paren; per paar kun je spelers kiezen, een paar weghalen of er een toevoegen.
 - **Doelpunt:** tik op de stand en kies het eigen logo (daarna wie scoorde) of het logo van de tegenstander.
 - **Wisselen:** tik de wisselbalk of een speler. Bovenin staat wie eruit en wie erin gaat; Tik op de tegel *Eruit* of *Erin* voor een lijst van het veld of de bank, met minuten en hoe vaak iemand al gewisseld is. Label *plan* = volgende wissel uit het actuele plan; *advies* = beste partner als je zelf iemand anders kiest. In de blauwe balk: *1 min later*, *Bewaren* (je aangepaste wissel gebeurt op het geplande moment, daarna rekent de app verder) en *Wissel nu*. Slepen kan ook: veld ↔ bank = direct wisselen, veld ↔ veld = plekken ruilen.
 - **Wedstrijdplan tijdens de wedstrijd:** de tijdlijn toont waar je nu bent, oude momenten worden grijs, de zwarte pil zegt hoe lang het nog duurt en bij de eerstvolgende wissel staat *Nu wisselen*.

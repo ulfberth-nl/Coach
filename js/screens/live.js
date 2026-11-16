@@ -138,6 +138,131 @@ export function SwapSheet({ match, team, d, init, counts, onClose }) {
   </${Sheet}>`;
 }
 
+// ---------- meerdere spelers tegelijk ----------
+export function GroupSwapSheet({ match, team, d, counts, onClose }) {
+  const st = d.state;
+  const planned = M.nextGroup(match, team);
+  const first = planned[0] || null;
+  const [pairs, setPairs] = useState(planned.map((s) => ({ out: s.out, in: s.in })));
+  const [after, setAfter] = useState(first && first.fixed && first.after ? first.after : 'terug');
+  const [open, setOpen] = useState(null); // { i, side }
+  const [last, setLast] = useState({ i: 0, side: 'out' });
+  const nick = (id) => M.nickOf(team, id);
+  const pw = M.periodWord(team);
+  const kracht = (id) => { const p = team.players.find((x) => x.id === id); return p ? p.kracht : 50; };
+  const placed = useMemo(() => M.placeGroup(match, team, pairs), [pairs]);
+  const preview = useMemo(() => (pairs.length ? M.previewSwap(match, team, { pairs }) : null), [pairs]);
+  const key = (ps) => ps.map((p) => p.out + '>' + p.in).sort().join('|');
+  const isPlanned = !!first && key(pairs) === key(planned);
+  const planOuts = planned.map((s) => s.out), planIns = planned.map((s) => s.in);
+  const usedOut = pairs.map((p) => p.out), usedIn = pairs.map((p) => p.in);
+  const benchAll = useMemo(() => st.bench.filter((id) => !st.disabled[id]).sort((a, b) => ((planIns.indexOf(b) !== -1) - (planIns.indexOf(a) !== -1)) || (st.played[a] - st.played[b])), []);
+  const fieldAll = useMemo(() => Object.keys(st.pos).sort((a, b) => ((planOuts.indexOf(b) !== -1) - (planOuts.indexOf(a) !== -1)) || (st.turns[a] - st.turns[b]) || (st.played[b] - st.played[a])), []);
+  const pf = preview && preview.plan.fair;
+  const marge = team.rules.marge;
+  const target = M.turnsTarget(team);
+
+  const setPair = (i, side, id) => { setPairs(pairs.map((p, k) => (k === i ? { ...p, [side]: id } : p))); setOpen(null); };
+  const toggle = (i, side) => { if (open && open.i === i && open.side === side) setOpen(null); else { setOpen({ i, side }); setLast({ i, side }); } };
+  const remove = (i) => { setPairs(pairs.filter((_, k) => k !== i)); setOpen(null); };
+  const freeIn = benchAll.filter((id) => usedIn.indexOf(id) === -1);
+  const freeOut = fieldAll.filter((id) => usedOut.indexOf(id) === -1);
+  const add = () => {
+    if (!freeIn.length || !freeOut.length) return;
+    const inn = freeIn[0];
+    const out = freeOut.slice().sort((a, b) => (st.turns[a] - st.turns[b]) || (st.played[b] - st.played[a]) || (Math.abs(kracht(a) - kracht(inn)) - Math.abs(kracht(b) - kracht(inn))))[0];
+    setPairs(pairs.concat([{ out, in: inn }]));
+  };
+  const run = (close) => {
+    mutate((m, t) => {
+      M.doSwapGroup(m, t, pairs);
+      if (after !== 'terug') for (const p of pairs) M.disablePlayer(m, t, p.out, after);
+    });
+    toast(`${pairs.length} wissels: ${pairs.map((p) => nick(p.in)).join(', ')} erin`, undoAction);
+    close();
+  };
+  const later = (close) => { mutate((m, t) => M.delay(m, t, 60)); toast('Wissels 1 minuut later'); close(); };
+  const save = (close) => {
+    const ok = mutate((m, t) => M.fixGroup(m, t, pairs, after));
+    if (ok) toast(`Bewaard voor ${M.fmt(first.t - match.clock.period * M.periodLen(team))}`, { label: 'Ongedaan', run: () => { mutate((m, t) => M.clearFixed(m, t)); toast('Bewaarde wissels teruggedraaid'); } });
+    else toast('Bewaren lukt niet met deze keuze');
+    close();
+  };
+  const ok = (good) => html`<span class=${'fx ' + (good ? 'good' : 'warn')}>${good ? '✓' : '!'}</span>`;
+  const row = (i, side, id) => {
+    const cur = pairs[i] && pairs[i][side];
+    const tag = (side === 'out' ? planOuts : planIns).indexOf(id) !== -1 ? 'plan' : null;
+    const t = st.turns[id] || 0;
+    return html`<button type="button" key=${side + id} class=${'prow2' + (side === 'out' ? ' warm' : '') + (cur === id ? ' on' : '')} onClick=${() => setPair(i, side, id)}>
+      <span class="ldot" style=${`background:${st.pos[id] ? POS_COLORS[st.pos[id]] : 'var(--line-2)'}`}></span>
+      <span class="col grow" style="gap:1px;min-width:0">
+        <span class="pr-name">${nick(id)}${tag && html` <span class="tag plan">plan</span>`}</span>
+        <span class="pr-meta">${st.pos[id] ? LINE_NAMES[st.pos[id]] + ' · ' : ''}${M.mins(st.played[id])} min · ${t ? t + '× gewisseld' : 'nog niet gewisseld'}</span>
+      </span>
+      ${cur === id && html`<span class="pr-check" aria-hidden="true">✓</span>`}
+    </button>`;
+  };
+  const panelList = () => {
+    const { i, side } = last;
+    const p = pairs[i];
+    if (!p) return [];
+    const pool = side === 'out' ? fieldAll.filter((id) => id === p.out || usedOut.indexOf(id) === -1) : benchAll.filter((id) => id === p.in || usedIn.indexOf(id) === -1);
+    return pool.map((id) => row(i, side, id));
+  };
+
+  const footer = (close) => html`
+    ${first && html`<button type="button" class="btn ghostblue" style="flex:1 1 0" onClick=${() => later(close)}>1 min later</button>`}
+    ${first && !isPlanned && html`<button type="button" class="btn ghostblue" style="flex:1 1 0" disabled=${!pairs.length} onClick=${() => save(close)}>Bewaren</button>`}
+    <button type="button" class="btn onblue" style="flex:1.4 1 0" disabled=${!pairs.length} onClick=${() => run(close)}>Wissel nu</button>`;
+
+  return html`<${Sheet} onClose=${onClose} label="Wissels" x footer=${footer}>
+    <div class="swaphead">
+      <span class="h2">${isPlanned ? `Wissel ${counts.done + 1} van ${counts.total}` : 'Wissels · aangepast'}</span>
+      <span class="sub">${pairs.length} ${pairs.length === 1 ? 'speler' : 'spelers'} tegelijk · ${M.fmt(M.elapsedInPeriod(match))} · ${M.periodLabel(team, match.clock.period)}</span>
+    </div>
+    <div class="gpairs">
+      ${pairs.map((p, i) => {
+        const pl = placed[i] || {};
+        return html`<div class="gpair-wrap" key=${'p' + i}>
+          <div class="gpair">
+            <button type="button" class="gtile out" aria-expanded=${open && open.i === i && open.side === 'out' ? 'true' : 'false'} onClick=${() => toggle(i, 'out')}>
+              <span class="duo-label">Eruit</span><span class="gname" key=${'o' + p.out}>${nick(p.out)}</span>
+              <span class="gsub">${LINE_NAMES[st.pos[p.out]] || ''} · ${M.mins(st.played[p.out])} min</span>
+            </button>
+            <span class="duo-arrow" aria-hidden="true"><${Icon} name="swap" size=${22} /></span>
+            <button type="button" class="gtile in" aria-expanded=${open && open.i === i && open.side === 'in' ? 'true' : 'false'} onClick=${() => toggle(i, 'in')}>
+              <span class="duo-label">Erin</span><span class="gname" key=${'i' + p.in}>${nick(p.in)}</span>
+              <span class="gsub">${pl.line ? 'naar ' + LINE_NAMES[pl.line] + ' · ' : ''}${M.mins(st.played[p.in])} min</span>
+            </button>
+            ${pairs.length > 1 && html`<button type="button" class="gremove" aria-label=${'Wissel ' + nick(p.out) + ' weghalen'} onClick=${() => remove(i)}><${Icon} name="x" size=${16} /></button>`}
+          </div>
+          ${pl.shift && html`<span class="gshift">↔ ${nick(pl.shift.id)} schuift door naar ${LINE_NAMES[pl.shift.to]}</span>`}
+          <div class=${'collapse' + (open && open.i === i ? ' open' : '')}><div>
+            ${last.i === i && html`<div class="plist" key=${last.side + i}>
+              <span class="plabel">${last.side === 'out' ? 'Wie gaat eruit? · in het veld' : 'Wie komt erin? · op de bank'}</span>
+              ${panelList()}
+            </div>`}
+          </div></div>
+        </div>`;
+      })}
+      ${freeIn.length > 0 && freeOut.length > 0 && html`<button type="button" class="addtile" onClick=${add}><${Icon} name="plus" size=${18} /> Nog een speler wisselen</button>`}
+    </div>
+    <span class="swapnote">Tik op een naam om een andere speler te kiezen</span>
+
+    <div class="col">
+      <span class="label">Wie eruit gaat, daarna</span>
+      <${Seg} label="Daarna" value=${after} onChange=${setAfter} options=${[['terug', 'Kan terug'], ['periode', 'Rust deze ' + pw], ['wedstrijd', 'Klaar']]} />
+    </div>
+
+    ${preview && html`<div class="effects">
+      <div class="fxrow">${ok(!preview.lines.some((l) => l.light))}<span>${preview.lines.some((l) => l.light) ? 'Lichter: ' + preview.lines.filter((l) => l.light).map((l) => l.name).join(', ') : 'Linies blijven in balans'}</span></div>
+      <div class="fxrow">${ok(!team.rules.equalTime || pf.spread <= marge * 60 + 1)}<span>Speeltijd straks ${M.mins(pf.minPlayed)}–${M.mins(pf.maxPlayed)} min per kind</span></div>
+      <div class="fxrow">${ok(target != null ? preview.minTurns === target && preview.maxTurns === target : preview.minTurns === preview.maxTurns)}<span>${preview.minTurns === preview.maxTurns ? `Iedereen ${preview.minTurns}× gewisseld` : `${preview.minTurns}–${preview.maxTurns}× gewisseld`}</span></div>
+      ${!isPlanned && first && html`<span class="small">Wissel nu: de app rekent direct een nieuw plan. Bewaren: deze wissels gebeuren op het geplande moment, daarna rekent de app verder.</span>`}
+    </div>`}
+  </${Sheet}>`;
+}
+
 // ---------- bankspeler ----------
 export function BenchSheet({ match, team, d, id, onClose, openSwap }) {
   const nick = M.nickOf(team, id);

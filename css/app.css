@@ -536,11 +536,7 @@ input[type="date"]::-webkit-datetime-edit, input[type="time"]::-webkit-datetime-
 /* stand met dubbele punt */
 .scorebtn .sep2 { display: inline-block; margin: 0 4px; color: var(--line-2); transform: translateY(-0.06em); }
 
-/* wisselbalk vanaf 1 minuut: oranje balk, witte lijn, daaromheen dezelfde neonrand als bij de spelers */
-.neon.barglow { border-radius: 20px; }
-.neon.barglow > .in { margin: 3px; padding: 2px; background: #fff; border-radius: 17px; }
-.neon.barglow .nextbar { border-radius: 15px; }
-.nb-late { flex: 0 0 auto; font-family: Inter, sans-serif; font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 900; color: #fff; background: #C8102E; padding: 4px 10px; border-radius: 10px; animation: stilPulse 1.2s ease-in-out infinite; }
+.nb-late { flex: 0 0 auto; font-family: Inter, sans-serif; font-variant-numeric: tabular-nums; font-size: 20px; font-weight: 900; color: #C8102E; background: #fff; padding: 3px 12px; border-radius: 999px; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
 @media (prefers-reduced-motion: reduce) { .nb-late { animation: none; } }
 
 /* wedstrijdplan tijdens de wedstrijd */
@@ -574,3 +570,35 @@ button.duo-side[aria-expanded="true"] .duo-chev { transform: rotate(-90deg); opa
 .tag.advies { background: #E3F3E7; color: #14652A; }
 .btn.ghostblue { font-size: 15px; padding: 0 8px; }
 .btn.ghostblue:disabled { opacity: .5; }
+
+/* wisselbalk: SpaBo-blauw, dikke oranje voortgangspil met witte rand; knippert steeds sneller vanaf 1 minuut */
+.nextbar.blue { flex-direction: column; align-items: stretch; gap: 9px; padding: 10px 14px 12px; background: var(--blue); color: #fff; box-shadow: 0 6px 18px rgba(31,60,136,.28); }
+.nb-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.nextbar.blue .nb-title { color: #fff; }
+.nextbar.blue .nb-sub { color: rgba(255,255,255,.86); }
+.nextbar.blue .nb-n { color: rgba(255,255,255,.78); }
+.nb-pill { position: relative; display: block; height: 16px; border-radius: 999px; border: 2px solid #fff; background: rgba(255,255,255,.16); overflow: hidden; }
+.nb-pill > span { display: block; height: 100%; border-radius: 999px; background: var(--orange); transition: width 1s linear; }
+.nb-pill.blink > span { animation: pillBlink var(--blink, 1s) ease-in-out infinite; }
+@keyframes pillBlink { 0%, 100% { opacity: 1; } 50% { opacity: .18; } }
+@media (prefers-reduced-motion: reduce) { .nb-pill.blink > span { animation: none; } }
+
+/* wisselvenster voor meerdere spelers tegelijk */
+.gpairs { display: flex; flex-direction: column; gap: 10px; }
+.gpair { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; align-items: center; gap: 6px; }
+.gtile { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding: 10px 12px; border-radius: 16px; text-align: left; font: inherit; color: var(--ink); cursor: pointer; transition: transform .18s var(--ease-out), box-shadow .25s ease; }
+.gtile:active { transform: scale(.97); }
+.gtile.out { background: var(--orange-tint); border: 2px solid var(--orange); }
+.gtile.in { background: var(--blue-tint); border: 2px solid var(--blue-2); }
+.gtile.out[aria-expanded="true"] { box-shadow: 0 0 0 4px rgba(245,165,36,.28); }
+.gtile.in[aria-expanded="true"] { box-shadow: 0 0 0 4px rgba(43,87,201,.18); }
+.gname { font-size: 19px; font-weight: 900; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: pop .35s var(--spring); }
+.gsub { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gremove { width: 34px; height: 34px; border-radius: 999px; border: none; background: var(--bg); color: var(--muted); display: inline-flex; align-items: center; justify-content: center; }
+.gshift { display: inline-block; margin-top: 6px; padding: 4px 10px; border-radius: 10px; border: 1.5px dashed var(--orange); font-size: 13px; font-weight: 800; }
+.gpair-wrap .collapse.open { margin-top: 8px; }
+
+/* programma-keuze als uitklaplijst */
+.progsel { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 62px; padding: 8px 14px; border-radius: 16px; border: 1.5px solid var(--line-2); background: #fff; text-align: left; font: inherit; color: var(--ink); transition: box-shadow .25s ease; }
+.progsel[aria-expanded="true"] { box-shadow: 0 0 0 4px rgba(43,87,201,.18); border-color: var(--blue-2); }
+.progsel .chev.open { transform: rotate(-90deg) !important; }

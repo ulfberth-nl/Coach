@@ -248,21 +248,27 @@ export function replan(match, team, ms = Date.now()) {
   // bewaarde (aangepaste) wissel: die gebeurt op het geplande moment, daarna rekent de app verder
   const fx = match.fixed;
   const L = periodLen(team);
-  const fixedOk = fx && !ctx.lineupPending && fx.t >= anchor && fx.t < (Math.floor(anchor / L) + 1) * L - 1 &&
-    (fx.out in st.pos) && st.bench.indexOf(fx.in) !== -1 && !st.disabled[fx.in];
+  const pairs = fx ? (fx.pairs || [{ out: fx.out, in: fx.in }]) : [];
+  const outs = pairs.map((p) => p.out), ins = pairs.map((p) => p.in);
+  const fixedOk = fx && pairs.length && !ctx.lineupPending && fx.t >= anchor && fx.t < (Math.floor(anchor / L) + 1) * L - 1 &&
+    outs.every((id) => id in st.pos) && ins.every((id) => st.bench.indexOf(id) !== -1 && !st.disabled[id]) &&
+    new Set(outs.concat(ins)).size === outs.length + ins.length;
   if (fx && !fixedOk) match.fixed = null;
   const plan = (c) => {
     if (!fixedOk) return planRest(st, c, anchor);
     const s2 = JSON.parse(JSON.stringify(st));
     for (const id of Object.keys(s2.pos)) s2.played[id] = (s2.played[id] || 0) + (fx.t - anchor);
-    const placed = placeIn(s2.pos, fx.out, fx.in, playersMap(team), stand);
-    s2.pos = placed.pos;
-    s2.bench = s2.bench.filter((id) => id !== fx.in).concat([fx.out]);
-    s2.since[fx.out] = fx.t; s2.since[fx.in] = fx.t;
-    s2.turns[fx.out] = (s2.turns[fx.out] || 0) + 1;
+    const steps = [];
+    for (const pr of pairs) {
+      const placed = placeIn(s2.pos, pr.out, pr.in, playersMap(team), stand);
+      s2.pos = placed.pos;
+      s2.bench = s2.bench.filter((id) => id !== pr.in).concat([pr.out]);
+      s2.since[pr.out] = fx.t; s2.since[pr.in] = fx.t;
+      s2.turns[pr.out] = (s2.turns[pr.out] || 0) + 1;
+      steps.push({ type: 'swap', t: fx.t, out: pr.out, in: pr.in, line: placed.line, shift: placed.shift, pos: { ...placed.pos }, fixed: true, after: fx.after || 'terug' });
+    }
     const rest = planRest(s2, { ...c, firstAt: null }, fx.t);
-    const step = { type: 'swap', t: fx.t, out: fx.out, in: fx.in, line: placed.line, shift: placed.shift, pos: { ...placed.pos }, fixed: true, after: fx.after || 'terug' };
-    return { ...rest, steps: [step].concat(rest.steps) };
+    return { ...rest, steps: steps.concat(rest.steps) };
   };
   let r = plan(ctx);
   const swapsOf = (x) => x.steps.filter((s) => s.type === 'swap').length;
@@ -444,11 +450,50 @@ export function doSwap(match, team, out, inn, shift) {
   replan(match, team);
 }
 
+// Meerdere wissels tegelijk: telkens de beste plek, één keer herplannen; ongedaan maken haalt de hele groep weg.
+export function doSwapGroup(match, team, pairs) {
+  if (pairs.length === 1) return doSwap(match, team, pairs[0].out, pairs[0].in, pairs[0].shift || null);
+  const T = gameTime(match, team);
+  const d = derive(match, team, T);
+  const stand = currentStand(match, team, d.score);
+  const players = playersMap(team);
+  let pos = { ...d.state.pos };
+  const g = uid();
+  for (const pr of pairs) {
+    if (!(pr.out in pos)) continue;
+    const placed = placeIn(pos, pr.out, pr.in, players, stand);
+    const line = placed.shift ? pos[placed.shift.id] : pos[pr.out];
+    match.events.push({ id: uid(), type: 'swap', t: T, out: pr.out, in: pr.in, line, shift: placed.shift || null, g });
+    pos = placed.pos;
+  }
+  match.firstAt = null;
+  match.fixed = null;
+  replan(match, team);
+}
+
+// Paren voor een groepswissel met de plek van elke nieuwe speler (na elkaar toegepast)
+export function placeGroup(match, team, pairs) {
+  const d = derive(match, team, gameTime(match, team));
+  const stand = currentStand(match, team, d.score);
+  const players = playersMap(team);
+  let pos = { ...d.state.pos };
+  return pairs.map((pr) => {
+    if (!(pr.out in pos)) return { ...pr, line: null, shift: null };
+    const placed = placeIn(pos, pr.out, pr.in, players, stand);
+    pos = placed.pos;
+    return { ...pr, line: placed.line, shift: placed.shift };
+  });
+}
+
 // Aangepaste wissel bewaren voor het moment waarop de volgende wissel gepland stond.
 export function fixSwap(match, team, out, inn, after = 'terug') {
+  return fixGroup(match, team, [{ out, in: inn }], after);
+}
+
+export function fixGroup(match, team, pairs, after = 'terug') {
   const next = nextSwap(match, team);
   if (!next) return false;
-  match.fixed = { t: next.t, out, in: inn, after };
+  match.fixed = { t: next.t, pairs: pairs.map((p) => ({ out: p.out, in: p.in })), after };
   match.firstAt = null;
   replan(match, team);
   return !!match.fixed;
@@ -533,6 +578,7 @@ export function undo(match, team) {
   const u = lastUndoable(match);
   if (!u) return null;
   match.events.splice(u.index, 1);
+  if (u.ev.g) match.events = match.events.filter((e) => e.g !== u.ev.g);
   if (u.ev.type === 'join') match.present = match.present.filter((id) => id !== u.ev.playerId);
   replan(match, team);
   return u.ev;
@@ -552,9 +598,20 @@ export function nextSwap(match, team) {
   return s && s.type === 'swap' && s.t < end ? s : null;
 }
 
+// Alle wissels van het eerstvolgende moment (1 of meer spelers tegelijk)
+export function nextGroup(match, team) {
+  const first = nextSwap(match, team);
+  if (!first) return [];
+  const out = [];
+  for (const s of match.plan.steps) { if (s.type !== 'swap' || s.t !== first.t) break; out.push(s); }
+  return out;
+}
+
+// telt wisselmomenten (een groep wissels tegelijk = 1 moment)
 export function swapCounts(match) {
-  const done = match.events.filter((e) => e.type === 'swap').length;
-  const planned = match.plan ? match.plan.steps.filter((s) => s.type === 'swap').length : 0;
+  const moments = (list) => { let n = 0, last = null; for (const s of list) { if (s.type !== 'swap') { last = null; continue; } const key = s.g || s.t; if (key !== last) n++; last = key; } return n; };
+  const done = moments(match.events.filter((e) => e.type === 'swap'));
+  const planned = match.plan ? moments(match.plan.steps) : 0;
   return { done, planned, total: done + planned };
 }
 
@@ -585,7 +642,8 @@ export function placement(match, team, out, inn) {
 // Wat gebeurt er als we deze wissel nu doen? Voor het gevolgen-paneel.
 export function previewSwap(match, team, swap) {
   const copy = JSON.parse(JSON.stringify(match));
-  if (swap) doSwap(copy, team, swap.out, swap.in, swap.shift || null);
+  if (swap && swap.pairs) doSwapGroup(copy, team, swap.pairs);
+  else if (swap) doSwap(copy, team, swap.out, swap.in, swap.shift || null);
   else delay(copy, team, 60);
   const d = derive(copy, team, gameTime(copy, team));
   const players = playersMap(team);
@@ -633,7 +691,10 @@ export function timeline(match, team) {
       const np = { ...pos }; delete np[ev.out];
       if (ev.shift && ev.shift.id in np) { np[ev.in] = np[ev.shift.id]; np[ev.shift.id] = ev.shift.to; } else np[ev.in] = pos[ev.out];
       pos = np; bench = bench.filter((x) => x !== ev.in).concat([ev.out]);
-      cards.push({ kind: 'swap', t: ev.t, out: ev.out, in: ev.in, shift: ev.shift, slots, pos, bench, keeper, past: true });
+      const prev = cards[cards.length - 1];
+      if (ev.g && prev && prev.kind === 'swap' && prev.g === ev.g) {
+        cards[cards.length - 1] = { ...prev, outs: prev.outs.concat([ev.out]), ins: prev.ins.concat([ev.in]), shift: prev.shift || ev.shift, slots, pos, bench };
+      } else cards.push({ kind: 'swap', t: ev.t, out: ev.out, in: ev.in, outs: [ev.out], ins: [ev.in], g: ev.g || null, shift: ev.shift, slots, pos, bench, keeper, past: true });
     } else if (ev.type === 'join' && bench) {
       bench = bench.concat([ev.playerId]);
     } else if (ev.type === 'move' && pos && pos[ev.a] && pos[ev.b]) {
@@ -653,7 +714,10 @@ export function timeline(match, team) {
       } else {
         slots = slotSwap(slots, s.out, s.in, s.shift);
         pos = { ...s.pos }; bench = bench.filter((x) => x !== s.in).concat([s.out]);
-        cards.push({ kind: 'swap', t: s.t, out: s.out, in: s.in, shift: s.shift, slots, pos, bench, keeper, past: false });
+        const prev = cards[cards.length - 1];
+        if (prev && !prev.past && prev.kind === 'swap' && prev.t === s.t) {
+          cards[cards.length - 1] = { ...prev, outs: prev.outs.concat([s.out]), ins: prev.ins.concat([s.in]), shift: prev.shift || s.shift, slots, pos, bench };
+        } else cards.push({ kind: 'swap', t: s.t, out: s.out, in: s.in, outs: [s.out], ins: [s.in], shift: s.shift, slots, pos, bench, keeper, past: false });
       }
     }
   }

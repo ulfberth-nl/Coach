@@ -165,11 +165,12 @@ export function isDisabled(state, id, t, ctx) {
 }
 
 // Kies wie erin gaat en wie eruit.
-export function chooseSwap(state, ctx, t, interval, inMode = 'played', outMode = 'played') {
+export function chooseSwap(state, ctx, t, interval, inMode = 'played', outMode = 'played', used = null) {
   const { players, rules, stand } = ctx;
-  const eligible = state.bench.filter((id) => !isDisabled(state, id, t, ctx));
+  // used = wie op dit moment al gewisseld is (bij meerdere wissels tegelijk niet direct terug)
+  const eligible = state.bench.filter((id) => !isDisabled(state, id, t, ctx) && !(used && used.has(id)));
   if (!eligible.length) return null;
-  const fieldIds = Object.keys(state.pos);
+  const fieldIds = Object.keys(state.pos).filter((id) => !(used && used.has(id)));
   if (!fieldIds.length) return null;
 
   const byPlayed = (a, b) => (state.played[a] - state.played[b]) || (state.since[a] - state.since[b]);
@@ -274,6 +275,7 @@ function applyLineup(state, lu, t) {
 // Simuleer de rest van de wedstrijd met m wissels (verdeeld over de resterende periodes).
 function simulate(start, ctx, T, m, opt = {}) {
   const { periodLen, periods, rules } = ctx;
+  const perMoment = Math.max(1, Math.min(5, rules.perMoment || 1));
   const end = periods * periodLen;
   const state = cloneState(start);
   const segments = [];
@@ -310,10 +312,15 @@ function simulate(start, ctx, T, m, opt = {}) {
       const t = Math.round(sg.first ? sg.first + ((sg.b - sg.first) * (j - 1)) / sg.k : sg.a + (sg.len * j) / (sg.k + 1));
       advance(state, now, t);
       now = t;
-      const sw = chooseSwap(state, ctx, t, interval, opt.inMode, opt.outMode);
-      if (!sw) continue;
-      steps.push({ type: 'swap', t, out: sw.out, in: sw.in, line: sw.line, shift: sw.shift, pos: { ...sw.pos } });
-      applySwap(state, sw, t);
+      // per moment 1–5 spelers tegelijk (instelling Team → Wisselen)
+      const used = new Set();
+      for (let q = 0; q < perMoment; q++) {
+        const sw = chooseSwap(state, ctx, t, interval, opt.inMode, opt.outMode, used);
+        if (!sw) break;
+        steps.push({ type: 'swap', t, out: sw.out, in: sw.in, line: sw.line, shift: sw.shift, pos: { ...sw.pos } });
+        applySwap(state, sw, t);
+        used.add(sw.out); used.add(sw.in);
+      }
     }
   }
   advance(state, now, end);

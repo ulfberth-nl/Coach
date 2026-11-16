@@ -154,7 +154,7 @@ export function Seizoen({ state }) {
   const rows = schedule.map((e) => ({ kind: 'plan', e, m: finished.find((x) => x.scheduleId === e.id) || null, date: e.date, time: e.time || '' }))
     .concat(finished.filter((m) => !m.scheduleId || !schedule.some((e) => e.id === m.scheduleId)).map((m) => ({ kind: 'played', m, date: m.date, time: m.time || '' })));
   // nieuwste bovenaan
-  const list = rows.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+  const list = rows.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.time || '').localeCompare(a.time || ''));
   void linked; void today;
   const newEntry = () => setEdit({ id: null, opponent: '', home: true, date: todayISO(), time: '', meet: '', field: '', season, keeperId: '', absent: [], tasks: { fluiten: [], fruit: [], bar: [] } });
 
@@ -258,6 +258,8 @@ function ScheduleSheet({ team, matches, entry, onClose }) {
     for (const m of matches) if (m.teamId === team.id && m.finished && m.keeperId && !m.scheduleId && seasonOf(m.date) === seasonOf(e.date)) c[m.keeperId] = (c[m.keeperId] || 0) + 1;
     return c;
   })();
+  const onDate = (ev) => { const v = ev.target.value; setE((x) => (x.date === v ? x : { ...x, date: v, season: !x.season || x.season === seasonOf(x.date) ? seasonOf(v) : x.season })); };
+  const onTime = (ev) => { const v = ev.target.value; setE((x) => (x.time === v ? x : { ...x, time: v, meet: v && (!x.meet || x.meet === minus30(x.time)) ? minus30(v) : x.meet })); };
   const fairFill = () => {
     const tasks = { ...(e.tasks || {}) };
     const used = new Set(Object.values(tasks).flat().filter(Boolean).concat(absent));
@@ -312,11 +314,11 @@ function ScheduleSheet({ team, matches, entry, onClose }) {
         ${[-1, 0, 1].map((n) => shiftSeason(seasonOf(todayISO()), n)).concat(e.season ? [e.season] : []).filter((v, i, a) => a.indexOf(v) === i).sort().map((s) => html`<option value=${s}>${seasonLabel(s)}</option>`)}
       </select></div>
     <div class="row">
-      <div class="col grow"><label class="label" for="s-date">Datum</label><input id="s-date" type="date" class="input" value=${e.date} onInput=${(ev) => { const v = ev.target.value; setE((x) => ({ ...x, date: v, season: !x.season || x.season === seasonOf(x.date) ? seasonOf(v) : x.season })); }} /></div>
-      <div class="col" style="width:118px"><label class="label" for="s-time">Aanvang</label><input id="s-time" type="time" class="input" value=${e.time} onInput=${(ev) => { const v = ev.target.value; setE((x) => ({ ...x, time: v, meet: v && (!x.meet || x.meet === minus30(x.time)) ? minus30(v) : x.meet })); }} /></div>
+      <div class="col grow"><label class="label" for="s-date">Datum</label><input id="s-date" type="date" class="input" value=${e.date} onInput=${onDate} onChange=${onDate} /></div>
+      <div class="col" style="width:118px"><label class="label" for="s-time">Aanvang</label><input id="s-time" type="time" class="input" value=${e.time} onInput=${onTime} onChange=${onTime} /></div>
     </div>
     <div class="row">
-      <div class="col" style="width:118px"><label class="label" for="s-meet">Verzamelen</label><input id="s-meet" type="time" class="input" value=${e.meet} onInput=${(ev) => set('meet', ev.target.value)} /></div>
+      <div class="col" style="width:118px"><label class="label" for="s-meet">Verzamelen</label><input id="s-meet" type="time" class="input" value=${e.meet} onInput=${(ev) => set('meet', ev.target.value)} onChange=${(ev) => set('meet', ev.target.value)} /></div>
       <div class="col grow"><label class="label" for="s-field">Veld / locatie</label><input id="s-field" class="input" value=${e.field} placeholder="Bijv. veld 3" onInput=${(ev) => set('field', ev.target.value)} /></div>
     </div>
 

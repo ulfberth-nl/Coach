@@ -3,7 +3,7 @@ import { currentMatch } from '../store.js';
 import * as M from '../match.js';
 import { PlanView } from '../planview.js';
 import { PlanSummary } from './home.js';
-import { mutate, SwapSheet } from './live.js';
+import { mutate, SwapSheet, GroupSwapSheet } from './live.js';
 import { Icon, toast, useNow } from '../ui.js';
 
 export function Plan({ state }) {
@@ -21,7 +21,8 @@ function PlanInner({ match, team }) {
   const T = live ? M.gameTime(match, team, now) : null;
   const [swap, setSwap] = useState(null);
   const next = live ? M.nextSwap(match, team) : null;
-  const openSwap = next && !M.lineupPending(match, team) ? () => setSwap({ out: next.out, in: next.in, planned: true }) : null;
+  const group = live ? M.nextGroup(match, team) : [];
+  const openSwap = next && !M.lineupPending(match, team) ? () => setSwap(group.length > 1 ? { group: true } : { out: next.out, in: next.in, planned: true }) : null;
   return html`<main class="screen">
     <div class="topbar">
       <a class="iconbtn" href="#/" aria-label="Terug"><${Icon} name="back" /></a>
@@ -34,6 +35,7 @@ function PlanInner({ match, team }) {
         liveT=${T} onSwapNow=${openSwap}
         editable=${editable} onSwap=${(a, b) => { mutate((m, t) => M.swapInStartLineup(m, t, a, b)); toast(`${M.nickOf(team, a)} ↔ ${M.nickOf(team, b)} · plan opnieuw berekend`); }} />
     </section>
-    ${swap && html`<${SwapSheet} match=${match} team=${team} d=${M.derive(match, team, T)} init=${swap} counts=${M.swapCounts(match)} onClose=${() => setSwap(null)} />`}
+    ${swap && !swap.group && html`<${SwapSheet} match=${match} team=${team} d=${M.derive(match, team, T)} init=${swap} counts=${M.swapCounts(match)} onClose=${() => setSwap(null)} />`}
+    ${swap && swap.group && html`<${GroupSwapSheet} match=${match} team=${team} d=${M.derive(match, team, T)} counts=${M.swapCounts(match)} onClose=${() => setSwap(null)} />`}
   </main>`;
 }

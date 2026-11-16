@@ -20,11 +20,14 @@ export function suggestKeeper(team, present, counts) {
 export const WHY_TEXT = { turns: 'het aantal wissels per kind', even: 'even vaak wisselen', time: 'de marge in speeltijd', bench: 'maximaal op de bank' };
 
 export function PlanSummary({ plan, team }) {
-  const swaps = plan.steps.filter((s) => s.type === 'swap').length;
+  const groups = {};
+  for (const s of plan.steps) if (s.type === 'swap') groups[s.t] = (groups[s.t] || 0) + 1;
+  const swaps = Object.keys(groups).length;
+  const per = Math.max(1, ...Object.values(groups));
   const every = swaps ? Math.round((matchEnd(team) / (swaps + team.periods)) / 30) / 2 : 0;
   const f = plan.fair;
   return html`<div class="col" style="gap:4px">
-    <span class="sub" style="color:var(--ink);font-weight:800">${swaps ? `${swaps} wissels, telkens 1 · ongeveer elke ${String(every).replace('.', ',')} min` : 'Geen wissels nodig'}</span>
+    <span class="sub" style="color:var(--ink);font-weight:800">${swaps ? `${swaps} ${per > 1 ? 'wisselmomenten' : 'wissels'}, telkens ${per > 1 ? 'tot ' + per : 1} · ongeveer elke ${String(every).replace('.', ',')} min` : 'Geen wissels nodig'}</span>
     ${swaps > 0 && html`<span class="sub">Speeltijd ${mins(f.minPlayed)}–${mins(f.maxPlayed)} min per kind · ${f.minTurns === f.maxTurns ? `iedereen ${f.minTurns}× gewisseld` : `${f.minTurns}–${f.maxTurns}× gewisseld`}</span>`}
     ${!plan.ok && html`<span class="small" style="color:var(--ink);background:var(--orange-tint);padding:6px 10px;border-radius:10px">Niet alles past tegelijk (${(plan.why || []).map((w) => WHY_TEXT[w]).join(', ')}). Dit is de eerlijkste verdeling; aanpassen kan bij Team → Wisselen.</span>`}
   </div>`;
