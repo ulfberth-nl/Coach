@@ -1,2 +1,10 @@
 node_modules/
 .DS_Store
+
+# back-ups uit de app bevatten gegevens van kinderen: nooit committen
+*backup*.json
+spabo-coach-*.json
+# clublogo wordt alleen lokaal in de app geladen
+logo*.png
+logo*.jpg
+logo*.svg
