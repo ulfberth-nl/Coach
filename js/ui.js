@@ -1,5 +1,7 @@
 // Gedeelde bouwstenen voor de schermen.
 import { html, useEffect, useRef, useState } from '../vendor/preact-htm.js';
+import { getState, update } from './store.js';
+import { findClub, searchClubs, withClub, clubColors, clubAbbr, colorKey, splitTeam, norm } from './clubs.js';
 
 export const POS_COLORS = { K: 'var(--pos-K)', A: 'var(--pos-A)', M: 'var(--pos-M)', V: 'var(--pos-V)' };
 export const POS_NAMES = { K: 'Keeper', A: 'Achter', M: 'Midden', V: 'Voor' };
@@ -147,7 +149,7 @@ export function Stepper({ value, min = 0, max = 99, step = 1, onChange, suffix =
   </div>`;
 }
 
-export function Sheet({ onClose, children, label }) {
+export function Sheet({ onClose, children, label, x = false, footer = null }) {
   const [closing, setClosing] = useState(false);
   const close = () => { if (closing) return; setClosing(true); setTimeout(onClose, 220); };
   useEffect(() => { dismissToast(); }, []);
@@ -157,9 +159,11 @@ export function Sheet({ onClose, children, label }) {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
   return html`<div class=${'sheet-backdrop' + (closing ? ' closing' : '')} onClick=${(e) => { if (e.target === e.currentTarget) close(); }}>
-    <div class="sheet" role="dialog" aria-modal="true" aria-label=${label}>
+    <div class=${'sheet' + (footer ? ' has-foot' : '')} role="dialog" aria-modal="true" aria-label=${label}>
       <span class="handle"></span>
+      ${x && html`<button type="button" class="sheet-x" aria-label="Sluiten" onClick=${close}><${Icon} name="x" size=${20} /></button>`}
       ${children}
+      ${footer && html`<div class="sheet-foot">${typeof footer === 'function' ? footer(close) : footer}</div>`}
     </div>
   </div>`;
 }
@@ -201,10 +205,16 @@ export function Icon({ name, size = 22 }) {
 // slots: { V0: id, M0: id, A0: id, ... }  aanval boven, eigen doel (keeper) onder
 export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false }) {
   const rows = ['V', 'M', 'A'].filter((l) => (lines[l] || 0) > 0);
-  const tops = { 3: ['5%', '30%', '56%'], 2: ['14%', '50%'], 1: ['40%'] }[rows.length] || [];
-  const dense = Object.values(lines).some((n) => n >= 4);
+  // linies gelijk verdeeld tussen de bovenrand en de keeper (middelpunten in %)
+  const START = 5, END = 78;
+  const tops = rows.map((_, r) => `${START + ((r + 0.5) * (END - START)) / rows.length}%`);
+  const total = rows.reduce((a, l) => a + lines[l], 0);
+  const widest = Math.max(1, ...rows.map((l) => lines[l]));
+  let size = total <= 6 ? 'l' : total <= 8 ? 'm' : total <= 10 ? 's' : 'xs';
+  if (compact && (size === 'l' || size === 'm')) size = 's';
+  const maxPx = { l: 116, m: 92, s: 76, xs: 66 }[size];
   const pillKind = (id) => (dashed.indexOf(id) !== -1 ? 'dashed' : '') + (muted.indexOf(id) !== -1 ? ' muted' : '') + (selected === id ? ' orange' : '');
-  const pillStyle = dense || compact ? 'max-width:74px;font-size:12px;padding:5px 8px' : '';
+  const pillStyle = `max-width:min(${maxPx}px, calc(${(100 / (widest + 1)).toFixed(2)}cqw - 6px))`;
   const spot = (id, left, top, key) => {
     const name = id ? nick(id) : '—';
     const isNeon = id && neon.indexOf(id) !== -1;
@@ -215,7 +225,7 @@ export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = []
       ${below && id ? below(id) : null}
     </button>`;
   };
-  return html`<div class="field" style=${`height:${typeof height === 'number' ? height + 'px' : height}`}>
+  return html`<div class=${'field sz-' + size} style=${`height:${typeof height === 'number' ? height + 'px' : height}`}>
     <span class="lines"></span>
     <span class="arc top"></span>
     <span class="arc bottom"></span>
@@ -316,11 +326,81 @@ export function TeamBadge({ team, size = 64 }) {
   </svg>`;
 }
 
-export function OppBadge({ name, size = 64 }) {
-  const short = (name || '').replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || '?';
+// Fantasieschild in de clubkleuren van de tegenstander (of neutraal als die onbekend zijn)
+const shade = (hex, f) => {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (v) => Math.max(0, Math.min(255, Math.round(v * f)));
+  return '#' + [n >> 16, (n >> 8) & 255, n & 255].map((v) => ch(v).toString(16).padStart(2, '0')).join('');
+};
+const isLight = (hex) => { const n = parseInt(hex.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) > 200; };
+let shieldSeq = 0;
+export function OppBadge({ name, size = 64, colors }) {
+  const ref = useRef(null);
+  if (!ref.current) ref.current = 'sh' + (++shieldSeq);
+  const cols = colors || (name ? clubColors(name, getState().clubColors) : null);
+  const short = name ? clubAbbr(name) : '?';
+  const fs = short.length >= 4 ? 14 : short.length === 3 ? 17 : 20;
+  const OUT = 'M32 3 L57 12 V30 C57 45 46 56 32 61 C18 56 7 45 7 30 V12 Z';
+  const IN = 'M32 9 L51 16 V30 C51 42 43 51 32 55 C21 51 13 42 13 30 V16 Z';
+  if (!cols) {
+    return html`<svg width=${size} height=${size} viewBox="0 0 64 64" role="img" aria-label=${name || 'Tegenstander'}>
+      <path d=${OUT} fill="#6B7280" /><path d=${IN} fill="#9CA3AF" />
+      <text x="32" y="39" text-anchor="middle" font-family="Nunito, sans-serif" font-weight="900" font-size=${fs} fill="#fff">${short}</text>
+    </svg>`;
+  }
+  const [c0, c1 = c0, c2] = cols;
+  const rim = c2 || (isLight(c0) ? shade(c1, 0.75) : shade(c0, 0.62));
   return html`<svg width=${size} height=${size} viewBox="0 0 64 64" role="img" aria-label=${name || 'Tegenstander'}>
-    <path d="M32 3 L57 12 V30 C57 45 46 56 32 61 C18 56 7 45 7 30 V12 Z" fill="#6B7280" />
-    <path d="M32 9 L51 16 V30 C51 42 43 51 32 55 C21 51 13 42 13 30 V16 Z" fill="#9CA3AF" />
-    <text x="32" y="39" text-anchor="middle" font-family="Nunito, sans-serif" font-weight="900" font-size="18" fill="#fff">${short}</text>
+    <defs><clipPath id=${ref.current}><path d=${IN} /></clipPath></defs>
+    <path d=${OUT} fill=${rim} />
+    <g clip-path=${`url(#${ref.current})`}>
+      <rect x="0" y="0" width="32" height="64" fill=${c0} /><rect x="32" y="0" width="32" height="64" fill=${c1} />
+    </g>
+    <path d=${IN} fill="none" stroke="rgba(0,0,0,.18)" stroke-width="1" />
+    <text x="32" y="39" text-anchor="middle" font-family="Nunito, sans-serif" font-weight="900" font-size=${fs} fill="#fff" stroke="#111827" stroke-width="3.2" paint-order="stroke" stroke-linejoin="round">${short}</text>
   </svg>`;
+}
+
+// Invoer tegenstander met clubsuggesties (naam, afkorting of plaats)
+export function OpponentInput({ id, value, onChange, placeholder = 'Bijv. Laren JO9-2' }) {
+  const [focus, setFocus] = useState(false);
+  const ref = useRef(null);
+  const { base, suffix } = splitTeam(value);
+  const exact = findClub(value);
+  const done = exact && norm(base) === norm(exact.n) && (suffix || /\s$/.test(value));
+  const list = focus && !done ? searchClubs(value) : [];
+  return html`<div class="oppinput">
+    <input id=${id} ref=${ref} class="input" value=${value} placeholder=${placeholder} autocomplete="off" autocorrect="off" spellcheck="false"
+      onInput=${(e) => onChange(e.target.value)} onFocus=${() => setFocus(true)} onBlur=${() => setTimeout(() => setFocus(false), 120)} />
+    ${list.length > 0 && html`<div class="suggest" role="listbox">
+      ${list.map((c) => html`<button type="button" role="option" onPointerDown=${(e) => e.preventDefault()} onClick=${() => { onChange(withClub(value, c)); if (ref.current) ref.current.focus(); }}>
+        <${OppBadge} name=${c.n} size=${30} />
+        <span class="col" style="gap:0;min-width:0"><b>${c.n}</b><span class="small">${c.f !== c.n ? c.f + ' · ' : ''}${c.t}</span></span>
+      </button>`)}
+    </div>`}
+  </div>`;
+}
+
+// Kleuren van het schild zelf kiezen (onthouden per club op deze telefoon)
+export function ShieldColors({ name }) {
+  const key = name ? colorKey(name) : '';
+  if (!key) return null;
+  const own = (getState().clubColors || {})[key];
+  const club = findClub(name);
+  const cols = own || (club && club.c) || ['#6B7280', '#9CA3AF'];
+  const set = (i, v) => update((d) => {
+    d.clubColors = d.clubColors || {};
+    const cur = (d.clubColors[key] || cols).slice(0, 2);
+    cur[i] = v;
+    d.clubColors[key] = cur;
+  });
+  const reset = () => update((d) => { if (d.clubColors) delete d.clubColors[key]; });
+  return html`<div class="shieldrow">
+    <${OppBadge} name=${name} size=${40} />
+    <span class="col grow" style="gap:0;min-width:0"><span style="font-weight:800">Schild</span>
+      <span class="small">${own ? 'eigen kleuren' : club && club.c ? 'clubkleuren' : 'kleuren onbekend · kies ze zelf'}</span></span>
+    <input type="color" class="swatch" aria-label="Kleur 1" value=${cols[0]} onInput=${(e) => set(0, e.target.value)} />
+    <input type="color" class="swatch" aria-label="Kleur 2" value=${cols[1] || cols[0]} onInput=${(e) => set(1, e.target.value)} />
+    ${own && html`<button type="button" class="link" onClick=${reset}>Standaard</button>`}
+  </div>`;
 }

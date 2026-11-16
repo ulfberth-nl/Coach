@@ -35,7 +35,7 @@ export function Afloop({ state, matchId }) {
     </div>
     <section class="card" style="align-items:center;gap:4px">
       <span class="sub">${team.name}${match.opponent ? ' – ' + match.opponent : ''}</span>
-      <span class="num" style="font-size:44px">${s.score.us}–${s.score.them}</span>
+      <span class="num" style="font-size:44px">${s.score.us}<span style="margin:0 5px;color:var(--line-2)">:</span>${s.score.them}</span>
       <span class="small">${match.finished ? 'Afgelopen' : 'Nog bezig'} · ${match.events.filter((e) => e.type === 'swap').length} wissels</span>
     </section>
 

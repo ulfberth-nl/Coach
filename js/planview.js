@@ -85,7 +85,7 @@ function useScrub(ref, fns) {
   }, []);
 }
 
-export function PlanView({ match, team, editable = false, onSwap, initialIndex = 0, nowIndex = -1, compact = false }) {
+export function PlanView({ match, team, editable = false, onSwap, initialIndex = 0, nowIndex = -1, compact = false, liveT = null, onSwapNow = null }) {
   const nick = (id) => M.nickOf(team, id);
   const END = M.matchEnd(team);
   const L = M.periodLen(team);
@@ -148,13 +148,20 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   const kids = match.present.filter((id) => id !== match.keeperId);
   const segs = cards.map((cc, k) => ({ a: cc.t, b: k + 1 < cards.length ? cards[k + 1].t : END, pos: cc.pos }));
   const status = i < nowIndex ? 'Gedaan' : i === nowIndex ? 'Nu' : nowIndex >= 0 ? 'Gepland' : null;
+  // tijdens de wedstrijd: waar staan we nu, hoe lang nog tot dit moment
+  const live = liveT != null && nowIndex >= 0 && !match.finished;
+  const nowPct = live ? (fOfTime(liveT) / n1) * 100 : null;
+  const until = live && i > nowIndex ? c.t - liveT : null;
+  const pillText = label(t) + (live ? (i < nowIndex ? ' · geweest' : until != null ? (until > 0 ? ' · over ' + M.fmt(until) : ' · nu!') : '') : '');
+  const isNext = live && i === nowIndex + 1 && c.kind === 'swap' && onSwapNow;
 
   return html`<div class=${'planview col' + (compact ? ' compact' : '')} style="gap:8px">
     <div class="tl" ref=${track} aria-label="Tijdlijn">
       <span class="tl-line"></span>
       ${cards.map((cc, k) => (k > 0 && cc.kind === 'lineup' ? html`<span class="tl-break" style=${`left:${dotPct(k - 0.5)}%`}><b>${team.periods === 2 ? 'rust' : 'pauze'}</b></span>` : null))}
       ${cards.map((cc, k) => html`<span class=${'tl-dot' + (k < i ? ' past' : k === i ? ' cur' : '') + (cc.kind === 'lineup' ? ' lu' : '')} style=${`left:${dotPct(k)}%`}></span>`)}
-      <span class="tl-head" style=${`left:${headPct}%`}><span class="tl-time" style=${`transform:translateX(-${headPct}%)`}>${label(t)}</span></span>
+      ${live && html`<span class="tl-now" style=${`left:${nowPct}%`}></span>`}
+      <span class="tl-head" style=${`left:${headPct}%`}><span class="tl-time" style=${`transform:translateX(-${headPct}%)`}>${pillText}</span></span>
     </div>
     ${!compact && html`<div class="between">
       <button type="button" class="iconbtn" aria-label="Vorige" onClick=${() => setF(i - 1, true)} disabled=${i === 0}><span style="transform:rotate(180deg);display:inline-flex"><${Icon} name="chev" /></span></button>
@@ -164,9 +171,13 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
       </div>
       <button type="button" class="iconbtn" aria-label="Volgende" onClick=${() => setF(i + 1, true)} disabled=${i === cards.length - 1}><${Icon} name="chev" /></button>
     </div>`}
+    ${!compact && isNext && html`<div class="planlive">
+      <span class="col grow" style="gap:0;min-width:0"><b>${until > 0 ? 'Over ' + M.fmt(until) : 'Nu wisselen'}</b><span class="small" style="color:var(--ink)">${nick(c.in)} erin voor ${nick(c.out)}</span></span>
+      <button type="button" class="btn primary" style="min-height:44px;padding:0 16px" onClick=${onSwapNow}>Nu wisselen</button>
+    </div>`}
     ${compact && html`<div class="fieldcap">${title}${i > 0 && c.kind === 'swap' ? html` · <b>${nick(c.in)}</b> erin voor ${nick(c.out)}` : ''}</div>`}
     <div ref=${zone} class="scrubzone">
-      <div class="fieldbox">
+      <div class=${'fieldbox' + (live && i < nowIndex ? ' past' : '')}>
         <${Field} slots=${c.slots} lines=${team.lines} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
           onTap=${() => {}} neon=${ch.in} dashed=${ch.shift ? [ch.shift.id] : []} />
       </div>
