@@ -149,3 +149,25 @@ console.log('Kloktest geslaagd');
   Date.now = saved;
 }
 console.log('Keepertest geslaagd');
+
+// bewaren: aangepaste wissel op het geplande moment, daarna een nieuw plan
+{
+  const team = store.newTeam('T', true);
+  const m = M.createMatch(team, { present: team.players.map((p) => p.id), keeperId: team.players[0].id });
+  M.startClock(m);
+  const next = m.plan.steps[0];
+  const d = M.derive(m, team, 0);
+  const otherOut = Object.keys(d.state.pos).find((id) => id !== next.out);
+  const otherIn = d.state.bench.find((id) => id !== next.in) || next.in;
+  assert.ok(M.fixSwap(m, team, otherOut, otherIn));
+  const s0 = m.plan.steps[0];
+  assert.equal(s0.t, next.t); assert.equal(s0.out, otherOut); assert.equal(s0.in, otherIn); assert.ok(s0.fixed);
+  assert.ok(m.plan.steps.length > 1);
+  // 1 minuut later schuift de bewaarde wissel mee
+  M.delay(m, team, 60);
+  assert.equal(m.plan.steps[0].out, otherOut);
+  // uitvoeren wist de bewaarde wissel
+  M.doSwap(m, team, otherOut, otherIn, null);
+  assert.equal(m.fixed, null);
+  console.log('Bewaartest geslaagd');
+}

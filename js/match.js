@@ -245,7 +245,26 @@ export function replan(match, team, ms = Date.now()) {
   ctx.lineupPending = lineupPending(match, team);
   ctx.firstAt = match.firstAt && match.firstAt > anchor ? match.firstAt : null;
   ctx.excludeFair = d.late;
-  let r = planRest(st, ctx, anchor);
+  // bewaarde (aangepaste) wissel: die gebeurt op het geplande moment, daarna rekent de app verder
+  const fx = match.fixed;
+  const L = periodLen(team);
+  const fixedOk = fx && !ctx.lineupPending && fx.t >= anchor && fx.t < (Math.floor(anchor / L) + 1) * L - 1 &&
+    (fx.out in st.pos) && st.bench.indexOf(fx.in) !== -1 && !st.disabled[fx.in];
+  if (fx && !fixedOk) match.fixed = null;
+  const plan = (c) => {
+    if (!fixedOk) return planRest(st, c, anchor);
+    const s2 = JSON.parse(JSON.stringify(st));
+    for (const id of Object.keys(s2.pos)) s2.played[id] = (s2.played[id] || 0) + (fx.t - anchor);
+    const placed = placeIn(s2.pos, fx.out, fx.in, playersMap(team), stand);
+    s2.pos = placed.pos;
+    s2.bench = s2.bench.filter((id) => id !== fx.in).concat([fx.out]);
+    s2.since[fx.out] = fx.t; s2.since[fx.in] = fx.t;
+    s2.turns[fx.out] = (s2.turns[fx.out] || 0) + 1;
+    const rest = planRest(s2, { ...c, firstAt: null }, fx.t);
+    const step = { type: 'swap', t: fx.t, out: fx.out, in: fx.in, line: placed.line, shift: placed.shift, pos: { ...placed.pos }, fixed: true, after: fx.after || 'terug' };
+    return { ...rest, steps: [step].concat(rest.steps) };
+  };
+  let r = plan(ctx);
   const swapsOf = (x) => x.steps.filter((s) => s.type === 'swap').length;
   if (!match.started) {
     match.baseline = swapsOf(r);
@@ -254,7 +273,7 @@ export function replan(match, team, ms = Date.now()) {
     const end = matchEnd(team);
     const expected = Math.ceil(match.baseline * (end - anchor) / end) + 1;
     if (!r.ok || swapsOf(r) > expected + 1) {
-      const r2 = planRest(st, { ...ctx, rules: { ...ctx.rules, turnsSlack: 1 } }, anchor);
+      const r2 = plan({ ...ctx, rules: { ...ctx.rules, turnsSlack: 1 } });
       if (r2.ok && swapsOf(r2) < swapsOf(r)) r = { ...r2, relaxed: true };
     }
   }
@@ -357,6 +376,7 @@ export function endPeriod(match, team) {
   const p = match.clock.period;
   match.events.push({ id: uid(), type: 'periodEnd', t: p * L + Math.min(match.clock.accum, L), period: p });
   match.firstAt = null;
+  match.fixed = null;
   if (p + 1 >= team.periods) {
     match.finished = true;
     match.endT = p * L + Math.min(match.clock.accum, L);
@@ -379,6 +399,7 @@ export function finishNow(match, team) {
   match.started = true;
   match.endT = T;
   match.firstAt = null;
+  match.fixed = null;
   match.plan = { ...(match.plan || {}), steps: [] };
 }
 
@@ -409,6 +430,7 @@ export function applyLineup(match, team, lu) {
   const players = playersMap(team);
   match.events.push({ id: uid(), type: 'lineup', t: T, period: match.clock.period, pos: lu.pos, bench: lu.bench, slots: lu.slots || makeSlots(lu.pos, team.lines, players) });
   match.firstAt = null;
+  match.fixed = null;
   replan(match, team);
 }
 
@@ -418,7 +440,18 @@ export function doSwap(match, team, out, inn, shift) {
   const line = shift ? d.state.pos[shift.id] : d.state.pos[out];
   match.events.push({ id: uid(), type: 'swap', t: T, out, in: inn, line, shift: shift || null });
   match.firstAt = null;
+  match.fixed = null;
   replan(match, team);
+}
+
+// Aangepaste wissel bewaren voor het moment waarop de volgende wissel gepland stond.
+export function fixSwap(match, team, out, inn, after = 'terug') {
+  const next = nextSwap(match, team);
+  if (!next) return false;
+  match.fixed = { t: next.t, out, in: inn, after };
+  match.firstAt = null;
+  replan(match, team);
+  return !!match.fixed;
 }
 
 export function changeKeeper(match, team, to, mode) {
@@ -441,8 +474,14 @@ export function movePlayers(match, team, a, b) {
   replan(match, team);
 }
 
+export function clearFixed(match, team) {
+  match.fixed = null;
+  replan(match, team);
+}
+
 export function delay(match, team, sec = 60) {
-  match.firstAt = gameTime(match, team) + sec;
+  if (match.fixed) match.fixed = { ...match.fixed, t: gameTime(match, team) + sec };
+  else match.firstAt = gameTime(match, team) + sec;
   replan(match, team);
 }
 

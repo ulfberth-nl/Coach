@@ -42,7 +42,7 @@ Klaarzetten en spelen gebeuren op hetzelfde scherm, dat altijd in één beeld pa
 - **Klok:** tik op de klok om te starten of te pauzeren. Blauw = loopt, oranje en knipperend = staat stil. Rechts zie je welke helft/welk kwart en hoeveel tijd er nog is.
 - **Wisselbalk:** vanaf 1 minuut voor de wissel gloeit hij in alle kleuren; ben je te laat, dan staat er hoeveel (bijv. −1:33).
 - **Doelpunt:** tik op de stand en kies het eigen logo (daarna wie scoorde) of het logo van de tegenstander.
-- **Wisselen:** tik de wisselbalk of een speler. Bovenin staat wie eruit en wie erin gaat; *Andere speler kiezen* klapt de bank en het veld open (beste keuze vooraan). *Wissel nu* en *1 min later* staan in de blauwe balk onderin. Slepen kan ook: veld ↔ bank = direct wisselen, veld ↔ veld = plekken ruilen.
+- **Wisselen:** tik de wisselbalk of een speler. Bovenin staat wie eruit en wie erin gaat; Tik op de tegel *Eruit* of *Erin* voor een lijst van het veld of de bank, met minuten en hoe vaak iemand al gewisseld is. Label *plan* = volgende wissel uit het actuele plan; *advies* = beste partner als je zelf iemand anders kiest. In de blauwe balk: *1 min later*, *Bewaren* (je aangepaste wissel gebeurt op het geplande moment, daarna rekent de app verder) en *Wissel nu*. Slepen kan ook: veld ↔ bank = direct wisselen, veld ↔ veld = plekken ruilen.
 - **Wedstrijdplan tijdens de wedstrijd:** de tijdlijn toont waar je nu bent, oude momenten worden grijs, de zwarte pil zegt hoe lang het nog duurt en bij de eerstvolgende wissel staat *Nu wisselen*.
 - **Keeper wisselen:** tik op de keeper.
 - **Stand van de opstelling** (verdedigen/balans/aanvallen): het label rechtsonder op het veld.
