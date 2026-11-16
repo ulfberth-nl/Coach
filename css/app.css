@@ -465,8 +465,98 @@ body:has(.tabbar) .toast { bottom: calc(94px + var(--safe-b)); }
 
 /* datum- en tijdvelden passen altijd in het scherm */
 .row > .col, .row > .grow { min-width: 0; }
-input[type="date"].input, input[type="time"].input { -webkit-appearance: none; appearance: none; min-width: 0; width: 100%; max-width: 100%; display: block; text-align: left; padding: 0 10px; }
-input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+input[type="date"].input, input[type="time"].input { -webkit-appearance: none; appearance: none; min-width: 0; width: 100%; max-width: 100%; display: block; text-align: center; padding: 0 8px; line-height: 42px; }
+input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-date-and-time-value { text-align: center; margin: 0 auto; line-height: 42px; }
+input[type="date"]::-webkit-datetime-edit, input[type="time"]::-webkit-datetime-edit { display: inline-flex; justify-content: center; padding: 0; }
 
 .addtile { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 56px; margin-top: 6px; border-radius: 16px; border: 2px dashed var(--line-2); background: var(--bg); color: var(--blue); font-size: 15px; font-weight: 800; transition: transform .18s var(--ease-out), border-color .25s; }
 .addtile:active { transform: scale(.97); border-color: var(--blue-2); }
+
+/* ================= v0.9 ================= */
+/* veld: pillen schalen met het aantal spelers; middelpunt van de speler op de linie */
+.field { container-type: inline-size; }
+.field .spot:not(.keeperspot) { translate: -50% -50%; }
+.field.sz-l .pill { font-size: 15px; padding: 8px 14px; }
+.field.sz-l .spot .time { font-size: 12px; }
+.field.sz-s .pill { font-size: 12px; padding: 5px 9px; }
+.field.sz-xs .pill { font-size: 11px; padding: 4px 7px; }
+.field.sz-xs .spot .time { font-size: 10px; }
+
+/* tegenstander: suggesties en schild */
+.oppinput { position: relative; }
+.suggest { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5; display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line-2); border-radius: 14px; box-shadow: 0 10px 28px rgba(17,24,39,.16); overflow: hidden; animation: rise .2s var(--ease-out); }
+.suggest button { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 12px; border: none; background: none; text-align: left; border-top: 1px solid var(--line); }
+.suggest button:first-child { border-top: none; }
+.suggest button:active { background: var(--blue-tint); }
+.suggest b { font-size: 15px; }
+.suggest .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shieldrow { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 14px; background: var(--bg); }
+.swatch { -webkit-appearance: none; appearance: none; width: 36px; height: 36px; padding: 0; border: 2px solid #fff; border-radius: 999px; box-shadow: 0 0 0 1px var(--line-2); background: none; overflow: hidden; }
+.swatch::-webkit-color-swatch-wrapper { padding: 0; }
+.swatch::-webkit-color-swatch { border: none; border-radius: 999px; }
+.mname svg { vertical-align: -5px; margin-right: 2px; }
+
+/* venster: sluitkruis en vaste voetbalk */
+.sheet { position: relative; }
+.sheet-x { position: absolute; top: 12px; right: 12px; z-index: 3; width: 40px; height: 40px; border-radius: 999px; border: none; background: var(--bg); color: var(--ink); display: inline-flex; align-items: center; justify-content: center; }
+.sheet-x:active { transform: scale(.92); }
+.sheet.has-foot { padding-bottom: 0; }
+.sheet-foot { position: sticky; bottom: 0; z-index: 4; margin: 4px -16px 0; padding: 12px 16px calc(12px + var(--safe-b)); background: var(--blue); display: flex; gap: 10px; align-items: center; box-shadow: 0 -8px 20px rgba(17,24,39,.12); }
+.btn.onblue { background: #fff; color: var(--blue); min-height: 56px; font-size: 19px; font-weight: 900; border: none; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+.btn.onblue:disabled { opacity: .55; }
+.btn.ghostblue { background: rgba(255,255,255,.14); color: #fff; min-height: 56px; border: 1.5px solid rgba(255,255,255,.45); font-weight: 800; }
+
+/* wisselvenster */
+.swaphead { display: flex; flex-direction: column; gap: 0; padding-right: 48px; }
+.swaphead .h2 { font-size: 22px; }
+.duo.big .duo-side { padding: 14px 12px; }
+.duo.big .duo-name { font-size: 26px; }
+.swapnote { text-align: center; font-size: 14px; font-weight: 700; color: var(--muted); margin-top: -4px; }
+.sep { height: 1px; background: var(--line); margin: 2px -16px; }
+.pickbtn { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 48px; border: none; background: none; padding: 0; font-size: 16px; font-weight: 800; color: var(--blue); }
+.pickgroup { display: flex; flex-direction: column; gap: 6px; }
+.pickgroup .wrap { gap: 8px; }
+.chip .best { font-size: 11px; font-weight: 900; padding: 1px 6px; border-radius: 999px; background: var(--orange); color: var(--ink); }
+.chip .ldot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
+
+/* klok: groot, met periode en resterende tijd */
+.clockbtn { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
+.clockmain { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.matchscreen .clock { font-size: 50px; letter-spacing: -0.02em; }
+.periods { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: 0 0 auto; }
+.ptrack { display: flex; gap: 4px; }
+.ptrack i { position: relative; display: block; width: 34px; height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.ptrack i.done { background: var(--blue-2); }
+.ptrack i > b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--blue-2); border-radius: 999px; transition: width 1s linear; }
+.clockbtn.stopped .ptrack i > b, .clockbtn.stopped .ptrack i.done { background: var(--orange); }
+.premain { font-size: 13px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; font-family: Inter, sans-serif; }
+.premain.over { color: #B26A00; }
+@media (max-height: 700px) { .matchscreen .clock { font-size: 40px; } }
+
+/* stand met dubbele punt */
+.scorebtn .sep2 { display: inline-block; margin: 0 4px; color: var(--line-2); transform: translateY(-0.06em); }
+
+/* wisselbalk: regenboog-neon vanaf 1 minuut, en te laat in beeld */
+@keyframes rainbowGlow {
+  0% { box-shadow: 0 0 10px 3px rgba(255,59,48,.85), 0 0 26px 8px rgba(255,59,48,.35); }
+  17% { box-shadow: 0 0 10px 3px rgba(255,149,0,.85), 0 0 26px 8px rgba(255,149,0,.35); }
+  33% { box-shadow: 0 0 10px 3px rgba(255,204,0,.85), 0 0 26px 8px rgba(255,204,0,.35); }
+  50% { box-shadow: 0 0 10px 3px rgba(52,199,89,.85), 0 0 26px 8px rgba(52,199,89,.35); }
+  67% { box-shadow: 0 0 10px 3px rgba(0,122,255,.85), 0 0 26px 8px rgba(0,122,255,.35); }
+  83% { box-shadow: 0 0 10px 3px rgba(175,82,222,.85), 0 0 26px 8px rgba(175,82,222,.35); }
+  100% { box-shadow: 0 0 10px 3px rgba(255,59,48,.85), 0 0 26px 8px rgba(255,59,48,.35); }
+}
+.neon.rainbow { animation: rainbowGlow 2.4s linear infinite; }
+.neon.rainbow > .ring { background: conic-gradient(from var(--spin), #ff3b30, #ff9500, #ffcc00, #34c759, #00c7be, #007aff, #af52de, #ff2d55, #ff3b30); animation: spin 1.8s linear infinite; }
+.neon.rainbow.box > .in { margin: 4px; }
+.neon.rainbow .nextbar { border-radius: 12px; }
+.nb-late { flex: 0 0 auto; font-family: Inter, sans-serif; font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 900; color: #fff; background: #C8102E; padding: 4px 10px; border-radius: 10px; animation: stilPulse 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .neon.rainbow, .neon.rainbow > .ring, .nb-late { animation: none; } }
+
+/* wedstrijdplan tijdens de wedstrijd */
+.fieldbox.past .field { filter: grayscale(1); opacity: .55; transition: filter .3s ease, opacity .3s ease; }
+.fieldbox .field { transition: filter .3s ease, opacity .3s ease; }
+.pastnote { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 2; padding: 4px 12px; border-radius: 999px; background: rgba(17,24,39,.7); color: #fff; font-size: 12px; font-weight: 800; pointer-events: none; }
+.tl-now { position: absolute; top: 36px; width: 3px; height: 22px; margin-left: -1.5px; transform: translateY(-50%); border-radius: 2px; background: var(--orange); box-shadow: 0 0 0 2px #fff; z-index: 1; pointer-events: none; transition: left 1s linear; }
+.tl-now::after { content: 'nu'; position: absolute; top: 23px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 900; color: #B26A00; }
+.planlive { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--orange-soft); }

@@ -6,7 +6,7 @@ import { PlanView } from '../planview.js';
 import { keeperCounts, suggestKeeper, WHY_TEXT } from './home.js';
 import { nextScheduled, todayISO } from './seizoen.js';
 import { mutate, undoAction, SwapSheet, BenchSheet, GoalSheet, BreakSheet, JoinSheet, KeeperSheet } from './live.js';
-import { Field, Neon, Sheet, Confirm, Seg, Switch, Icon, TeamBadge, OppBadge, useNow, useWakeLock, useDragSwap, justDragged, beep, flash, unlockAudio, toast, go, STANDS } from '../ui.js';
+import { Field, Neon, Sheet, Confirm, Seg, Switch, Icon, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, beep, flash, unlockAudio, toast, go, STANDS } from '../ui.js';
 
 // ---------- concept-wedstrijd (nog niet begonnen) ----------
 export function newConcept(d) {
@@ -216,7 +216,8 @@ function OpponentSheet({ match, upcoming = [], onClose }) {
         <span class="sub">${dateLabel(e.date)}${e.time ? ' · ' + e.time : ''}${e.home === false ? ' · uit' : ' · thuis'}</span></span></button>`)}
       <span class="label" style="margin-top:6px">Of zelf invullen</span>
     </div>`}
-    <div class="col"><label class="label" for="o-opp">Tegenstander</label><input id="o-opp" class="input" value=${opp} placeholder="Bijv. Hurley JO9-3" onInput=${(e) => setOpp(e.target.value)} /></div>
+    <div class="col"><label class="label" for="o-opp">Tegenstander</label><${OpponentInput} id="o-opp" value=${opp} onChange=${setOpp} /></div>
+    ${opp.trim() && html`<${ShieldColors} name=${opp} />`}
     <div class="row">
       <div class="col grow"><label class="label" for="o-date">Datum</label><input id="o-date" type="date" class="input" value=${date} onInput=${(e) => setDate(e.target.value)} /></div>
       <div class="col" style="width:110px"><label class="label" for="o-time">Tijd</label><input id="o-time" type="time" class="input" value=${time} onInput=${(e) => setTime(e.target.value)} /></div>
@@ -293,12 +294,14 @@ function LiveView({ match, team }) {
   let bar;
   if (pending) bar = { hot: true, title: `Rust · opstelling ${M.periodLabel(team, match.clock.period)}`, sub: 'tik om klaar te zetten' };
   else if (timeUp) bar = { hot: true, title: `Tijd! Einde ${M.periodLabel(team, match.clock.period)}`, sub: 'tik om af te sluiten' };
-  else if (next) bar = { hot: countdown <= 60, title: countdown <= 0 ? 'Nu wisselen' : 'Wissel over ' + M.fmt(countdown), sub: `${nick(next.in)} erin voor ${nick(next.out)}`, n: `${counts.done + 1}/${counts.total}`,
+  else if (next) bar = { hot: countdown <= 60, title: countdown <= 0 ? 'Nu wisselen' : 'Wissel over ' + M.fmt(countdown), sub: `${nick(next.in)} erin voor ${nick(next.out)}`, n: countdown < -0.5 ? null : `${counts.done + 1}/${counts.total}`,
+    late: countdown < -0.5 ? '−' + M.fmt(-countdown) : null,
     progress: Math.max(0, Math.min(1, (T - (match.plan ? match.plan.at : 0)) / Math.max(1, next.t - (match.plan ? match.plan.at : 0)))) };
   else bar = { hot: false, title: `Geen wissels meer deze ${M.periodWord(team)}`, calm: true };
   const barInner = html`<span class=${'nextbar' + (bar.calm ? ' calm' : '')}>
     <span class="col grow" style="gap:0;min-width:0"><span class="nb-title">${bar.title}</span>${bar.sub && html`<span class="nb-sub">${bar.sub}</span>`}</span>
     ${bar.n && html`<span class="nb-n">${bar.n}</span>`}
+    ${bar.late && html`<span class="nb-late" aria-label=${'Te laat: ' + bar.late}>${bar.late}</span>`}
     ${bar.progress != null && html`<span class="nb-prog"><span style=${`width:${bar.progress * 100}%`}></span></span>`}
   </span>`;
 
@@ -309,14 +312,21 @@ function LiveView({ match, team }) {
     </${Affiche}>
     <div class="clockrow">
       <button type="button" class=${'clockbtn ' + (running ? 'running' : 'stopped')} onClick=${toggleClock} aria-label=${running ? 'Klok loopt, tik om te pauzeren' : 'Klok staat stil, tik om te starten'}>
-        <span class="num clock" style=${el > L ? 'color:#B26A00' : ''}>${M.fmt(el)}</span>
-        <span class="clockstate">${running ? html`<span class="rundot"></span>${M.periodLabel(team, match.clock.period)}` : html`<span class="stopdot"></span>stil · ${M.periodLabel(team, match.clock.period)}`}</span>
+        <span class="clockmain">
+          <span class="num clock" style=${el > L ? 'color:#B26A00' : ''}>${M.fmt(el)}</span>
+          <span class="clockstate">${running ? html`<span class="rundot"></span>${M.periodLabel(team, match.clock.period)}` : html`<span class="stopdot"></span>stil · ${M.periodLabel(team, match.clock.period)}`}</span>
+        </span>
+        <span class="periods" aria-hidden="true">
+          <span class="ptrack">${Array.from({ length: team.periods }, (_, p) => (p < match.clock.period ? html`<i class="done"></i>`
+            : p === match.clock.period ? html`<i><b style=${`width:${Math.min(100, (el / L) * 100)}%`}></b></i>` : html`<i></i>`))}</span>
+          <span class=${'premain' + (el > L ? ' over' : '')}>${el <= L ? 'nog ' + M.fmt(L - el) : '+' + M.fmt(el - L)}</span>
+        </span>
       </button>
       <button type="button" class=${'scorebtn ' + (d.score.us > d.score.them ? 'ahead' : d.score.us < d.score.them ? 'behind' : 'level')} onClick=${() => setSheet({ type: 'goal' })} aria-label=${`Stand ${d.score.us} tegen ${d.score.them}, tik bij een doelpunt`}>
-        <span class="num score bump" key=${d.score.us + '-' + d.score.them}>${d.score.us}<span class="dash">–</span>${d.score.them}</span>
+        <span class="num score bump" key=${d.score.us + '-' + d.score.them}>${d.score.us}<span class="sep2">:</span>${d.score.them}</span>
       </button>
     </div>
-    <button type="button" class="nextbtn" onClick=${openNext} disabled=${bar.calm}>${bar.hot ? html`<${Neon} box>${barInner}</${Neon}>` : barInner}</button>
+    <button type="button" class="nextbtn" onClick=${openNext} disabled=${bar.calm}>${bar.hot ? html`<${Neon} box cls="rainbow">${barInner}</${Neon}>` : barInner}</button>
     <div class="grow-field" ref=${zone}>
       <div class="fieldbox">
         <${Field} slots=${d.state.slots} lines=${team.lines} keeperId=${d.state.keeper} nick=${nick} height="auto"
@@ -419,7 +429,7 @@ function DoneView({ match, team }) {
     <${Affiche} match=${match} team=${team} onClick=${() => go('/afloop/' + match.id)} />
     <div class="card" style="flex:1 1 auto;align-items:center;justify-content:center;gap:10px;text-align:center">
       <span class="label">Afgelopen</span>
-      <span class="num" style="font-size:64px;line-height:1">${s.us}–${s.them}</span>
+      <span class="num" style="font-size:64px;line-height:1">${s.us}<span style="margin:0 6px;color:var(--line-2)">:</span>${s.them}</span>
       <a class="btn soft" href=${'#/afloop/' + match.id}>Overzicht van de wedstrijd</a>
     </div>
     <button type="button" class="btn primary block startbtn" onClick=${() => update((d) => { d.currentMatchId = null; })}>Nieuwe wedstrijd klaarzetten</button>

@@ -1,9 +1,16 @@
 import { html, useMemo, useState } from '../../vendor/preact-htm.js';
 import { update, activeTeam, uid } from '../store.js';
 import * as M from '../match.js';
-import { Icon, Sheet, Seg, Confirm, toast, POS_COLORS } from '../ui.js';
+import { Icon, Sheet, Seg, Confirm, toast, POS_COLORS, OpponentInput, ShieldColors, OppBadge } from '../ui.js';
 
 export const todayISO = () => new Date().toLocaleDateString('sv-SE');
+// standaard verzamelen: een half uur voor aanvang
+export function minus30(t) {
+  if (!t || !/^\d{1,2}:\d{2}/.test(t)) return '';
+  const [h, m] = t.split(':').map(Number);
+  const x = (h * 60 + m - 30 + 1440) % 1440;
+  return String(Math.floor(x / 60)).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0');
+}
 // seizoen loopt van augustus t/m juli, bijv. '2026-2027'
 export function seasonOf(iso) {
   const [y, m] = (iso || todayISO()).split('-').map(Number);
@@ -37,15 +44,16 @@ export function nextScheduled(team, matches) {
 export function buildMessage(team, e) {
   const names = (ids) => { const n = (ids || []).filter(Boolean).map((id) => firstName(team, id)); return n.length > 1 ? n.slice(0, -1).join(', ') + ' en ' + n[n.length - 1] : n[0] || ''; };
   const title = e.home === false ? `${e.opponent || 'Tegenstander'} – ${team.name}` : `${team.name} – ${e.opponent || 'Tegenstander'}`;
-  const lines = [`🏑 ${title}`, `📅 ${longDate(e.date)}`];
-  if (e.time || e.meet) lines.push(`⏰ ${e.time ? 'Aanvang ' + e.time : ''}${e.time && e.meet ? ' · ' : ''}${e.meet ? 'verzamelen ' + e.meet : ''}`);
+  // *tekst* is vet in WhatsApp
+  const lines = [`*${title}*`, longDate(e.date)];
+  if (e.time || e.meet) lines.push(`${e.time ? 'Aanvang ' + e.time : ''}${e.time && e.meet ? ' · ' : ''}${e.meet ? (e.time ? 'verzamelen ' : 'Verzamelen ') + e.meet : ''}`);
   lines.push(`📍 ${e.home === false ? 'Uit' : 'Thuis'}${e.field ? ' · ' + e.field : ''}`);
   if (e.keeperId) lines.push(`🧤 Keeper: ${firstName(team, e.keeperId)}`);
   if ((e.absent || []).length) lines.push(`🙋 Afgemeld: ${names(e.absent)}`);
   const tasks = TASKS.filter((t) => (e.tasks && e.tasks[t.key] || []).filter(Boolean).length);
   if (tasks.length) {
-    lines.push('', '📋 Taken');
-    for (const t of tasks) lines.push(`${t.emoji} ${t.label}: ouders van ${names(e.tasks[t.key])}`);
+    lines.push('', '*Taken*');
+    for (const t of tasks) lines.push(`${t.emoji} ${t.label}: ${names(e.tasks[t.key])}`);
   }
   lines.push('', `Succes ${team.name}! 💪🧡💙`);
   return lines.join('\n');
@@ -55,9 +63,9 @@ export function buildMessage(team, e) {
 export function buildTaskOverview(team, entries, season) {
   const short = (iso) => { const s = new Date(iso + 'T12:00:00').toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' }).replace('.', ''); return s.charAt(0).toUpperCase() + s.slice(1); };
   const list = (ids) => (ids || []).filter(Boolean).map((id) => firstName(team, id)).join(', ');
-  const out = [`🏑 ${team.name} · taken ${seasonLabel(season).replace('Seizoen ', 'seizoen ')}`];
+  const out = [`*${team.name} · taken ${seasonLabel(season).replace('Seizoen ', 'seizoen ')}*`];
   for (const e of entries) {
-    out.push('', `📅 ${short(e.date)}${e.time ? ' · ' + e.time : ''} · ${e.opponent || 'Tegenstander'} (${e.home === false ? 'uit' : 'thuis'})`);
+    out.push('', `*${short(e.date)}${e.time ? ' · ' + e.time : ''} · ${e.opponent || 'Tegenstander'} (${e.home === false ? 'uit' : 'thuis'})*`);
     if (e.keeperId) out.push(`🧤 Keeper: ${firstName(team, e.keeperId)}`);
     for (const t of TASKS) { const l = list(e.tasks && e.tasks[t.key]); if (l) out.push(`${t.emoji} ${t.label}: ${l}`); }
   }
@@ -77,7 +85,7 @@ export function buildICS(team, entries) {
   for (const e of entries) {
     const title = e.home === false ? `${e.opponent || 'Tegenstander'} – ${team.name}` : `${team.name} – ${e.opponent || 'Tegenstander'}`;
     const desc = [e.time ? 'Aanvang ' + e.time : '', e.meet ? 'Verzamelen ' + e.meet : '', e.keeperId ? 'Keeper: ' + firstName(team, e.keeperId) : '']
-      .concat(TASKS.map((t) => { const l = ((e.tasks && e.tasks[t.key]) || []).filter(Boolean).map((id) => firstName(team, id)).join(', '); return l ? `${t.label}: ouders van ${l}` : ''; })).filter(Boolean).join('\n');
+      .concat(TASKS.map((t) => { const l = ((e.tasks && e.tasks[t.key]) || []).filter(Boolean).map((id) => firstName(team, id)).join(', '); return l ? `${t.label}: ${l}` : ''; })).filter(Boolean).join('\n');
     lines.push('BEGIN:VEVENT', 'UID:' + e.id + '@spabo-coach', 'DTSTAMP:' + stamp);
     const start = e.meet || e.time;
     if (start) { lines.push('DTSTART:' + dt(e.date, start), 'DTEND:' + dt(e.date, addMin(e.time || start, dur))); }
@@ -163,10 +171,10 @@ export function Seizoen({ state }) {
     return html`<div class="mrow">
       <span class="mdate"><b>${d.getDate()}</b><span>${d.toLocaleDateString('nl-NL', { month: 'short' }).replace('.', '')}</span></span>
       <button type="button" class="mmain" onClick=${() => (r.e ? setEdit({ ...r.e, tasks: { ...(r.e.tasks || {}) } }) : (location.hash = '#/afloop/' + r.m.id))}>
-        <span class="mname">${name || 'Tegenstander'}</span>
+        <span class="mname"><${OppBadge} name=${name} size=${22} /> ${name || 'Tegenstander'}</span>
         <span class="msub">${r.e ? (r.e.home === false ? 'Uit' : 'Thuis') : ''}${r.time ? (r.e ? ' · ' : '') + r.time : ''}${r.e && r.e.field ? ' · ' + r.e.field : ''}${r.e && !r.m ? (taskCount ? ` · ${taskCount} taken` : ' · taken nog open') : ''}</span>
       </button>
-      ${s ? html`<a class=${'mscore ' + res} href=${'#/afloop/' + r.m.id}>${s.score.us}–${s.score.them}</a>`
+      ${s ? html`<a class=${'mscore ' + res} href=${'#/afloop/' + r.m.id}>${s.score.us} : ${s.score.them}</a>`
         : html`<button type="button" class="iconbtn" aria-label="Bericht kopiëren" onClick=${() => copyText(buildMessage(team, r.e)).then((ok) => { if (!ok) setEdit({ ...r.e, tasks: { ...(r.e.tasks || {}) }, showText: true }); })}><${Icon} name="copy" size=${20} /></button>`}
     </div>`;
   };
@@ -189,7 +197,7 @@ export function Seizoen({ state }) {
       <div class="between"><span class="h2">Wedstrijden</span><span class="small">${seasonLabel(season)}</span></div>
       ${schedule.length > 0 && html`<div class="row" style="margin:4px 0 6px">
         <button type="button" class="btn plain grow" style="min-height:40px;font-size:14px" onClick=${() => { const entries = schedule.filter((x) => season !== current || x.date >= todayISO()).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || ''))); copyText(buildTaskOverview(team, entries.length ? entries : schedule, season), 'Takenoverzicht gekopieerd · plak het in WhatsApp'); }}><${Icon} name="copy" size=${16} /> Takenoverzicht</button>
-        <button type="button" class="btn plain grow" style="min-height:40px;font-size:14px" onClick=${() => shareFile(`hockey-${team.name.replace(/[^A-Za-z0-9]+/g, '-')}-${season}.ics`, buildICS(team, schedule.slice().sort((a, b) => a.date.localeCompare(b.date))), 'text/calendar')}><${Icon} name="calendar" size=${16} /> Agenda-bestand</button>
+        <button type="button" class="btn plain grow" style="min-height:40px;font-size:14px" onClick=${() => shareFile(`hockey-${team.name.replace(/[^A-Za-z0-9]+/g, '-')}-${season}.ics`, buildICS(team, schedule.slice().sort((a, b) => a.date.localeCompare(b.date))), 'text/calendar')}><${Icon} name="calendar" size=${16} /> Agenda</button>
       </div>`}
       ${list.map(row)}
       <button type="button" class="addtile" onClick=${newEntry}><${Icon} name="plus" size=${20} /> Wedstrijd toevoegen</button>
@@ -296,7 +304,8 @@ function ScheduleSheet({ team, matches, entry, onClose }) {
   const tasks = e.tasks || {};
   return html`<${Sheet} onClose=${onClose} label="Wedstrijd">
     <span class="h2" style="font-size:22px">${e.id ? 'Wedstrijd' : 'Nieuwe wedstrijd'}</span>
-    <div class="col"><label class="label" for="s-opp">Tegenstander</label><input id="s-opp" class="input" value=${e.opponent} placeholder="Bijv. Hurley JO9-3" onInput=${(ev) => set('opponent', ev.target.value)} /></div>
+    <div class="col"><label class="label" for="s-opp">Tegenstander</label><${OpponentInput} id="s-opp" value=${e.opponent || ''} onChange=${(v) => set('opponent', v)} /></div>
+    ${(e.opponent || '').trim() && html`<${ShieldColors} name=${e.opponent} />`}
     <${Seg} label="Thuis of uit" value=${e.home === false ? 'uit' : 'thuis'} onChange=${(v) => set('home', v === 'thuis')} options=${[['thuis', 'Thuis'], ['uit', 'Uit']]} />
     <div class="col"><label class="label" for="s-season">Seizoen</label>
       <select id="s-season" class="input" value=${e.season || seasonOf(e.date)} onChange=${(ev) => set('season', ev.target.value)}>
@@ -304,7 +313,7 @@ function ScheduleSheet({ team, matches, entry, onClose }) {
       </select></div>
     <div class="row">
       <div class="col grow"><label class="label" for="s-date">Datum</label><input id="s-date" type="date" class="input" value=${e.date} onInput=${(ev) => { const v = ev.target.value; setE((x) => ({ ...x, date: v, season: !x.season || x.season === seasonOf(x.date) ? seasonOf(v) : x.season })); }} /></div>
-      <div class="col" style="width:118px"><label class="label" for="s-time">Aanvang</label><input id="s-time" type="time" class="input" value=${e.time} onInput=${(ev) => set('time', ev.target.value)} /></div>
+      <div class="col" style="width:118px"><label class="label" for="s-time">Aanvang</label><input id="s-time" type="time" class="input" value=${e.time} onInput=${(ev) => { const v = ev.target.value; setE((x) => ({ ...x, time: v, meet: v && (!x.meet || x.meet === minus30(x.time)) ? minus30(v) : x.meet })); }} /></div>
     </div>
     <div class="row">
       <div class="col" style="width:118px"><label class="label" for="s-meet">Verzamelen</label><input id="s-meet" type="time" class="input" value=${e.meet} onInput=${(ev) => set('meet', ev.target.value)} /></div>
@@ -330,7 +339,7 @@ function ScheduleSheet({ team, matches, entry, onClose }) {
         <div class="between"><span class="t" style="font-weight:800">${t.emoji} ${t.label}</span>
           <div style="width:${t.max > 1 ? 170 : 120}px"><${Seg} small label=${t.label} value=${n} onChange=${(v) => setCount(t.key, v)} options=${opts} /></div></div>
         ${Array.from({ length: n }, (_, i) => html`<select class="input" style="height:44px" aria-label=${t.label + ' ' + (i + 1)} value=${tasks[t.key][i] || ''} onChange=${(ev) => setSlot(t.key, i, ev.target.value)}>
-          <option value="">Kies een speler (ouders van)…</option>
+          <option value="">Kies een speler…</option>
           ${active.map((p) => html`<option value=${p.id}>${p.name || p.nick}</option>`)}
         </select>`)}
       </div>`;

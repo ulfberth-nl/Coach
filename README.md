@@ -28,9 +28,10 @@ Klaarzetten en spelen gebeuren op hetzelfde scherm, dat altijd in één beeld pa
 
 ## Seizoen en programma
 
-- **+ Wedstrijd:** tegenstander, thuis/uit, datum, aanvang, verzameltijd, veld en taken voor ouders (fluiten 0–2, fruit 0–1, bar/wedstrijdtafel 0–2). *Eerlijk verdelen* kiest wie het minst aan de beurt was.
+- **+ Wedstrijd:** tegenstander, thuis/uit, datum, aanvang, verzameltijd (standaard een half uur voor aanvang), veld en taken voor ouders (fluiten 0–2, fruit 0–1, bar/wedstrijdtafel 0–2). *Eerlijk verdelen* kiest wie het minst aan de beurt was.
+- **Clubs:** bij het typen van de tegenstander stelt de app clubs voor (naam, afkorting zoals HMHC/SCHC/SpaBo, of plaats). Het schild krijgt de clubkleuren als die bekend zijn (`js/clubs.js`, met bron); anders kies je de kleuren zelf, de app onthoudt ze per club.
 - **Keeper en afmeldingen per wedstrijd:** vooraf in te vullen (met keepbeurten dit seizoen); de klaargezette wedstrijd neemt ze over.
-- **Bericht kopiëren:** een overzicht met emoji's om in de teamapp te plakken.
+- **Bericht kopiëren:** wedstrijd en taken voor de teamapp of WhatsApp (vet met *sterretjes*).
 - **Takenoverzicht:** alle komende wedstrijden met keeper en taken in één bericht voor WhatsApp.
 - **Agenda-bestand (.ics):** alle wedstrijden of één wedstrijd, op de telefoon gemaakt, om in de agenda te zetten of te delen.
 - Het Wedstrijd-scherm zet automatisch de eerstvolgende wedstrijd uit het programma klaar; via het affiche kies je een andere.
@@ -38,9 +39,11 @@ Klaarzetten en spelen gebeuren op hetzelfde scherm, dat altijd in één beeld pa
 
 ## Tijdens de wedstrijd
 
-- **Klok:** tik op de klok om te starten of te pauzeren. Blauw met een kloppende stip = loopt, oranje en knipperend = staat stil.
+- **Klok:** tik op de klok om te starten of te pauzeren. Blauw = loopt, oranje en knipperend = staat stil. Rechts zie je welke helft/welk kwart en hoeveel tijd er nog is.
+- **Wisselbalk:** vanaf 1 minuut voor de wissel gloeit hij in alle kleuren; ben je te laat, dan staat er hoeveel (bijv. −1:33).
 - **Doelpunt:** tik op de stand en kies het eigen logo (daarna wie scoorde) of het logo van de tegenstander.
-- **Wisselen:** tik een speler voor het wisselvoorstel, of sleep: veld ↔ bank = direct wisselen, veld ↔ veld = plekken ruilen. De app rekent vanaf die situatie verder.
+- **Wisselen:** tik de wisselbalk of een speler. Bovenin staat wie eruit en wie erin gaat; *Andere speler kiezen* klapt de bank en het veld open (beste keuze vooraan). *Wissel nu* en *1 min later* staan in de blauwe balk onderin. Slepen kan ook: veld ↔ bank = direct wisselen, veld ↔ veld = plekken ruilen.
+- **Wedstrijdplan tijdens de wedstrijd:** de tijdlijn toont waar je nu bent, oude momenten worden grijs, de zwarte pil zegt hoe lang het nog duurt en bij de eerstvolgende wissel staat *Nu wisselen*.
 - **Keeper wisselen:** tik op de keeper.
 - **Stand van de opstelling** (verdedigen/balans/aanvallen): het label rechtsonder op het veld.
 - **Tijd aanpassen, einde periode, afsluiten of weggooien:** het ⋯-menu.
