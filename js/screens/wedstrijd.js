@@ -294,7 +294,7 @@ function LiveView({ match, team }) {
   let bar;
   if (pending) bar = { hot: true, title: `Rust · opstelling ${M.periodLabel(team, match.clock.period)}`, sub: 'tik om klaar te zetten' };
   else if (timeUp) bar = { hot: true, title: `Tijd! Einde ${M.periodLabel(team, match.clock.period)}`, sub: 'tik om af te sluiten' };
-  else if (next) bar = { hot: countdown <= 60, title: countdown <= 0 ? 'Nu wisselen' : 'Wissel over ' + M.fmt(countdown), sub: `${nick(next.in)} erin voor ${nick(next.out)}`, n: countdown < -0.5 ? null : `${counts.done + 1}/${counts.total}`,
+  else if (next) bar = { hot: countdown <= 60, title: countdown <= 0 ? 'Nu wisselen' : 'Wissel over ' + M.fmt(countdown), sub: `${nick(next.in)} erin voor ${nick(next.out)}${next.fixed ? ' · aangepast' : ''}`, n: countdown < -0.5 ? null : `${counts.done + 1}/${counts.total}`,
     late: countdown < -0.5 ? '−' + M.fmt(-countdown) : null,
     progress: Math.max(0, Math.min(1, (T - (match.plan ? match.plan.at : 0)) / Math.max(1, next.t - (match.plan ? match.plan.at : 0)))) };
   else bar = { hot: false, title: `Geen wissels meer deze ${M.periodWord(team)}`, calm: true };
@@ -326,7 +326,7 @@ function LiveView({ match, team }) {
         <span class="num score bump" key=${d.score.us + '-' + d.score.them}>${d.score.us}<span class="sep2">:</span>${d.score.them}</span>
       </button>
     </div>
-    <button type="button" class="nextbtn" onClick=${openNext} disabled=${bar.calm}>${bar.hot ? html`<${Neon} box cls="rainbow">${barInner}</${Neon}>` : barInner}</button>
+    <button type="button" class="nextbtn" onClick=${openNext} disabled=${bar.calm}>${bar.hot ? html`<${Neon} box cls="barglow">${barInner}</${Neon}>` : barInner}</button>
     <div class="grow-field" ref=${zone}>
       <div class="fieldbox">
         <${Field} slots=${d.state.slots} lines=${team.lines} keeperId=${d.state.keeper} nick=${nick} height="auto"

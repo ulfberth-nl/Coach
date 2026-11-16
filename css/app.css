@@ -536,22 +536,12 @@ input[type="date"]::-webkit-datetime-edit, input[type="time"]::-webkit-datetime-
 /* stand met dubbele punt */
 .scorebtn .sep2 { display: inline-block; margin: 0 4px; color: var(--line-2); transform: translateY(-0.06em); }
 
-/* wisselbalk: regenboog-neon vanaf 1 minuut, en te laat in beeld */
-@keyframes rainbowGlow {
-  0% { box-shadow: 0 0 10px 3px rgba(255,59,48,.85), 0 0 26px 8px rgba(255,59,48,.35); }
-  17% { box-shadow: 0 0 10px 3px rgba(255,149,0,.85), 0 0 26px 8px rgba(255,149,0,.35); }
-  33% { box-shadow: 0 0 10px 3px rgba(255,204,0,.85), 0 0 26px 8px rgba(255,204,0,.35); }
-  50% { box-shadow: 0 0 10px 3px rgba(52,199,89,.85), 0 0 26px 8px rgba(52,199,89,.35); }
-  67% { box-shadow: 0 0 10px 3px rgba(0,122,255,.85), 0 0 26px 8px rgba(0,122,255,.35); }
-  83% { box-shadow: 0 0 10px 3px rgba(175,82,222,.85), 0 0 26px 8px rgba(175,82,222,.35); }
-  100% { box-shadow: 0 0 10px 3px rgba(255,59,48,.85), 0 0 26px 8px rgba(255,59,48,.35); }
-}
-.neon.rainbow { animation: rainbowGlow 2.4s linear infinite; }
-.neon.rainbow > .ring { background: conic-gradient(from var(--spin), #ff3b30, #ff9500, #ffcc00, #34c759, #00c7be, #007aff, #af52de, #ff2d55, #ff3b30); animation: spin 1.8s linear infinite; }
-.neon.rainbow.box > .in { margin: 4px; }
-.neon.rainbow .nextbar { border-radius: 12px; }
+/* wisselbalk vanaf 1 minuut: oranje balk, witte lijn, daaromheen dezelfde neonrand als bij de spelers */
+.neon.barglow { border-radius: 20px; }
+.neon.barglow > .in { margin: 3px; padding: 2px; background: #fff; border-radius: 17px; }
+.neon.barglow .nextbar { border-radius: 15px; }
 .nb-late { flex: 0 0 auto; font-family: Inter, sans-serif; font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 900; color: #fff; background: #C8102E; padding: 4px 10px; border-radius: 10px; animation: stilPulse 1.2s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .neon.rainbow, .neon.rainbow > .ring, .nb-late { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .nb-late { animation: none; } }
 
 /* wedstrijdplan tijdens de wedstrijd */
 .fieldbox.past .field { filter: grayscale(1); opacity: .55; transition: filter .3s ease, opacity .3s ease; }
@@ -560,3 +550,27 @@ input[type="date"]::-webkit-datetime-edit, input[type="time"]::-webkit-datetime-
 .tl-now { position: absolute; top: 36px; width: 3px; height: 22px; margin-left: -1.5px; transform: translateY(-50%); border-radius: 2px; background: var(--orange); box-shadow: 0 0 0 2px #fff; z-index: 1; pointer-events: none; transition: left 1s linear; }
 .tl-now::after { content: 'nu'; position: absolute; top: 23px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 900; color: #B26A00; }
 .planlive { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--orange-soft); }
+
+/* wisselvenster: tegels openen de keuzelijst */
+button.duo-side { position: relative; text-align: left; font: inherit; color: inherit; cursor: pointer; transition: transform .18s var(--ease-out), box-shadow .25s ease; }
+button.duo-side:active { transform: scale(.97); }
+button.duo-side[aria-expanded="true"] { box-shadow: 0 0 0 4px rgba(43,87,201,.18); }
+button.duo-side.out[aria-expanded="true"] { box-shadow: 0 0 0 4px rgba(245,165,36,.28); }
+.duo-chev { position: absolute; top: 10px; right: 10px; display: inline-flex; transform: rotate(90deg); color: var(--ink); opacity: .55; transition: transform .35s var(--spring); }
+button.duo-side[aria-expanded="true"] .duo-chev { transform: rotate(-90deg); opacity: .9; }
+.plist { display: flex; flex-direction: column; gap: 6px; padding: 2px 0 4px; }
+.plabel { font-size: 12px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 2px 2px 2px; }
+.prow2 { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 58px; padding: 8px 14px; border-radius: 16px; border: 1.5px solid var(--line); background: #fff; text-align: left; font: inherit; color: var(--ink); animation: rise .28s var(--ease-out) both; transition: background .2s ease, border-color .2s ease, transform .15s var(--ease-out); }
+.prow2:nth-child(3) { animation-delay: .03s; } .prow2:nth-child(4) { animation-delay: .06s; } .prow2:nth-child(5) { animation-delay: .09s; } .prow2:nth-child(6) { animation-delay: .12s; } .prow2:nth-child(n+7) { animation-delay: .15s; }
+.prow2:active { transform: scale(.98); }
+.prow2.on { border-color: var(--blue-2); background: var(--blue-tint); }
+.prow2.warm.on { border-color: var(--orange); background: var(--orange-tint); }
+.prow2 .ldot { flex: 0 0 10px; width: 10px; height: 10px; border-radius: 999px; }
+.pr-name { font-size: 17px; font-weight: 900; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pr-meta { font-size: 13px; font-weight: 700; color: var(--muted); }
+.pr-check { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 999px; background: var(--ink); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 900; }
+.tag { font-size: 11px; font-weight: 900; padding: 2px 8px; border-radius: 999px; text-transform: lowercase; }
+.tag.plan { background: var(--orange); color: var(--ink); }
+.tag.advies { background: #E3F3E7; color: #14652A; }
+.btn.ghostblue { font-size: 15px; padding: 0 8px; }
+.btn.ghostblue:disabled { opacity: .5; }
