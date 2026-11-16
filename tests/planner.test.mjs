@@ -110,3 +110,23 @@ console.log('Vast-aantal-test geslaagd');
   }
 }
 console.log('Standtest geslaagd');
+
+// meerdere spelers per wisselmoment
+{
+  for (const k of [2, 3, 5]) {
+    const r2 = { ...rules, perMoment: k };
+    const ctx = { players, lines: { V: 2, M: 1, A: 2 }, periodLen: 1500, periods: 2, rules: r2, stand: 'balans' };
+    const start = initialState(['1', '2', '3', '4', '5', '7', '8', '9'], ctx);
+    const r = planRest(start, ctx, 0);
+    const groups = {};
+    for (const s of r.steps.filter((x) => x.type === 'swap')) (groups[s.t] = groups[s.t] || []).push(s);
+    const sizes = Object.values(groups).map((g) => g.length);
+    for (const g of Object.values(groups)) {
+      const ids = g.map((s) => s.out).concat(g.map((s) => s.in));
+      assert.equal(new Set(ids).size, ids.length, 'niemand in én uit op hetzelfde moment');
+      assert.ok(g.length <= k);
+    }
+    console.log(`${k} per moment: ${sizes.length} momenten (${sizes.join(',')}), speeltijd ${Math.round(r.fair.minPlayed / 60)}–${Math.round(r.fair.maxPlayed / 60)} min, ok=${r.ok}`);
+  }
+}
+console.log('Groepstest geslaagd');

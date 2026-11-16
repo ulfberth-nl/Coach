@@ -21,6 +21,7 @@ export function defaultRules() {
     maxBenchOn: true,
     maxBench: 10,
     turnsPerPeriod: 0,
+    perMoment: 1,
     minInterval: 2
   };
 }

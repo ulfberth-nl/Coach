@@ -154,6 +154,8 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   const until = live && i > nowIndex ? c.t - liveT : null;
   const pillText = label(t) + (live ? (i < nowIndex ? ' · geweest' : until != null ? (until > 0 ? ' · over ' + M.fmt(until) : ' · nu!') : '') : '');
   const isNext = live && i === nowIndex + 1 && c.kind === 'swap' && onSwapNow;
+  const multi = c.kind === 'swap' && c.ins && c.ins.length > 1;
+  const swapText = c.kind === 'swap' ? (multi ? `${c.ins.map(nick).join(', ')} erin` : `${nick(c.in)} erin voor ${nick(c.out)}`) : '';
 
   return html`<div class=${'planview col' + (compact ? ' compact' : '')} style="gap:8px">
     <div class="tl" ref=${track} aria-label="Tijdlijn">
@@ -172,10 +174,10 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
       <button type="button" class="iconbtn" aria-label="Volgende" onClick=${() => setF(i + 1, true)} disabled=${i === cards.length - 1}><${Icon} name="chev" /></button>
     </div>`}
     ${!compact && isNext && html`<div class="planlive">
-      <span class="col grow" style="gap:0;min-width:0"><b>${until > 0 ? 'Over ' + M.fmt(until) : 'Nu wisselen'}</b><span class="small" style="color:var(--ink)">${nick(c.in)} erin voor ${nick(c.out)}</span></span>
+      <span class="col grow" style="gap:0;min-width:0"><b>${until > 0 ? 'Over ' + M.fmt(until) : 'Nu wisselen'}</b><span class="small" style="color:var(--ink)">${swapText}</span></span>
       <button type="button" class="btn primary" style="min-height:44px;padding:0 16px" onClick=${onSwapNow}>Nu wisselen</button>
     </div>`}
-    ${compact && html`<div class="fieldcap">${title}${i > 0 && c.kind === 'swap' ? html` · <b>${nick(c.in)}</b> erin voor ${nick(c.out)}` : ''}</div>`}
+    ${compact && html`<div class="fieldcap">${title}${i > 0 && c.kind === 'swap' ? html` · ${multi ? html`<b>${c.ins.map(nick).join(', ')}</b> erin` : html`<b>${nick(c.in)}</b> erin voor ${nick(c.out)}`}` : ''}</div>`}
     <div ref=${zone} class="scrubzone">
       <div class=${'fieldbox' + (live && i < nowIndex ? ' past' : '')}>
         <${Field} slots=${c.slots} lines=${team.lines} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
@@ -193,6 +195,7 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
       ? html`<span class="sub">${editable ? 'Sleep een speler naar een andere plek of naar de bank om te ruilen. Het plan rekent meteen mee.' : 'Startopstelling.'}</span>`
       : c.kind === 'lineup'
         ? html`<span class="sub" style="color:var(--ink)"><span class="chg in">Erin: ${ch.in.map(nick).join(', ') || '—'}</span> <span class="chg out">Eruit: ${ch.out.map(nick).join(', ') || '—'}</span></span>`
+        : multi ? html`<span class="sub" style="color:var(--ink)"><span class="chg in">↑ ${c.ins.map(nick).join(', ')}</span> erin voor <span class="chg out">↓ ${c.outs.map(nick).join(', ')}</span></span>`
         : html`<span class="sub" style="color:var(--ink)"><span class="chg in">↑ ${nick(c.in)}</span> erin voor <span class="chg out">↓ ${nick(c.out)}</span>${c.shift ? html`<br /><span class="chg sh">↔ ${nick(c.shift.id)}</span> schuift naar ${LINE_NAMES[c.shift.to]}` : ''}</span>`)}
     ${!compact && html`<span class="small">Veeg over het veld of sleep het oranje bolletje.</span>`}
 

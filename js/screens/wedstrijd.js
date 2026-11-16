@@ -5,7 +5,7 @@ import * as M from '../match.js';
 import { PlanView } from '../planview.js';
 import { keeperCounts, suggestKeeper, WHY_TEXT } from './home.js';
 import { nextScheduled, todayISO } from './seizoen.js';
-import { mutate, undoAction, SwapSheet, BenchSheet, GoalSheet, BreakSheet, JoinSheet, KeeperSheet } from './live.js';
+import { mutate, undoAction, SwapSheet, GroupSwapSheet, BenchSheet, GoalSheet, BreakSheet, JoinSheet, KeeperSheet } from './live.js';
 import { Field, Neon, Sheet, Confirm, Seg, Switch, Icon, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, beep, flash, unlockAudio, toast, go, STANDS } from '../ui.js';
 
 // ---------- concept-wedstrijd (nog niet begonnen) ----------
@@ -65,10 +65,22 @@ export function rebuildConcept(d, changes = {}) {
   d.matches[i] = n;
 }
 
+// programma: nog niet gespeelde wedstrijden vanaf een paar dagen terug, op datum
 function upcomingFor(team, matches) {
-  const today = todayISO();
+  const from = new Date(Date.now() - 3 * 864e5).toLocaleDateString('sv-SE');
   const played = new Set(matches.filter((m) => m.finished && m.scheduleId).map((m) => m.scheduleId));
-  return (team.schedule || []).filter((e) => e.date >= today && !played.has(e.id)).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+  return (team.schedule || []).filter((e) => e.date >= from && !played.has(e.id)).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+}
+// dichtst bij vandaag (vandaag zelf wint, bij gelijke afstand de komende)
+function closestEntry(list) {
+  const today = new Date(todayISO() + 'T12:00:00').getTime();
+  let best = null, bd = Infinity;
+  for (const e of list) {
+    const diff = new Date(e.date + 'T12:00:00').getTime() - today;
+    const d = Math.abs(diff) + (diff < 0 ? 1 : 0);
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best;
 }
 
 const mutateConcept = (fn) => update((d) => { const m = d.matches.find((x) => x.id === d.currentMatchId); if (m) fn(m, d); });
@@ -114,7 +126,8 @@ function PrepView({ state, match, team }) {
   const field = match.present.filter((id) => id !== match.keeperId);
   const tooFew = field.length < F || (team.keeper && !match.keeperId);
   const plan = match.plan;
-  const swaps = plan ? plan.steps.filter((s) => s.type === 'swap').length : 0;
+  const swaps = plan ? new Set(plan.steps.filter((s) => s.type === 'swap').map((s) => s.t)).size : 0;
+  const perMoment = Math.max(1, Math.min(5, team.rules.perMoment || 1));
   const every = swaps ? Math.round((M.matchEnd(team) / (swaps + team.periods)) / 30) / 2 : 0;
   const todo = [!setup.present && 'wie er is', team.keeper && !setup.keeper && 'de keeper', !setup.opponent && 'de tegenstander'].filter(Boolean);
   const start = () => {
@@ -134,7 +147,7 @@ function PrepView({ state, match, team }) {
       ? html`<div class="card" style="flex:1 1 auto;justify-content:center;text-align:center"><span class="h2">Te weinig spelers</span><span class="sub">Je hebt ${F} veldspelers nodig${team.keeper ? ' plus een keeper' : ''}. Tik op "spelers".</span></div>`
       : html`
         <button type="button" class="planline" onClick=${() => go('/plan')}>
-          <span>${swaps ? `${swaps} wissels · ~${String(every).replace('.', ',')} min · ${M.mins(plan.fair.minPlayed)}–${M.mins(plan.fair.maxPlayed)} min p.p. · ${plan.fair.minTurns === plan.fair.maxTurns ? plan.fair.minTurns + '×' : plan.fair.minTurns + '–' + plan.fair.maxTurns + '×'}` : 'Geen wissels nodig'}</span>
+          <span>${swaps ? `${swaps} ${perMoment > 1 ? 'momenten (tot ' + perMoment + ' tegelijk)' : 'wissels'} · ~${String(every).replace('.', ',')} min · ${M.mins(plan.fair.minPlayed)}–${M.mins(plan.fair.maxPlayed)} min p.p. · ${plan.fair.minTurns === plan.fair.maxTurns ? plan.fair.minTurns + '×' : plan.fair.minTurns + '–' + plan.fair.maxTurns + '×'}` : 'Geen wissels nodig'}</span>
           ${!plan.ok && html`<span class="warnicon" title=${(plan.why || []).map((w) => WHY_TEXT[w]).join(', ')}>!</span>`}
           <${Icon} name="chev" size=${16} />
         </button>
@@ -207,20 +220,35 @@ function OpponentSheet({ match, upcoming = [], onClose }) {
     update((d) => useScheduleInConcept(d, e));
     onClose();
   };
+  const [listOpen, setListOpen] = useState(false);
+  const current = upcoming.find((e) => e.id === match.scheduleId) || closestEntry(upcoming);
+  const entryLine = (e) => `${dateLabel(e.date)}${e.time ? ' · ' + e.time : ''}${e.home === false ? ' · uit' : ' · thuis'}${e.field ? ' · ' + e.field : ''}`;
   return html`<${Sheet} onClose=${save} label="Wedstrijdgegevens">
     <span class="h2" style="font-size:22px">Wedstrijd</span>
-    ${upcoming.length > 0 && html`<div class="col">
+    ${upcoming.length > 0 && current && html`<div class="col">
       <span class="label">Uit het programma</span>
-      ${upcoming.slice(0, 5).map((e) => html`<button type="button" class="choice" aria-pressed=${match.scheduleId === e.id ? 'true' : 'false'} onClick=${() => choose(e)}>
-        <span class="col" style="gap:1px"><span style="font-weight:800;font-size:16px">${e.opponent || 'Tegenstander'}</span>
-        <span class="sub">${dateLabel(e.date)}${e.time ? ' · ' + e.time : ''}${e.home === false ? ' · uit' : ' · thuis'}</span></span></button>`)}
+      <button type="button" class="progsel" aria-expanded=${listOpen ? 'true' : 'false'} onClick=${() => setListOpen(!listOpen)}>
+        <${OppBadge} name=${current.opponent} size=${36} />
+        <span class="col grow" style="gap:1px;min-width:0"><span class="pr-name">${current.opponent || 'Tegenstander'}${match.scheduleId === current.id ? html` <span class="tag advies">gekozen</span>` : ''}</span>
+          <span class="pr-meta">${entryLine(current)}</span></span>
+        <span class=${'chev' + (listOpen ? ' open' : '')} style="transform:rotate(90deg)"><${Icon} name="chev" size=${18} /></span>
+      </button>
+      <div class=${'collapse' + (listOpen ? ' open' : '')}><div>
+        <div class="plist">
+          ${upcoming.map((e) => html`<button type="button" key=${e.id} class=${'prow2' + (match.scheduleId === e.id ? ' on' : '')} onClick=${() => choose(e)}>
+            <${OppBadge} name=${e.opponent} size=${30} />
+            <span class="col grow" style="gap:1px;min-width:0"><span class="pr-name">${e.opponent || 'Tegenstander'}</span><span class="pr-meta">${entryLine(e)}</span></span>
+            ${match.scheduleId === e.id && html`<span class="pr-check" aria-hidden="true">✓</span>`}
+          </button>`)}
+        </div>
+      </div></div>
       <span class="label" style="margin-top:6px">Of zelf invullen</span>
     </div>`}
     <div class="col"><label class="label" for="o-opp">Tegenstander</label><${OpponentInput} id="o-opp" value=${opp} onChange=${setOpp} /></div>
     ${opp.trim() && html`<${ShieldColors} name=${opp} />`}
     <div class="row">
-      <div class="col grow"><label class="label" for="o-date">Datum</label><input id="o-date" type="date" class="input" value=${date} onInput=${(e) => setDate(e.target.value)} /></div>
-      <div class="col" style="width:110px"><label class="label" for="o-time">Tijd</label><input id="o-time" type="time" class="input" value=${time} onInput=${(e) => setTime(e.target.value)} /></div>
+      <div class="col grow"><label class="label" for="o-date">Datum</label><input id="o-date" type="date" class="input" value=${date} onInput=${(e) => setDate(e.target.value)} onChange=${(e) => setDate(e.target.value)} /></div>
+      <div class="col" style="width:110px"><label class="label" for="o-time">Tijd</label><input id="o-time" type="time" class="input" value=${time} onInput=${(e) => setTime(e.target.value)} onChange=${(e) => setTime(e.target.value)} /></div>
     </div>
     <div class="col"><label class="label" for="o-field">Veld</label><input id="o-field" class="input" value=${fieldNo} placeholder="Bijv. 3" onInput=${(e) => setFieldNo(e.target.value)} /></div>
     <button type="button" class="btn primary block" onClick=${save}>Klaar</button>
@@ -236,7 +264,8 @@ function LiveView({ match, team }) {
   const tick = Math.floor(T);
   const d = useMemo(() => M.derive(match, team, T), [match, team, tick]);
   const nick = (id) => M.nickOf(team, id);
-  const next = M.nextSwap(match, team);
+  const group = M.nextGroup(match, team);
+  const next = group[0] || null;
   const countdown = next ? next.t - T : null;
   const pending = M.lineupPending(match, team);
   const timeUp = !match.finished && el >= L;
@@ -279,6 +308,7 @@ function LiveView({ match, team }) {
   const tapField = (id) => {
     if (justDragged(zone)) return;
     if (pending) { setSheet({ type: 'break' }); return; }
+    if (group.length > 1 && group.some((s) => s.out === id)) { setSheet({ type: 'group' }); return; }
     const inn = next && next.out === id ? next.in : M.suggestIn(match, team, id);
     if (!inn) { toast('Er zit niemand inzetbaar op de bank'); return; }
     setSheet({ type: 'swap', out: id, in: inn, planned: !!(next && next.out === id && next.in === inn) });
@@ -287,6 +317,7 @@ function LiveView({ match, team }) {
   const openNext = () => {
     if (pending) setSheet({ type: 'break' });
     else if (timeUp) setSheet({ type: 'end' });
+    else if (group.length > 1) setSheet({ type: 'group' });
     else if (next) setSheet({ type: 'swap', out: next.out, in: next.in, planned: true });
   };
 
@@ -294,15 +325,21 @@ function LiveView({ match, team }) {
   let bar;
   if (pending) bar = { hot: true, title: `Rust · opstelling ${M.periodLabel(team, match.clock.period)}`, sub: 'tik om klaar te zetten' };
   else if (timeUp) bar = { hot: true, title: `Tijd! Einde ${M.periodLabel(team, match.clock.period)}`, sub: 'tik om af te sluiten' };
-  else if (next) bar = { hot: countdown <= 60, title: countdown <= 0 ? 'Nu wisselen' : 'Wissel over ' + M.fmt(countdown), sub: `${nick(next.in)} erin voor ${nick(next.out)}${next.fixed ? ' · aangepast' : ''}`, n: countdown < -0.5 ? null : `${counts.done + 1}/${counts.total}`,
+  else if (next) bar = { hot: countdown <= 60, title: countdown <= 0 ? 'Nu wisselen' : 'Wissel over ' + M.fmt(countdown),
+    sub: (group.length > 1 ? `${group.length} tegelijk: ${group.map((s) => nick(s.in)).join(', ')} erin` : `${nick(next.in)} erin voor ${nick(next.out)}`) + (next.fixed ? ' · aangepast' : ''),
+    n: countdown < -0.5 ? null : `${counts.done + 1}/${counts.total}`,
+    blink: countdown <= 60 ? (countdown <= 0 ? 0.32 : 0.32 + (countdown / 60) * 1.0) : 0,
     late: countdown < -0.5 ? '−' + M.fmt(-countdown) : null,
     progress: Math.max(0, Math.min(1, (T - (match.plan ? match.plan.at : 0)) / Math.max(1, next.t - (match.plan ? match.plan.at : 0)))) };
   else bar = { hot: false, title: `Geen wissels meer deze ${M.periodWord(team)}`, calm: true };
-  const barInner = html`<span class=${'nextbar' + (bar.calm ? ' calm' : '')}>
-    <span class="col grow" style="gap:0;min-width:0"><span class="nb-title">${bar.title}</span>${bar.sub && html`<span class="nb-sub">${bar.sub}</span>`}</span>
-    ${bar.n && html`<span class="nb-n">${bar.n}</span>`}
-    ${bar.late && html`<span class="nb-late" aria-label=${'Te laat: ' + bar.late}>${bar.late}</span>`}
-    ${bar.progress != null && html`<span class="nb-prog"><span style=${`width:${bar.progress * 100}%`}></span></span>`}
+  if (timeUp && bar.hot && !pending) { bar.progress = 1; bar.blink = 0.32; }
+  const barInner = html`<span class=${'nextbar' + (bar.calm ? ' calm' : ' blue')}>
+    <span class="nb-top">
+      <span class="col grow" style="gap:0;min-width:0"><span class="nb-title">${bar.title}</span>${bar.sub && html`<span class="nb-sub">${bar.sub}</span>`}</span>
+      ${bar.n && html`<span class="nb-n">${bar.n}</span>`}
+      ${bar.late && html`<span class="nb-late" aria-label=${'Te laat: ' + bar.late}>${bar.late}</span>`}
+    </span>
+    ${bar.progress != null && html`<span class=${'nb-pill' + (bar.blink ? ' blink' : '')} style=${bar.blink ? `--blink:${bar.blink.toFixed(2)}s` : ''}><span style=${`width:${Math.max(6, bar.progress * 100)}%`}></span></span>`}
   </span>`;
 
   return html`<main class="matchscreen live">
@@ -326,12 +363,12 @@ function LiveView({ match, team }) {
         <span class="num score bump" key=${d.score.us + '-' + d.score.them}>${d.score.us}<span class="sep2">:</span>${d.score.them}</span>
       </button>
     </div>
-    <button type="button" class="nextbtn" onClick=${openNext} disabled=${bar.calm}>${bar.hot ? html`<${Neon} box cls="barglow">${barInner}</${Neon}>` : barInner}</button>
+    <button type="button" class="nextbtn" onClick=${openNext} disabled=${bar.calm}>${barInner}</button>
     <div class="grow-field" ref=${zone}>
       <div class="fieldbox">
         <${Field} slots=${d.state.slots} lines=${team.lines} keeperId=${d.state.keeper} nick=${nick} height="auto"
           onTap=${tapField} onKeeper=${!pending ? () => setSheet({ type: 'keeper' }) : null}
-          neon=${next && !pending ? [next.out] : []} sub=${(id) => M.fmt(d.state.played[id])} />
+          neon=${next && !pending ? group.map((s) => s.out) : []} sub=${(id) => M.fmt(d.state.played[id])} />
         <button type="button" class="fieldtag right" onClick=${() => setSheet({ type: 'stand' })}>${STANDS.find(([v]) => v === stand)[1]}${match.standMode !== 'manual' && team.rules.autoStand ? ' · auto' : ''}</button>
       </div>
       <div class="benchrow">
@@ -339,7 +376,7 @@ function LiveView({ match, team }) {
         <div class="scroll">
           ${d.state.bench.map((id) => {
             const dis = d.state.disabled[id];
-            const isNext = next && next.in === id && !pending;
+            const isNext = next && !pending && group.some((s) => s.in === id);
             const pill = html`<button type="button" key=${id} data-pid=${id} class=${'benchpill' + (dis ? ' off' : '')} onClick=${() => tapBench(id)}>
               ${nick(id)}<span class="t">${dis ? (dis === 'wedstrijd' ? 'klaar' : 'rust') : isNext ? 'klaarmaken' : M.mins(d.state.played[id]) + ' min'}</span>
             </button>`;
@@ -352,6 +389,7 @@ function LiveView({ match, team }) {
     </div>
 
     ${sheet && sheet.type === 'swap' && html`<${SwapSheet} match=${match} team=${team} d=${d} init=${sheet} counts=${counts} onClose=${() => setSheet(null)} />`}
+    ${sheet && sheet.type === 'group' && html`<${GroupSwapSheet} match=${match} team=${team} d=${d} counts=${counts} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'bench' && html`<${BenchSheet} match=${match} team=${team} d=${d} id=${sheet.id} onClose=${() => setSheet(null)} openSwap=${(s) => setSheet({ type: 'swap', ...s, planned: false })} />`}
     ${sheet && sheet.type === 'goal' && html`<${GoalSheet} match=${match} team=${team} d=${d} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'break' && html`<${BreakSheet} match=${match} team=${team} d=${d} onClose=${() => setSheet(null)} />`}

@@ -5,7 +5,7 @@ import { suggestKeeper } from './home.js';
 import { rebuildConcept } from './wedstrijd.js';
 import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, toast, STANDS } from '../ui.js';
 
-export const APP_VERSION = '0.9.1';
+export const APP_VERSION = '0.10.0';
 
 // Eerlijkheid in drie standen; zetten de onderliggende regels in één keer
 const FAIR = {
@@ -51,7 +51,7 @@ export function Team({ state }) {
     const F = team.lines.A + team.lines.M + team.lines.V;
     if (present.filter((id) => id !== keeper).length < F) return null;
     const plan = createMatch(team, { present, keeperId: keeper, priority: r.priority }).plan;
-    const swaps = plan.steps.filter((x) => x.type === 'swap').length;
+    const swaps = new Set(plan.steps.filter((x) => x.type === 'swap').map((x) => x.t)).size;
     const f = plan.fair;
     return {
       n: present.length, swaps, ok: plan.ok,
@@ -141,7 +141,7 @@ export function Team({ state }) {
       <span class="h2">Spelvorm</span>
       ${locked && html`<span class="small" style="color:var(--ink)">Tijdens een wedstrijd kun je de spelvorm niet aanpassen.</span>`}
       <fieldset disabled=${locked} style="border:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px">
-        <${Seg} label="Veld of zaal" value=${team.type} onChange=${(v) => set((t) => { t.type = v; })} options=${[['veld', 'Veld'], ['zaal', 'Zaal']]} />
+        <${Seg} label="Veld of zaal" value=${team.type} onChange=${(v) => set((t) => { t.type = v; const f = t.lines.A + t.lines.M + t.lines.V; t.rules.perMoment = v === 'zaal' ? Math.min(5, f) : 1; })} options=${[['veld', 'Veld'], ['zaal', 'Zaal']]} />
         <${Setting} title="Met keeper"><${Switch} label="Met keeper" on=${team.keeper} onChange=${(v) => set((t) => { t.keeper = v; })} /></${Setting}>
         <${Setting} title="Achter"><${Stepper} label="Achter" value=${team.lines.A} min=${0} max=${5} onChange=${(v) => setLines('A', v)} /></${Setting}>
         <${Setting} title="Midden"><${Stepper} label="Midden" value=${team.lines.M} min=${0} max=${5} onChange=${(v) => setLines('M', v)} /></${Setting}>
@@ -157,6 +157,9 @@ export function Team({ state }) {
       <span class="label">Hoe vaak gaat elk kind naar de bank?</span>
       <${Seg} label="Wisselritme" value=${[0, 1, 2].indexOf(r.turnsPerPeriod || 0) !== -1 ? (r.turnsPerPeriod || 0) : -1} onChange=${(v) => setRule('turnsPerPeriod', v)} options=${[[0, 'App kiest'], [1, '1× per ' + pw], [2, '2× per ' + pw]]} />
       <span class="small">${r.turnsPerPeriod ? `Ieder kind ${r.turnsPerPeriod}× per ${pw} op de bank; de app kiest de momenten.` : 'De app kiest het kleinste aantal wissels dat eerlijk uitkomt.'}</span>
+      <span class="label">Hoeveel spelers tegelijk wisselen?</span>
+      <${Seg} label="Spelers per wissel" value=${Math.max(1, Math.min(5, r.perMoment || 1))} onChange=${(v) => setRule('perMoment', v)} options=${[1, 2, 3, 4, 5].map((n) => [n, String(n)])} />
+      <span class="small">${(r.perMoment || 1) > 1 ? `Per wisselmoment gaan er ${r.perMoment} kinderen tegelijk naar de bank (of minder als de bank kleiner is).` : 'Telkens één kind tegelijk.'}${team.type === 'zaal' && (r.perMoment || 1) < Math.min(5, F) ? html` <button type="button" class="link" onClick=${() => setRule('perMoment', Math.min(5, F))}>Hele veldploeg (${Math.min(5, F)})</button>` : ''}</span>
       <span class="label">Eerlijkheid</span>
       <${Seg} label="Eerlijkheid" value=${preset} onChange=${(v) => set((t) => { Object.assign(t.rules, FAIR[v].rules); })} options=${Object.keys(FAIR).map((k) => [k, FAIR[k].label])} />
       <span class="small">${preset in FAIR ? FAIR[preset].sub : 'Eigen instellingen (zie hieronder).'}</span>
@@ -165,7 +168,7 @@ export function Team({ state }) {
       ${preview && html`<div class="preview">
         <span class="label">Zo ziet een wedstrijd eruit met je ${preview.n} spelers</span>
         <div class="pv-grid">
-          <div><b class="num">${preview.swaps}</b><span>wissels</span></div>
+          <div><b class="num">${preview.swaps}</b><span>${(r.perMoment || 1) > 1 ? 'wisselmomenten' : 'wissels'}</span></div>
           <div><b class="num">~${String(preview.every).replace('.', ',')}′</b><span>tussen wissels</span></div>
           <div><b class="num">${preview.minP === preview.maxP ? preview.minP : preview.minP + '–' + preview.maxP}′</b><span>speeltijd per kind</span></div>
           <div><b class="num">${preview.maxStint}′</b><span>langst op de bank</span></div>
