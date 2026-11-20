@@ -23,7 +23,7 @@ export const undoAction = { label: 'Ongedaan', run: () => { const ev = mutate((m
 // ---------- wissel: schets bovenin (tik een tegel om te kiezen), knoppen in vaste balk ----------
 // Labels: "plan" = de volgende wissel uit het actuele plan (dat na elke afwijking opnieuw wordt berekend);
 // "advies" = kies je zelf een andere speler, dan is dit de beste partner voor die keuze.
-export function SwapSheet({ match, team, d, init, counts, onClose }) {
+export function SwapSheet({ match, team, d, init, counts, onClose, onDone }) {
   const st = d.state;
   const pending = M.lineupPending(match, team);
   const next = pending ? null : M.nextSwap(match, team);
@@ -61,7 +61,8 @@ export function SwapSheet({ match, team, d, init, counts, onClose }) {
       M.doSwap(m, t, out, inn, place.shift);
       if (after !== 'terug') M.disablePlayer(m, t, out, after);
     });
-    toast(`${nick(inn)} erin voor ${nick(out)}`, undoAction);
+    if (onDone) onDone({ out, status: after, undos: after !== 'terug' ? 2 : 1 });
+    else toast(`${nick(inn)} erin voor ${nick(out)}`, undoAction);
     close();
   };
   const later = (close) => { mutate((m, t) => M.delay(m, t, 60)); toast('Wissel 1 minuut later'); close(); };
@@ -139,7 +140,7 @@ export function SwapSheet({ match, team, d, init, counts, onClose }) {
 }
 
 // ---------- meerdere spelers tegelijk ----------
-export function GroupSwapSheet({ match, team, d, counts, onClose }) {
+export function GroupSwapSheet({ match, team, d, counts, onClose, onDone }) {
   const st = d.state;
   const planned = M.nextGroup(match, team);
   const first = planned[0] || null;
@@ -178,7 +179,8 @@ export function GroupSwapSheet({ match, team, d, counts, onClose }) {
       M.doSwapGroup(m, t, pairs);
       if (after !== 'terug') for (const p of pairs) M.disablePlayer(m, t, p.out, after);
     });
-    toast(`${pairs.length} wissels: ${pairs.map((p) => nick(p.in)).join(', ')} erin`, undoAction);
+    if (onDone) onDone({ outs: pairs.map((p) => p.out), status: after, undos: 1 + (after !== 'terug' ? pairs.length : 0) });
+    else toast(`${pairs.length} wissels: ${pairs.map((p) => nick(p.in)).join(', ')} erin`, undoAction);
     close();
   };
   const later = (close) => { mutate((m, t) => M.delay(m, t, 60)); toast('Wissels 1 minuut later'); close(); };

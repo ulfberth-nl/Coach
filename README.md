@@ -40,17 +40,18 @@ Klaarzetten en spelen gebeuren op hetzelfde scherm, dat altijd in één beeld pa
 
 ## Tijdens de wedstrijd
 
-- **Doelpunt:** tik op de stand. In het veld kies je voor wie; bij een goal van ons tik je daarna de speler die scoorde (of *Weet ik niet*). Over de keeper verschijnt een paar seconden *Ongedaan maken*.
-- **Klok:** tik op de klok om te starten of te pauzeren. Blauw = loopt, oranje en knipperend = staat stil. Rechts zie je welke helft/welk kwart en hoeveel tijd er nog is.
-- **Wisselbalk:** SpaBo-blauw met een oranje voortgangspil. Vanaf 1 minuut voor de wissel knippert de pil, steeds sneller tot de wissel gedaan is; ben je te laat, dan staat er hoeveel (bijv. −1:33).
+- **Scorebord:** klok en stand staan naast elkaar, even groot; daaronder de helften/kwarten over de volle breedte. Cijfers rollen verend door. Groene ademende stip = klok loopt, oranje = pauze. Tik op de klok om te starten of te pauzeren; is de tijd om, dan sluit je met dezelfde tik de periode af en zet je daarna (tik opnieuw) de opstelling voor de volgende periode klaar.
+- **Doelpunt:** tik op de stand. In het veld kies je voor wie; bij een goal van ons tik je daarna de speler die scoorde (of *Weet ik niet*). Daarna verschijnt over de keeper een paar seconden *Ongedaan maken* (scoorde de keeper zelf, dan bovenin).
+- **Wissel-eiland:** onder het scorebord staat in tekst wat er komt (wie erin, wie eruit, wie doorschuift) en rechts een grote aftelring. Vanaf 1 minuut wordt het eiland donkerblauw en ademt de ring steeds sneller; ben je te laat, dan wordt de ring rood, wiebelt het eiland en staat er een witte pil met hoeveel (bijv. −0:44). Tik op het eiland om te wisselen.
+- **Zwevers in het veld:** wie eruit gaat heeft een oranje draaiende ring; schuin erachter zweeft rustig wie erin komt (in de laatste minuut duidelijker, sneller en met een blauwe draaiende ring). Een grijze zwever met ↑/↓ laat zien wie doorschuift. Bij de wissel springt de pil op, draait om naar de nieuwe naam en landt; wie eruit gaat valt op de bank.
+- **Slepen = nu wisselen:** veld ↔ bank wisselt direct, veld ↔ veld ruilt plekken. Over de keeper verschijnt dan een pil met *Kan terug / Rust / Klaar* (standaard *Kan terug*) en *Ongedaan maken*. Wie je terugsleept uit rust of klaar, is weer inzetbaar.
 - **Meerdere spelers tegelijk:** stel bij Team → Wisselen in hoeveel kinderen per wisselmoment wisselen (1–5; in de zaal standaard de hele veldploeg). Het wisselvenster toont dan alle paren; per paar kun je spelers kiezen, een paar weghalen of er een toevoegen.
-- **Doelpunt:** tik op de stand en kies het eigen logo (daarna wie scoorde) of het logo van de tegenstander.
-- **Wisselen:** tik de wisselbalk of een speler. Bovenin staat wie eruit en wie erin gaat; Tik op de tegel *Eruit* of *Erin* voor een lijst van het veld of de bank, met minuten en hoe vaak iemand al gewisseld is. Label *plan* = volgende wissel uit het actuele plan; *advies* = beste partner als je zelf iemand anders kiest. In de blauwe balk: *1 min later*, *Bewaren* (je aangepaste wissel gebeurt op het geplande moment, daarna rekent de app verder) en *Wissel nu*. Slepen kan ook: veld ↔ bank = direct wisselen, veld ↔ veld = plekken ruilen.
+- **Wisselen:** tik het eiland of een speler. Bovenin staat wie eruit en wie erin gaat; Tik op de tegel *Eruit* of *Erin* voor een lijst van het veld of de bank, met minuten en hoe vaak iemand al gewisseld is. Label *plan* = volgende wissel uit het actuele plan; *advies* = beste partner als je zelf iemand anders kiest. In de blauwe balk: *1 min later*, *Bewaren* (je aangepaste wissel gebeurt op het geplande moment, daarna rekent de app verder) en *Wissel nu*. Na *Wissel nu* verschijnt dezelfde pil over de keeper.
 - **Wedstrijdplan tijdens de wedstrijd:** de tijdlijn toont waar je nu bent, oude momenten worden grijs, de zwarte pil zegt hoe lang het nog duurt en bij de eerstvolgende wissel staat *Nu wisselen*.
 - **Keeper wisselen:** tik op de keeper.
 - **Stand van de opstelling** (verdedigen/balans/aanvallen): het label rechtsonder op het veld.
 - **Tijd aanpassen, einde periode, afsluiten of weggooien:** het ⋯-menu.
-- **Ongedaan maken:** de pijl bovenin, of "Ongedaan" in de melding.
+- **Ongedaan maken:** de pijl bovenin, of de pil over de keeper.
 
 ## Hoe de app wisselt
 
