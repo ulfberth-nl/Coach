@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>Voorstel live-scherm · SpaBo Coach</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Voorstel live-scherm v2 · SpaBo Coach</title>
 <style>
 @font-face { font-family: 'Nunito'; font-weight: 700; src: url('fonts/nunito-latin-700-normal.woff2') format('woff2'); }
 @font-face { font-family: 'Nunito'; font-weight: 800; src: url('fonts/nunito-latin-800-normal.woff2') format('woff2'); }
@@ -12,210 +13,216 @@
 @font-face { font-family: 'Inter'; font-weight: 700; src: url('fonts/inter-latin-700-normal.woff2') format('woff2'); }
 @font-face { font-family: 'Inter'; font-weight: 800; src: url('fonts/inter-latin-800-normal.woff2') format('woff2'); }
 :root {
-  --navy: #0D1B45; --blue: #1F3C88; --blue-2: #2B57C9; --orange: #F5A524; --ink: #0E1530; --muted: #5B6478; --bg: #EEF1F8; --red: #E5484D; --green: #22A55B;
-  /* veren: overshoot en "jelly" (iOS 17.2+ ondersteunt linear()) */
+  --navy: #0D1B45; --blue: #1F3C88; --blue-2: #2B57C9; --orange: #F5A524; --ink: #0E1530; --muted: #5B6478; --bg: #EEF1F8; --red: #E5484D; --green: #1F9D55;
   --spring: linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, 0.991, 0.977 51%, 0.974 53.8%, 0.975 57.1%, 0.997 69.8%, 1.003 76.9%, 1);
   --soft: linear(0, 0.157 4.4%, 0.533 9.6%, 1.003 15.7%, 1.144 19.5%, 1.19 23%, 1.14 27.6%, 0.988 36.5%, 0.958 41.1%, 0.976 48.3%, 1.007 59.4%, 1);
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; background: var(--bg); }
-body { font-family: Nunito, system-ui, sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none; }
-button { font: inherit; color: inherit; border: none; background: none; padding: 0; cursor: pointer; touch-action: manipulation; }
-.wrap { max-width: 430px; margin: 0 auto; padding: max(14px, env(safe-area-inset-top)) 14px 40px; display: flex; flex-direction: column; gap: 12px; }
-.intro { font-size: 14px; font-weight: 700; color: var(--muted); line-height: 1.4; padding: 2px 4px 4px; }
-.intro b { color: var(--ink); }
-
-/* jelly-knoppen: indrukken = indeuken, loslaten = terugveren */
+html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--bg); }
+body { font-family: Nunito, system-ui, sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+button { font: inherit; color: inherit; border: none; background: none; padding: 0; cursor: pointer; }
+.app { height: 100dvh; max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; padding: max(10px, env(safe-area-inset-top)) 12px max(8px, env(safe-area-inset-bottom)); }
 .jelly { transition: transform .55s var(--spring); }
-.jelly:active, .jelly.pressed { transform: scale(.93, .9); transition: transform .12s ease-out; }
+.jelly:active { transform: scale(.94, .9); transition: transform .12s ease-out; }
 
-/* ---- scorebord ---- */
-.board { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 16px 16px 14px; border-radius: 28px; color: #fff; background: radial-gradient(120% 140% at 0% 0%, #2B4FB0 0%, #16307A 45%, #0D1B45 100%); box-shadow: 0 18px 40px -16px rgba(13,27,69,.55), inset 0 1px 0 rgba(255,255,255,.18); overflow: hidden; }
+.head { display: flex; align-items: center; gap: 10px; padding: 0 4px; }
+.head .t { flex: 1; min-width: 0; font-size: 17px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.head .t span { display: block; font-size: 12px; font-weight: 800; color: var(--muted); }
+.icon { width: 38px; height: 38px; border-radius: 99px; background: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 900; box-shadow: 0 2px 8px rgba(14,21,48,.08); }
+
+.board { position: relative; display: flex; align-items: stretch; gap: 12px; padding: 14px 14px 12px 16px; border-radius: 28px; color: #fff; background: radial-gradient(120% 140% at 0% 0%, #2B4FB0 0%, #16307A 45%, #0D1B45 100%); box-shadow: 0 18px 40px -16px rgba(13,27,69,.55), inset 0 1px 0 rgba(255,255,255,.18); overflow: hidden; flex: 0 0 auto; }
 .board::after { content: ''; position: absolute; inset: 0; background: linear-gradient(115deg, rgba(255,255,255,.12) 0%, rgba(255,255,255,0) 38%); pointer-events: none; }
-.clockbtn { display: flex; flex-direction: column; gap: 8px; text-align: left; }
-.digits { display: inline-flex; font-family: Inter, sans-serif; font-weight: 800; font-size: 62px; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.clockbtn { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 7px; text-align: left; }
+.digits { display: inline-flex; font-family: Inter, sans-serif; font-weight: 800; font-size: 58px; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .slot { position: relative; display: inline-block; height: 1em; overflow: hidden; width: .62em; text-align: center; }
 .slot.colon { width: .3em; }
 .slot i { position: absolute; left: 0; right: 0; top: 0; font-style: normal; }
 .slot i.in { animation: rollIn .55s var(--spring) both; }
 .slot i.out { animation: rollOut .35s ease-in both; }
-@keyframes rollIn { from { transform: translateY(105%); opacity: 0; filter: blur(2px); } to { transform: none; opacity: 1; filter: none; } }
-@keyframes rollOut { to { transform: translateY(-105%); opacity: 0; filter: blur(2px); } }
-.paused .digits { opacity: .45; transition: opacity .3s; }
-.state { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 800; color: rgba(255,255,255,.85); }
-.live-dot { width: 9px; height: 9px; border-radius: 99px; background: #4ADE80; box-shadow: 0 0 0 0 rgba(74,222,128,.6); animation: livePulse 1.6s ease-out infinite; }
+@keyframes rollIn { from { transform: translateY(105%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes rollOut { to { transform: translateY(-105%); opacity: 0; } }
+.paused .clockbtn .digits { opacity: .45; transition: opacity .3s; }
+.state { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 800; color: rgba(255,255,255,.88); }
+.live-dot { width: 9px; height: 9px; border-radius: 99px; background: #4ADE80; animation: livePulse 1.6s ease-out infinite; }
 .paused .live-dot { background: var(--orange); animation: none; }
-@keyframes livePulse { to { box-shadow: 0 0 0 10px rgba(74,222,128,0); } }
-/* periodes: segmenten die als vloeistof vollopen */
-.periods { display: grid; gap: 5px; margin-top: 2px; }
+.ended .live-dot { background: #fff; }
+@keyframes livePulse { from { box-shadow: 0 0 0 0 rgba(74,222,128,.6); } to { box-shadow: 0 0 0 10px rgba(74,222,128,0); } }
+.periods { display: grid; gap: 5px; }
 .seg { position: relative; height: 8px; border-radius: 99px; background: rgba(255,255,255,.16); overflow: hidden; }
 .seg b { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 99px; background: linear-gradient(90deg, #FFC75A, var(--orange)); box-shadow: 0 0 12px rgba(245,165,36,.7); transition: width 1s linear; }
-.seg.done b { width: 100% !important; background: rgba(255,255,255,.75); box-shadow: none; }
-.plabel { display: flex; justify-content: space-between; font-size: 12px; font-weight: 800; color: rgba(255,255,255,.7); }
-.score { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; border-radius: 22px; background: rgba(255,255,255,.1); box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
-.score .badges { display: flex; gap: 22px; }
-.score .badges span { width: 26px; height: 26px; border-radius: 99px; display: inline-flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 900; }
-.b-us { background: var(--blue); box-shadow: 0 0 0 2.5px var(--orange); }
-.b-them { background: #fff; color: var(--blue); clip-path: polygon(50% 0, 100% 15%, 100% 55%, 50% 100%, 0 55%, 0 15%); border-radius: 0 !important; }
-.score .digits { font-size: 52px; gap: 4px; align-items: center; }
-.score .dots { display: inline-flex; flex-direction: column; gap: 7px; margin: 0 4px; }
-.score .dots i { width: 7px; height: 7px; border-radius: 99px; background: rgba(255,255,255,.5); }
+.seg.done b { width: 100% !important; background: rgba(255,255,255,.8); box-shadow: none; }
+.plabel { display: flex; justify-content: space-between; font-size: 12px; font-weight: 800; color: rgba(255,255,255,.72); }
+.ended .plabel span:last-child { color: #FFC75A; }
+.score { flex: 0 0 116px; display: grid; grid-template-columns: 1fr 14px 1fr; grid-template-rows: auto 1fr; align-items: center; justify-items: center; row-gap: 4px; padding: 10px 6px 8px; border-radius: 22px; background: rgba(255,255,255,.1); box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
+.score .bd { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 900; }
+.b-us { border-radius: 99px; background: var(--blue); box-shadow: 0 0 0 2.5px var(--orange); }
+.b-them { background: #fff; color: var(--blue); clip-path: polygon(50% 0, 100% 16%, 100% 56%, 50% 100%, 0 56%, 0 16%); font-size: 8px !important; }
+.score .digits { font-size: 50px; }
+.score .slot { width: .64em; }
+.score .colon2 { display: flex; flex-direction: column; gap: 7px; }
+.score .colon2 i { width: 7px; height: 7px; border-radius: 99px; background: rgba(255,255,255,.55); }
 .score.pop { animation: scorePop .8s var(--soft); }
-@keyframes scorePop { 0% { transform: scale(1); } 20% { transform: scale(1.14, .9); } 45% { transform: scale(.95, 1.06); } 100% { transform: scale(1); } }
+@keyframes scorePop { 20% { transform: scale(1.12, .9); } 45% { transform: scale(.95, 1.06); } 100% { transform: scale(1); } }
 
-/* ---- wissel-eiland: groeit naar het moment toe ---- */
-.island { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 10px 10px 12px; border-radius: 26px; background: #fff; text-align: left; box-shadow: 0 10px 30px -12px rgba(14,21,48,.25), 0 0 0 1px rgba(14,21,48,.05); transition: transform .55s var(--spring), padding .55s var(--spring), background .4s ease, box-shadow .4s ease; }
-.island.hot { padding: 16px 12px 16px 14px; background: var(--navy); color: #fff; box-shadow: 0 16px 36px -12px rgba(13,27,69,.6); }
+.island { position: relative; flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px; border-radius: 26px; background: #fff; text-align: left; box-shadow: 0 10px 30px -12px rgba(14,21,48,.25), 0 0 0 1px rgba(14,21,48,.05); transition: transform .55s var(--spring), padding .55s var(--spring), background .4s ease, color .4s ease; }
+.island.hot { padding: 14px 12px 14px 18px; background: var(--navy); color: #fff; }
 .island.late { animation: wobble 2.4s var(--soft) infinite; }
 @keyframes wobble { 0%, 70%, 100% { transform: none; } 76% { transform: rotate(-1.6deg) scale(1.02); } 82% { transform: rotate(1.4deg) scale(1.02); } 88% { transform: rotate(-.8deg); } 94% { transform: rotate(.4deg); } }
-.duo { display: flex; align-items: center; flex: 1 1 auto; min-width: 0; }
-.ava { position: relative; width: 44px; height: 44px; border-radius: 99px; display: inline-flex; align-items: center; justify-content: center; font-weight: 900; font-size: 15px; flex: 0 0 auto; }
-.ava.out { background: #FFE9C2; color: #8A5300; }
-.ava.in { background: #DCE6FF; color: var(--blue); margin-left: -8px; box-shadow: 0 0 0 3px #fff; transition: box-shadow .4s; }
-.island.hot .ava.in { box-shadow: 0 0 0 3px var(--navy); }
-.names { display: flex; flex-direction: column; min-width: 0; margin-left: 10px; }
-.names .t1 { font-size: 17px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.names .t2 { font-size: 13px; font-weight: 800; opacity: .65; }
-.ring { position: relative; width: 66px; height: 66px; flex: 0 0 auto; transition: transform .55s var(--spring); }
-.island.hot .ring { transform: scale(1.08); }
-.ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
-.ring circle { fill: none; stroke-width: 6; stroke-linecap: round; }
+.island .txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.island .k { font-size: 11px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: var(--blue-2); }
+.island.hot .k { color: var(--orange); }
+.island.late .k { color: #FF8E91; }
+.island .t1 { font-size: 18px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.island .t1 em { font-style: normal; color: var(--blue-2); }
+.island.hot .t1 em { color: #9DB8FF; }
+.island .t2 { font-size: 13px; font-weight: 800; opacity: .68; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.island.swapped { animation: islandPop .7s var(--soft); }
+@keyframes islandPop { 25% { transform: scale(.94, .9); } 55% { transform: scale(1.03); } }
+.ring { position: relative; width: 64px; height: 64px; flex: 0 0 auto; }
+.island.hot .ring { animation: breathe var(--breathe, 1.4s) ease-in-out infinite; }
+@keyframes breathe { 50% { transform: scale(1.12); } }
+.ring svg { position: absolute; inset: 0; transform: rotate(-90deg); overflow: visible; }
+.ring circle { fill: none; stroke-width: 9; stroke-linecap: round; }
 .ring .track { stroke: rgba(14,21,48,.08); }
 .island.hot .ring .track { stroke: rgba(255,255,255,.14); }
 .ring .arc { stroke: var(--blue-2); transition: stroke-dashoffset 1s linear, stroke .4s; }
 .island.hot .ring .arc { stroke: var(--orange); filter: drop-shadow(0 0 6px rgba(245,165,36,.8)); }
 .island.late .ring .arc { stroke: var(--red); filter: drop-shadow(0 0 6px rgba(229,72,77,.8)); }
 .ring .lbl { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: Inter, sans-serif; font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; }
-.island.hot .ring { animation: breathe var(--breathe, 1.4s) ease-in-out infinite; }
-@keyframes breathe { 50% { transform: scale(1.14); } }
-.latechip { position: absolute; top: -10px; right: 14px; padding: 3px 10px; border-radius: 99px; background: #fff; color: var(--red); font-family: Inter, sans-serif; font-weight: 800; font-size: 13px; box-shadow: 0 6px 16px rgba(229,72,77,.35); opacity: 0; transform: translateY(6px) scale(.8); transition: opacity .3s, transform .5s var(--spring); }
+.latechip { position: absolute; top: -10px; right: 12px; padding: 3px 10px; border-radius: 99px; background: #fff; color: var(--red); font-family: Inter, sans-serif; font-weight: 800; font-size: 13px; box-shadow: 0 6px 16px rgba(229,72,77,.35); opacity: 0; transform: translateY(6px) scale(.8); transition: opacity .3s, transform .5s var(--spring); }
 .island.late .latechip { opacity: 1; transform: none; }
 
-/* ---- veld (klein) ---- */
-.field { position: relative; height: 300px; border-radius: 26px; background: repeating-linear-gradient(180deg, #2A55BF 0 37.5px, #2750B6 37.5px 75px); box-shadow: inset 0 0 0 2px rgba(255,255,255,.25); overflow: hidden; }
-.field::before { content: ''; position: absolute; left: 50%; top: -60px; width: 170px; height: 120px; margin-left: -85px; border: 2px solid rgba(255,255,255,.35); border-radius: 0 0 85px 85px; }
-.field::after { content: ''; position: absolute; left: 50%; bottom: -60px; width: 170px; height: 120px; margin-left: -85px; border: 2px solid rgba(255,255,255,.35); border-radius: 85px 85px 0 0; }
-.p { position: absolute; translate: -50% -50%; padding: 8px 14px; border-radius: 99px; background: #fff; font-weight: 900; font-size: 15px; white-space: nowrap; box-shadow: 0 6px 14px -4px rgba(0,0,0,.3); transition: transform .55s var(--spring); }
-.p:active { transform: scale(.9, .86); transition: transform .1s; }
-.p.k { background: var(--ink); color: #fff; }
-.p.next { box-shadow: 0 0 0 3px var(--orange), 0 0 18px 2px rgba(245,165,36,.7); animation: nextBob 1.6s ease-in-out infinite; }
-@keyframes nextBob { 50% { transform: translateY(-3px); } }
+.field { position: relative; flex: 1 1 auto; min-height: 220px; border-radius: 26px; background: repeating-linear-gradient(180deg, #2A55BF 0 40px, #2750B6 40px 80px); box-shadow: inset 0 0 0 2px rgba(255,255,255,.25); overflow: hidden; perspective: 700px; }
+.field .arc { position: absolute; left: 50%; width: 170px; height: 110px; margin-left: -85px; border: 2px solid rgba(255,255,255,.32); }
+.field .arc.top { top: -55px; border-radius: 0 0 85px 85px; }
+.field .arc.bot { bottom: -55px; border-radius: 85px 85px 0 0; }
+.p { position: absolute; translate: -50% -50%; isolation: isolate; }
+.card { display: grid; transform-style: preserve-3d; transition: transform .55s var(--spring); }
+.p:active .card { transform: scale(.9, .86); transition: transform .1s; }
+.face { grid-area: 1 / 1; padding: 9px 16px; border-radius: 99px; background: #fff; font-weight: 900; font-size: 16px; white-space: nowrap; text-align: center; box-shadow: 0 6px 14px -4px rgba(0,0,0,.35); -webkit-backface-visibility: hidden; backface-visibility: hidden; }
+.face.back { transform: rotateY(180deg); background: #DCE6FF; color: var(--blue); }
+.p.next .face.front { box-shadow: 0 0 0 3px var(--orange), 0 0 18px 2px rgba(245,165,36,.65); }
+.p .t { display: block; margin-top: 3px; text-align: center; font-family: Inter, sans-serif; font-size: 11px; font-weight: 800; color: rgba(255,255,255,.75); }
+.ghost { position: absolute; left: 50%; top: 0; z-index: -1; padding: 7px 13px; border-radius: 99px; background: rgba(220,230,255,.92); color: var(--blue); font-weight: 900; font-size: 14px; white-space: nowrap; box-shadow: 0 8px 18px -6px rgba(0,0,0,.4); transform: translate(-6%, -62%) rotate(5deg); opacity: var(--go, .55); animation: float var(--fl, 3s) ease-in-out infinite; transition: opacity .4s; }
+.ghost.shift { background: rgba(255,255,255,.9); color: var(--ink); }
+.ghost small { font-size: 11px; font-weight: 900; color: var(--blue-2); margin-left: 4px; }
+@keyframes float { 0%, 100% { transform: translate(-6%, -62%) rotate(5deg); } 50% { transform: translate(-2%, -78%) rotate(2deg); } }
+.p.right .ghost { left: auto; right: 50%; transform: translate(6%, -62%) rotate(-5deg); animation-name: floatL; }
+@keyframes floatL { 0%, 100% { transform: translate(6%, -62%) rotate(-5deg); } 50% { transform: translate(2%, -78%) rotate(-2deg); } }
+.p.flip .ghost { animation: ghostIn .5s ease-in forwards; }
+@keyframes ghostIn { to { opacity: 0; transform: translate(-50%, -10%) rotate(0) scale(.8); } }
+.p.flip .card { animation: flipJump 1s var(--soft) forwards; }
+@keyframes flipJump { 0% { transform: translateY(0) rotateY(0); } 30% { transform: translateY(-34px) rotateY(90deg) scale(1.12); } 55% { transform: translateY(-16px) rotateY(180deg) scale(1.08); } 75% { transform: translateY(2px) rotateY(180deg) scale(1.06, .92); } 100% { transform: translateY(0) rotateY(180deg); } }
+.keeper .face { background: var(--ink); color: #fff; }
 
-/* ---- wisselvenster ---- */
+.bench { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 4px; overflow: hidden; }
+.bench .l { font-size: 13px; font-weight: 900; color: var(--muted); }
+.bp { display: inline-flex; align-items: baseline; gap: 6px; padding: 9px 14px; border-radius: 99px; background: #fff; font-weight: 900; font-size: 15px; white-space: nowrap; box-shadow: 0 3px 10px rgba(14,21,48,.08); }
+.bp span { font-size: 12px; font-weight: 800; color: var(--muted); }
+.bp.ready { box-shadow: 0 0 0 2.5px var(--orange), 0 4px 14px rgba(245,165,36,.4); }
+.bp.drop { animation: benchIn .7s var(--soft) both; }
+@keyframes benchIn { from { transform: translateY(-40px) scale(.7); opacity: 0; } }
+
+.demo { flex: 0 0 auto; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px; }
+.demo::-webkit-scrollbar { display: none; }
+.demo button { flex: 0 0 auto; height: 32px; padding: 0 12px; border-radius: 99px; background: #fff; font-size: 13px; font-weight: 800; color: var(--muted); box-shadow: inset 0 0 0 1px #DCE1EC; }
+.demo b { flex: 0 0 auto; align-self: center; font-size: 11px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+
 .scrim { position: fixed; inset: 0; z-index: 10; background: rgba(9,16,38,.45); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); opacity: 0; pointer-events: none; transition: opacity .3s; }
 .scrim.open { opacity: 1; pointer-events: auto; }
-.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 11; max-width: 430px; margin: 0 auto; padding: 10px 16px 0; border-radius: 30px 30px 0 0; background: #fff; transform: translateY(105%); transition: transform .6s var(--spring); }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 11; max-width: 440px; max-height: 92dvh; margin: 0 auto; display: flex; flex-direction: column; border-radius: 30px 30px 0 0; background: #fff; transform: translateY(105%); transition: transform .6s var(--spring); }
 .sheet.open { transform: none; }
-.sheet .grab { display: block; width: 42px; height: 5px; margin: 0 auto 10px; border-radius: 99px; background: #D5DAE6; }
-.sheet h2 { margin: 0; font-size: 22px; font-weight: 900; }
-.sheet .sub { font-size: 13px; font-weight: 800; color: var(--muted); }
-.stage { position: relative; height: 230px; margin: 12px 0 10px; border-radius: 22px; background: #2650B8; overflow: hidden; }
-.stage .line { position: absolute; left: 12px; font-size: 10px; font-weight: 900; letter-spacing: .08em; color: rgba(255,255,255,.55); text-transform: uppercase; }
-.stage .bench { position: absolute; left: 0; right: 0; bottom: 0; height: 46px; background: rgba(9,16,38,.35); }
-.stage .bench span { position: absolute; left: 12px; top: 15px; font-size: 10px; font-weight: 900; letter-spacing: .08em; color: rgba(255,255,255,.6); }
-.sp { position: absolute; translate: -50% -50%; padding: 6px 11px; border-radius: 99px; background: #fff; font-weight: 900; font-size: 13px; white-space: nowrap; }
-.sp.ghost { background: rgba(255,255,255,.35); color: #fff; }
-.sp.out { background: #FFE9C2; }
-.sp.in { background: #DCE6FF; color: var(--blue); }
-.sp.shift { background: #fff; }
-.play .sp.out { animation: aOut 3.6s var(--soft) infinite; }
-.play .sp.in { animation: aIn 3.6s var(--soft) infinite; }
-.play .sp.shift { animation: aShift 3.6s var(--soft) infinite; }
-.play .trail { animation: aTrail 3.6s ease infinite; }
-@keyframes aOut { 0%, 12% { left: 70%; top: 30%; } 38%, 100% { left: 70%; top: 89%; opacity: .75; } }
-@keyframes aShift { 0%, 40% { left: 70%; top: 58%; } 66%, 100% { left: 70%; top: 30%; } }
-@keyframes aIn { 0%, 62% { left: 32%; top: 89%; } 88%, 100% { left: 70%; top: 58%; } }
-@keyframes aTrail { 0%, 10% { opacity: 0; } 20%, 90% { opacity: 1; } 100% { opacity: 0; } }
-.trail { position: absolute; inset: 0; pointer-events: none; }
-.trail path { vector-effect: non-scaling-stroke; fill: none; stroke: rgba(255,255,255,.85); stroke-width: 2.5; stroke-dasharray: 5 6; stroke-linecap: round; }
-.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
-.step { padding: 10px; border-radius: 16px; background: #F3F5FA; font-size: 13px; font-weight: 800; line-height: 1.3; }
-.step b { display: block; font-size: 15px; font-weight: 900; }
-.step .n { display: inline-flex; width: 20px; height: 20px; margin-bottom: 4px; border-radius: 99px; align-items: center; justify-content: center; font-size: 11px; font-weight: 900; color: #fff; }
-.foot { display: flex; gap: 10px; margin: 0 -16px; padding: 12px 16px max(14px, env(safe-area-inset-bottom)); background: var(--navy); border-radius: 26px 26px 0 0; }
-.foot button { min-height: 56px; border-radius: 99px; font-weight: 900; font-size: 17px; }
-.foot .ghost { flex: 1; color: #fff; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.35); }
-.foot .go { flex: 1.6; background: #fff; color: var(--blue); font-size: 19px; box-shadow: 0 8px 20px rgba(0,0,0,.25); }
-
-/* bediening van de demo */
-.demo { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; border-radius: 22px; background: #fff; }
-.demo .lbl { grid-column: 1 / -1; font-size: 12px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.demo button { min-height: 44px; border-radius: 14px; background: #EEF1F8; font-weight: 800; font-size: 14px; }
-.toast { position: fixed; left: 50%; top: 18px; z-index: 20; padding: 10px 18px; border-radius: 99px; background: var(--ink); color: #fff; font-weight: 900; transform: translate(-50%, -80px); transition: transform .6s var(--spring); }
+.sheet .body > * { flex-shrink: 0; }
+.sheet .body { overflow-y: auto; padding: 10px 16px 14px; display: flex; flex-direction: column; gap: 14px; }
+.grab { display: block; width: 42px; height: 5px; margin: 0 auto; border-radius: 99px; background: #D5DAE6; }
+.sh { display: flex; align-items: center; gap: 10px; }
+.sh h2 { flex: 1; margin: 0; font-size: 22px; font-weight: 900; }
+.x { width: 38px; height: 38px; border-radius: 99px; background: #F0F2F7; font-weight: 900; font-size: 18px; }
+.pick { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.tile { display: flex; flex-direction: column; gap: 1px; padding: 12px 14px; border-radius: 20px; text-align: left; }
+.tile .l { font-size: 11px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; opacity: .7; }
+.tile .n { font-size: 22px; font-weight: 900; }
+.tile .s { font-size: 12px; font-weight: 800; opacity: .7; }
+.tile.out { background: #FFF1D6; box-shadow: inset 0 0 0 2px var(--orange); color: #6B4100; }
+.tile.in { background: #E6EDFF; box-shadow: inset 0 0 0 2px var(--blue-2); color: var(--blue); }
+.tile .n.bump { animation: scorePop .6s var(--soft); }
+.arrow { font-size: 22px; font-weight: 900; color: var(--muted); }
+.hint { margin-top: -8px; font-size: 12px; font-weight: 800; color: var(--muted); text-align: center; }
+.sect { display: flex; align-items: baseline; justify-content: space-between; }
+.sect b { font-size: 16px; font-weight: 900; }
+.sect span { font-size: 12px; font-weight: 800; color: var(--muted); }
+.cards { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; margin: -4px -16px 0; padding: 10px 16px 6px; scrollbar-width: none; }
+.cards::-webkit-scrollbar { display: none; }
+.mc { flex: 0 0 74%; scroll-snap-align: center; border-radius: 20px; background: #F3F5FA; padding: 10px; display: flex; flex-direction: column; gap: 8px; position: relative; }
+.mc.diff { box-shadow: inset 0 0 0 2px var(--orange); }
+.mc .top { display: flex; justify-content: space-between; font-size: 12px; font-weight: 900; }
+.mc .top span:last-child { color: var(--muted); }
+.mc .tag { position: absolute; top: -9px; right: 10px; padding: 2px 8px; border-radius: 99px; background: var(--orange); font-size: 11px; font-weight: 900; }
+.mini { position: relative; height: 128px; border-radius: 14px; background: #2650B8; }
+.mini .mp { position: absolute; translate: -50% -50%; padding: 4px 8px; border-radius: 99px; background: #fff; font-size: 11px; font-weight: 900; white-space: nowrap; }
+.mini .mp.new { background: #DCE6FF; color: var(--blue); box-shadow: 0 0 0 2px #fff; }
+.mini .mp.k { background: var(--ink); color: #fff; }
+.mc .chg { font-size: 12px; font-weight: 800; color: var(--muted); }
+.mc .chg b { color: var(--blue); } .mc .chg i { font-style: normal; color: #9A5C00; font-weight: 900; }
+.dots { display: flex; justify-content: center; gap: 5px; margin-top: -6px; }
+.dots i { width: 6px; height: 6px; border-radius: 99px; background: #D5DAE6; transition: width .4s var(--spring), background .3s; }
+.dots i.on { width: 18px; background: var(--blue-2); }
+.mins { display: flex; flex-direction: column; gap: 6px; }
+.mr { display: grid; grid-template-columns: 58px 1fr 44px; align-items: center; gap: 8px; font-size: 13px; font-weight: 900; }
+.mt { position: relative; height: 12px; border-radius: 99px; background: #F0F2F7; }
+.mt .pl { position: absolute; inset: 0 auto 0 0; border-radius: 99px; box-shadow: inset 0 0 0 1.5px #B9C3D8; }
+.mt .nw { position: absolute; inset: 2px auto 2px 2px; border-radius: 99px; background: var(--blue-2); transition: width .6s var(--spring); }
+.mr .d { text-align: right; font-family: Inter, sans-serif; font-size: 12px; font-weight: 800; color: var(--muted); }
+.mr .d.up { color: var(--green); } .mr .d.down { color: #C2410C; }
+.verdict { padding: 10px 12px; border-radius: 14px; background: #EAF7EF; color: #14652A; font-size: 14px; font-weight: 800; }
+.verdict.warn { background: #FFF1D6; color: #8A5300; }
+.foot { display: flex; gap: 8px; padding: 12px 14px max(14px, env(safe-area-inset-bottom)); background: var(--navy); border-radius: 24px 24px 0 0; }
+.foot button { min-height: 56px; border-radius: 99px; font-weight: 900; }
+.foot .gh { flex: 1; color: #fff; font-size: 15px; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.35); }
+.foot .go { flex: 1.5; background: #fff; color: var(--blue); font-size: 19px; box-shadow: 0 8px 20px rgba(0,0,0,.25); }
+.toast { position: fixed; left: 50%; top: max(14px, env(safe-area-inset-top)); z-index: 20; padding: 10px 18px; border-radius: 99px; background: var(--ink); color: #fff; font-weight: 900; transform: translate(-50%, -90px); transition: transform .6s var(--spring); white-space: nowrap; }
 .toast.show { transform: translate(-50%, 0); }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: .01s !important; transition-duration: .01s !important; } }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="intro"><b>Voorstel nieuw live-scherm.</b> Tik op de klok, de stand, het wissel-eiland en de spelers. Onderaan versnel je de tijd om het eiland te zien groeien.</div>
+<div class="app">
+  <div class="head"><span class="icon">SB</span><span class="t">tegen Laren JO9-2<span>Voorstel v2 · demo met voorbeeldspelers</span></span><span class="icon">↶</span></div>
 
   <section class="board" id="board">
-    <button class="clockbtn jelly" id="clockbtn" aria-label="Klok starten of pauzeren">
+    <button class="clockbtn jelly" id="clockbtn" aria-label="Klok">
       <span class="digits" id="clock"></span>
-      <span class="state"><span class="live-dot"></span><span id="pstate">2e kwart</span></span>
+      <span class="state"><span class="live-dot"></span><span id="pstate"></span></span>
       <span class="periods" id="periods"></span>
-      <span class="plabel"><span id="pnum">kwart 2 van 4</span><span id="premain">nog 9:12</span></span>
+      <span class="plabel"><span id="pnum"></span><span id="premain"></span></span>
     </button>
-    <button class="score jelly" id="score" aria-label="Doelpunt">
-      <span class="badges"><span class="b-us">SB</span><span class="b-them">LMHC</span></span>
-      <span class="digits"><span class="slot" id="s1"></span><span class="dots"><i></i><i></i></span><span class="slot" id="s2"></span></span>
+    <button class="score jelly" id="score" aria-label="Stand">
+      <span class="bd b-us">SB</span><span></span><span class="bd b-them">LMHC</span>
+      <span class="digits"><span class="slot" id="s1"></span></span><span class="colon2"><i></i><i></i></span><span class="digits"><span class="slot" id="s2"></span></span>
     </button>
   </section>
 
   <button class="island jelly" id="island" aria-label="Volgende wissel">
-    <span class="latechip" id="latechip">−0:00</span>
-    <span class="duo">
-      <span class="ava out">S6</span><span class="ava in">S7</span>
-      <span class="names"><span class="t1" id="itext">Wissel over 2:28</span><span class="t2">Speler 7 erin voor Speler 6</span></span>
-    </span>
-    <span class="ring"><svg viewBox="0 0 66 66"><circle class="track" cx="33" cy="33" r="28"/><circle class="arc" id="arc" cx="33" cy="33" r="28" stroke-dasharray="175.9" stroke-dashoffset="0"/></svg><span class="lbl" id="rlbl">2:28</span></span>
+    <span class="latechip" id="latechip"></span>
+    <span class="txt"><span class="k" id="ik"></span><span class="t1" id="it1"></span><span class="t2" id="it2"></span></span>
+    <span class="ring"><svg viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="27"/><circle class="arc" id="arc" cx="32" cy="32" r="27" stroke-dasharray="169.6" stroke-dashoffset="0"/></svg><span class="lbl" id="rlbl"></span></span>
   </button>
 
-  <section class="field" id="field">
-    <span class="p" style="left:30%;top:20%">Speler 2</span><span class="p next" style="left:70%;top:20%">Speler 6</span>
-    <span class="p" style="left:50%;top:45%">Speler 4</span>
-    <span class="p" style="left:30%;top:70%">Speler 1</span><span class="p" style="left:70%;top:70%">Speler 8</span>
-    <span class="p k" style="left:50%;top:92%">K · Speler 3</span>
-  </section>
-
-  <section class="demo">
-    <span class="lbl">Demo</span>
-    <button class="jelly" id="d-fast">Tijd ×20</button>
-    <button class="jelly" id="d-min">Naar 1 min voor wissel</button>
-    <button class="jelly" id="d-late">Te laat</button>
-    <button class="jelly" id="d-per">Helften / kwarten</button>
-  </section>
+  <section class="field" id="field"><span class="arc top"></span><span class="arc bot"></span></section>
+  <div class="bench" id="bench"></div>
+  <div class="demo"><b>Demo</b><button id="d-fast">Tijd ×20</button><button id="d-min">1 min voor wissel</button><button id="d-late">Te laat</button><button id="d-end">Einde kwart</button><button id="d-per">Helften/kwarten</button></div>
 </div>
 
 <div class="scrim" id="scrim"></div>
 <section class="sheet" id="sheet" role="dialog" aria-label="Wissel">
-  <span class="grab"></span>
-  <h2>Wissel 3 van 14</h2>
-  <span class="sub">Speler 7 erin · Speler 8 schuift door</span>
-  <div class="stage play" id="stage">
-    <span class="line" style="top:22%">Voor</span><span class="line" style="top:50%">Achter</span>
-    <span class="sp ghost" style="left:30%;top:30%">Speler 2</span>
-    <span class="sp ghost" style="left:30%;top:58%">Speler 1</span>
-    <svg class="trail" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M70 34 Q 84 60 70 86"/><path d="M73 54 Q 80 42 73 33"/><path d="M34 86 Q 50 64 67 60"/></svg>
-    <span class="sp out">↓ Speler 6</span>
-    <span class="sp shift">↑ Speler 8</span>
-    <span class="sp in">Speler 7 ↗</span>
-    <span class="bench"><span>Bank</span></span>
-  </div>
-  <div class="steps">
-    <div class="step"><span class="n" style="background:#D98A00">1</span><b>Speler 6</b>van voor naar de bank</div>
-    <div class="step"><span class="n" style="background:var(--blue-2)">2</span><b>Speler 8</b>schuift van achter naar voor</div>
-    <div class="step"><span class="n" style="background:var(--green)">3</span><b>Speler 7</b>komt erin, achterin</div>
-  </div>
-  <div class="foot"><button class="ghost jelly" id="later">1 min later</button><button class="go jelly" id="go">Wissel nu</button></div>
+  <div class="body" id="sbody"></div>
+  <div class="foot"><button class="gh jelly" id="later">1 min later</button><button class="gh jelly" id="save">Bewaren</button><button class="go jelly" id="go">Wissel nu</button></div>
 </section>
 <div class="toast" id="toast"></div>
 
 <script>
 const $ = (id) => document.getElementById(id);
-const fmt = (s) => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
-// rollende cijfers
+const fmt = (s) => { const n = Math.max(0, Math.round(s)); return Math.floor(n / 60) + ':' + String(n % 60).padStart(2, '0'); };
 function roll(el, text) {
   const chars = [...text];
   while (el.children.length < chars.length) { const s = document.createElement('span'); s.className = 'slot'; el.appendChild(s); }
@@ -229,51 +236,215 @@ function setSlot(slot, c) {
   if (cur) { cur.className = 'out'; setTimeout(() => cur.remove(), 360); }
   const i = document.createElement('i'); i.textContent = c; if (cur) i.className = 'in'; slot.appendChild(i);
 }
-// toestand
-const st = { periods: 4, period: 1, len: 15 * 60, el: 5 * 60 + 48, running: true, speed: 1, next: 0, planAt: 0, us: 1, them: 0 };
-st.next = st.el + 148; st.planAt = st.el - 200;
+const LINE = { V: 'voor', M: 'midden', A: 'achter' };
+const SPOT = { V1: [30, 17], V2: [70, 17], M1: [50, 43], A1: [30, 68], A2: [70, 68] };
+const KEEPER = 'Luuk';
+const st = {
+  periods: 4, period: 1, len: 900, el: 348, running: true, ended: false, speed: 1, us: 1, them: 0, done: 2, total: 14,
+  pos: { V1: 'Jip', V2: 'Noor', M1: 'Lotte', A1: 'Finn', A2: 'Bram' },
+  bench: ['Sem', 'Mila', 'Saar'],
+  played: { Noor: 1100, Jip: 1000, Lotte: 980, Finn: 900, Bram: 950, Sem: 700, Mila: 760, Saar: 820 },
+  next: null, saved: null, planAt: 0,
+};
+const T = () => st.period * st.len + st.el;
+const END = () => st.periods * st.len;
+const slotOf = (pos, name) => Object.keys(pos).find((k) => pos[k] === name);
+function greedy(pos, bench, played) {
+  const inn = bench.slice().sort((a, b) => played[a] - played[b])[0];
+  const out = Object.values(pos).sort((a, b) => played[b] - played[a])[0];
+  return { out, in: inn, shift: null };
+}
+function applySwap(pos, bench, sw) {
+  const p = { ...pos }; const s = slotOf(p, sw.out);
+  if (sw.shift) { const from = slotOf(p, sw.shift); p[s] = sw.shift; p[from] = sw.in; } else p[s] = sw.in;
+  return { pos: p, bench: bench.filter((x) => x !== sw.in).concat([sw.out]) };
+}
+function simulate(first) {
+  let pos = { ...st.pos }, bench = st.bench.slice(); const played = { ...st.played };
+  let t = T(); const moments = [];
+  const run = (to) => { for (const n of Object.values(pos)) played[n] += to - t; t = to; };
+  let at = Math.max(st.next.t, T()), sw = first;
+  while (at < END()) {
+    run(at);
+    const r = applySwap(pos, bench, sw);
+    moments.push({ t: at, sw, pos: r.pos });
+    pos = r.pos; bench = r.bench;
+    at += 180; sw = greedy(pos, bench, played);
+  }
+  run(END());
+  return { moments, played };
+}
+function planFirst() {
+  const g = greedy(st.pos, st.bench, st.played);
+  if (g.out === 'Noor' && g.in === 'Sem') g.shift = 'Bram';
+  return g;
+}
+st.next = { t: T() + 148, ...planFirst() }; st.planAt = T() - 200;
+
 function buildPeriods() {
-  const p = $('periods'); p.innerHTML = '';
-  p.style.gridTemplateColumns = `repeat(${st.periods}, 1fr)`;
+  const p = $('periods'); p.innerHTML = ''; p.style.gridTemplateColumns = `repeat(${st.periods}, 1fr)`;
   for (let k = 0; k < st.periods; k++) { const s = document.createElement('span'); s.className = 'seg' + (k < st.period ? ' done' : ''); s.innerHTML = '<b></b>'; p.appendChild(s); }
 }
-function render() {
+const word = () => (st.periods === 4 ? 'kwart' : 'helft');
+function renderClock() {
   roll($('clock'), fmt(st.el));
   $('board').classList.toggle('paused', !st.running);
-  const w = st.periods === 4 ? 'kwart' : 'helft';
-  $('pstate').textContent = st.running ? `${st.period + 1}e ${w}` : `pauze · ${st.period + 1}e ${w}`;
+  $('board').classList.toggle('ended', st.ended);
+  const w = word();
+  $('pstate').textContent = st.ended ? `Einde ${st.period + 1}e ${w}` : st.running ? `${st.period + 1}e ${w}` : `Pauze · ${st.period + 1}e ${w}`;
   $('pnum').textContent = `${w} ${st.period + 1} van ${st.periods}`;
-  $('premain').textContent = 'nog ' + fmt(st.len - st.el);
+  $('premain').textContent = st.ended ? (st.period + 1 < st.periods ? `tik: start ${st.period + 2}e ${w}` : 'einde wedstrijd') : 'nog ' + fmt(st.len - st.el);
   const seg = $('periods').children[st.period]; if (seg) seg.firstChild.style.width = Math.min(100, (st.el / st.len) * 100) + '%';
-  const left = st.next - st.el;
+}
+function swapText(sw) { const s = slotOf(st.pos, sw.out); return { t1: `<em>${sw.in}</em> erin voor ${sw.out}`, t2: sw.shift ? `${sw.shift} schuift door naar ${LINE[s[0]]}` : `${sw.in} gaat naar ${LINE[s[0]]}` }; }
+function renderIsland() {
   const isl = $('island');
+  if (st.ended) {
+    isl.classList.remove('hot', 'late');
+    $('ik').textContent = 'Rust'; $('it1').innerHTML = `Einde ${st.period + 1}e ${word()}`;
+    $('it2').textContent = st.period + 1 < st.periods ? `Tik op de klok voor het ${st.period + 2}e ${word()}` : 'Wedstrijd afsluiten';
+    $('rlbl').textContent = 'rust'; $('arc').style.strokeDashoffset = '0'; return;
+  }
+  const left = st.next.t - T();
   isl.classList.toggle('hot', left <= 60);
   isl.classList.toggle('late', left < 0);
   isl.style.setProperty('--breathe', (left <= 0 ? 0.55 : 0.55 + (left / 60) * 1.1).toFixed(2) + 's');
-  $('itext').textContent = left <= 0 ? 'Nu wisselen' : 'Wissel over ' + fmt(left);
-  $('rlbl').textContent = left < 0 ? 'nu' : fmt(left);
+  $('ik').textContent = left < 0 ? 'Te laat · wissel ' + (st.done + 1) : left <= 60 ? 'Bijna · wissel ' + (st.done + 1) + ' van ' + st.total : 'Volgende wissel · ' + (st.done + 1) + ' van ' + st.total;
+  const tx = swapText(st.next);
+  $('it1').innerHTML = tx.t1; $('it2').textContent = (st.saved ? 'Aangepast · ' : '') + tx.t2;
+  $('rlbl').textContent = left <= 0 ? 'nu' : fmt(left);
   $('latechip').textContent = '−' + fmt(-left);
-  const frac = Math.max(0, Math.min(1, (st.el - st.planAt) / Math.max(1, st.next - st.planAt)));
-  $('arc').style.strokeDashoffset = left <= 0 ? '0' : (175.9 * frac).toFixed(1);
-  document.querySelector('.p.next').classList.toggle('next', true);
+  const frac = Math.max(0, Math.min(1, (T() - st.planAt) / Math.max(1, st.next.t - st.planAt)));
+  $('arc').style.strokeDashoffset = left <= 0 ? '0' : (169.6 * frac).toFixed(1);
+  const f = $('field'); f.style.setProperty('--go', left <= 60 ? '.95' : '.6'); f.style.setProperty('--fl', left <= 60 ? '1.4s' : '3.2s');
+}
+function ghostsFor(sw) {
+  const g = {}; const outSlot = slotOf(st.pos, sw.out);
+  if (sw.shift) { g[outSlot] = { name: sw.shift, shift: true, from: LINE[slotOf(st.pos, sw.shift)[0]] }; g[slotOf(st.pos, sw.shift)] = { name: sw.in }; }
+  else g[outSlot] = { name: sw.in };
+  return g;
+}
+function renderField() {
+  const f = $('field'); f.querySelectorAll('.p').forEach((n) => n.remove());
+  const ghosts = ghostsFor(st.next);
+  for (const [slot, name] of Object.entries(st.pos)) {
+    const [x, y] = SPOT[slot]; const g = ghosts[slot];
+    const p = document.createElement('button'); p.className = 'p' + (name === st.next.out ? ' next' : '') + (x > 50 ? ' right' : ''); p.dataset.slot = slot; p.dataset.name = name;
+    p.style.left = x + '%'; p.style.top = y + '%';
+    p.innerHTML = `${g ? `<span class="ghost${g.shift ? ' shift' : ''}">${g.name}${g.shift ? `<small>↑</small>` : ''}</span>` : ''}<span class="card"><span class="face front">${name}</span><span class="face back">${g ? g.name : name}</span></span><span class="t">${fmt(st.played[name])}</span>`;
+    p.onclick = () => openSheet(g ? null : name);
+    f.appendChild(p);
+  }
+  const k = document.createElement('span'); k.className = 'p keeper'; k.style.left = '50%'; k.style.top = '91%';
+  k.innerHTML = `<span class="card"><span class="face front">K · ${KEEPER}</span></span>`; f.appendChild(k);
+}
+function renderBench(dropped = []) {
+  $('bench').innerHTML = '<span class="l">Bank</span>' + st.bench.map((n) => `<span class="bp${n === st.next.in ? ' ready' : ''}${dropped.includes(n) ? ' drop' : ''}">${n}<span>${n === st.next.in ? 'klaarmaken' : Math.round(st.played[n] / 60) + ' min'}</span></span>`).join('');
 }
 function setScore(pop) { setSlot($('s1'), String(st.us)); setSlot($('s2'), String(st.them)); if (pop) { const s = $('score'); s.classList.remove('pop'); void s.offsetWidth; s.classList.add('pop'); } }
-buildPeriods(); render(); setScore();
-let last = performance.now();
-setInterval(() => { const now = performance.now(); if (st.running) { st.el = Math.min(st.len + 120, st.el + ((now - last) / 1000) * st.speed); } last = now; render(); }, 250);
-function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('show'), 1800); }
-$('clockbtn').onclick = () => { st.running = !st.running; render(); };
+function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('show'), 1900); }
+
+function doSwap(sw) {
+  const ghosts = ghostsFor(sw);
+  const nodes = [...$('field').querySelectorAll('.p')].filter((n) => ghosts[n.dataset.slot]);
+  nodes.forEach((n, k) => {
+    n.querySelector('.face.back').textContent = ghosts[n.dataset.slot].name;
+    if (!n.querySelector('.ghost')) n.insertAdjacentHTML('afterbegin', `<span class="ghost">${ghosts[n.dataset.slot].name}</span>`);
+    setTimeout(() => n.classList.add('flip'), k * 140);
+  });
+  setTimeout(() => {
+    const r = applySwap(st.pos, st.bench, sw);
+    st.pos = r.pos; st.bench = r.bench; st.done++; st.saved = null;
+    st.planAt = T(); st.next = { t: T() + 180, ...greedy(st.pos, st.bench, st.played) };
+    renderField(); renderBench([sw.out]); renderIsland();
+    const isl = $('island'); isl.classList.remove('swapped'); void isl.offsetWidth; isl.classList.add('swapped');
+  }, 1100 + nodes.length * 140);
+  toast(`${sw.in} erin voor ${sw.out}`);
+}
+
+let choice = null, base = null;
+function openSheet(outOverride) {
+  base = simulate(st.next);
+  choice = { ...st.next };
+  if (outOverride) choice = { out: outOverride, in: choice.in, shift: null };
+  renderSheet(); $('sheet').classList.add('open'); $('scrim').classList.add('open');
+}
+function closeSheet() { $('sheet').classList.remove('open'); $('scrim').classList.remove('open'); }
+function renderSheet(bumpSide) {
+  const sim = simulate(choice);
+  const isPlan = choice.out === st.next.out && choice.in === st.next.in;
+  const tx = swapText(choice);
+  const names = Object.keys(sim.played).sort((a, b) => sim.played[b] - sim.played[a]);
+  const all = names.flatMap((n) => [sim.played[n], base.played[n]]);
+  const lo = Math.max(0, Math.min(...all) - 360), hi = Math.max(...all);
+  const w = (v) => (((v - lo) / Math.max(1, hi - lo)) * 100).toFixed(1);
+  const spr = (p) => Math.round((Math.max(...names.map((n) => p[n])) - Math.min(...names.map((n) => p[n]))) / 60);
+  const spread = spr(sim.played), baseSpread = spr(base.played);
+  const cards = sim.moments.map((m, k) => {
+    const diff = !isPlan && (!base.moments[k] || base.moments[k].sw.out !== m.sw.out || base.moments[k].sw.in !== m.sw.in);
+    const pills = Object.entries(m.pos).map(([s, n]) => `<span class="mp${n === m.sw.in || n === m.sw.shift ? ' new' : ''}" style="left:${SPOT[s][0]}%;top:${SPOT[s][1] + 4}%">${n}</span>`).join('') + `<span class="mp k" style="left:50%;top:90%">${KEEPER}</span>`;
+    const per = Math.floor(m.t / st.len), at = m.t - per * st.len;
+    return `<div class="mc${diff ? ' diff' : ''}">${diff ? '<span class="tag">anders dan plan</span>' : ''}<div class="top"><span>${k === 0 ? 'Deze wissel' : 'Wissel ' + (st.done + 1 + k)}</span><span>${per + 1}e ${word()} · ${fmt(at)}</span></div><div class="mini">${pills}</div><div class="chg"><b>↑ ${m.sw.in}</b> erin · <i>↓ ${m.sw.out}</i> eruit${m.sw.shift ? ' · ' + m.sw.shift + ' schuift' : ''}</div></div>`;
+  }).join('');
+  const rows = names.map((n) => {
+    const d = Math.round((sim.played[n] - base.played[n]) / 60);
+    return `<div class="mr"><span>${n}</span><span class="mt"><span class="pl" style="width:${w(base.played[n])}%"></span><span class="nw" style="width:calc(${w(sim.played[n])}% - 4px)"></span></span><span class="d${!isPlan && d > 0 ? ' up' : !isPlan && d < 0 ? ' down' : ''}">${isPlan || !d ? Math.round(sim.played[n] / 60) + '′' : (d > 0 ? '+' : '−') + Math.abs(d) + '′'}</span></div>`;
+  }).join('');
+  const verdict = isPlan ? `<div class="verdict">Volgens plan: aan het eind hooguit ${spread} min verschil in speeltijd.</div>`
+    : spread <= baseSpread + 1 ? `<div class="verdict">Prima keuze: het verschil in speeltijd blijft ${spread} min (plan: ${baseSpread}).</div>`
+    : `<div class="verdict warn">Let op: het verschil in speeltijd wordt ${spread} min (plan: ${baseSpread}).</div>`;
+  $('sbody').innerHTML = `<span class="grab"></span>
+    <div class="sh"><h2>${isPlan ? 'Wissel ' + (st.done + 1) + ' van ' + st.total : 'Wissel · aangepast'}</h2><button class="x jelly" id="sx" aria-label="Sluiten">✕</button></div>
+    <div class="pick"><button class="tile out jelly" id="tout"><span class="l">Eruit</span><span class="n${bumpSide === 'out' ? ' bump' : ''}">${choice.out}</span><span class="s">${LINE[slotOf(st.pos, choice.out)[0]]} · ${Math.round(st.played[choice.out] / 60)} min gespeeld</span></button><span class="arrow">⇄</span>
+    <button class="tile in jelly" id="tin"><span class="l">Erin</span><span class="n${bumpSide === 'in' ? ' bump' : ''}">${choice.in}</span><span class="s">${Math.round(st.played[choice.in] / 60)} min gespeeld</span></button></div>
+    <span class="hint">${tx.t2} · tik een naam om te wisselen van keuze</span>
+    <div class="sect"><b>Zo loopt de rest van de wedstrijd</b><span>veeg →</span></div>
+    <div class="cards" id="cards">${cards}</div>
+    <div class="dots" id="dots">${sim.moments.map((_, k) => `<i class="${k === 0 ? 'on' : ''}"></i>`).join('')}</div>
+    <div class="sect"><b>Speeltijd aan het eind</b><span>${isPlan ? 'minuten per kind' : 'verschil met het plan'}</span></div>
+    ${verdict}
+    <div class="mins">${rows}</div>`;
+  $('sx').onclick = closeSheet;
+  $('tout').onclick = () => { const f = Object.values(st.pos); choice = { out: f[(f.indexOf(choice.out) + 1) % f.length], in: choice.in, shift: null }; if (choice.out === st.next.out && choice.in === st.next.in) choice.shift = st.next.shift; renderSheet('out'); };
+  $('tin').onclick = () => { const b = st.bench; choice = { out: choice.out, in: b[(b.indexOf(choice.in) + 1) % b.length], shift: null }; if (choice.out === st.next.out && choice.in === st.next.in) choice.shift = st.next.shift; renderSheet('in'); };
+  const cardsEl = $('cards');
+  cardsEl.onscroll = () => { const w = cardsEl.firstChild ? cardsEl.firstChild.offsetWidth + 10 : 1; const k = Math.round(cardsEl.scrollLeft / w); [...$('dots').children].forEach((d, i) => d.classList.toggle('on', i === k)); };
+  $('save').style.display = isPlan ? 'none' : '';
+}
+
+buildPeriods(); renderClock(); renderIsland(); renderField(); renderBench(); setScore();
+let last = performance.now(), lastSec = -1;
+setInterval(() => {
+  const now = performance.now();
+  if (st.running) {
+    const dt = ((now - last) / 1000) * st.speed;
+    st.el += dt; for (const n of Object.values(st.pos)) st.played[n] += dt;
+    if (st.el >= st.len) { st.el = st.len; st.running = false; st.ended = true; }
+  }
+  last = now;
+  renderClock(); renderIsland();
+  const sec = Math.floor(T()); if (sec !== lastSec) { lastSec = sec; $('field').querySelectorAll('.p[data-name] .t').forEach((t) => { const n = t.parentNode.dataset.name; t.textContent = fmt(st.played[n]); }); }
+}, 250);
+$('clockbtn').onclick = () => {
+  if (st.ended) {
+    if (st.period + 1 >= st.periods) { toast('Einde wedstrijd'); return; }
+    st.period++; st.el = 0; st.ended = false; st.running = true; buildPeriods();
+    st.planAt = T(); st.next.t = T() + 150;
+    toast(`${st.period + 1}e ${word()} gestart`);
+  } else st.running = !st.running;
+  renderClock();
+};
 $('score').onclick = () => { st.us++; setScore(true); toast('Goal! ' + st.us + ' : ' + st.them); };
-const open = (v) => { $('sheet').classList.toggle('open', v); $('scrim').classList.toggle('open', v); };
-$('island').onclick = () => open(true);
-document.querySelectorAll('.p:not(.k)').forEach((p) => { p.onclick = () => open(true); });
-$('scrim').onclick = () => open(false);
-$('later').onclick = () => { st.next = st.el + 60; open(false); render(); toast('Wissel 1 minuut later'); };
-$('go').onclick = () => { st.planAt = st.el; st.next = st.el + 180; open(false); render(); toast('Speler 7 erin voor Speler 6'); };
+$('island').onclick = () => openSheet(null);
+$('scrim').onclick = closeSheet;
+$('go').onclick = () => { const sw = { ...choice }; closeSheet(); setTimeout(() => doSwap(sw), 380); };
+$('later').onclick = () => { st.next.t = T() + 60; closeSheet(); renderIsland(); toast('Wissel 1 minuut later'); };
+$('save').onclick = () => { st.next = { t: st.next.t, ...choice }; st.saved = true; closeSheet(); renderField(); renderBench(); renderIsland(); toast('Bewaard voor het geplande moment'); };
 $('d-fast').onclick = (e) => { st.speed = st.speed === 1 ? 20 : 1; e.target.textContent = st.speed === 1 ? 'Tijd ×20' : 'Tijd normaal'; };
-$('d-min').onclick = () => { st.next = st.el + 62; render(); };
-$('d-late').onclick = () => { st.next = st.el - 42; render(); };
-$('d-per').onclick = () => { st.periods = st.periods === 4 ? 2 : 4; st.len = st.periods === 4 ? 900 : 1500; st.period = Math.min(st.period, st.periods - 1); st.el = Math.min(st.el, st.len - 60); buildPeriods(); render(); };
+$('d-min').onclick = () => { st.next.t = T() + 62; renderIsland(); };
+$('d-late').onclick = () => { st.next.t = T() - 42; renderIsland(); };
+$('d-end').onclick = () => { st.el = st.len - 4; st.running = true; st.ended = false; };
+$('d-per').onclick = () => { const ratio = st.el / st.len; st.periods = st.periods === 4 ? 2 : 4; st.len = st.periods === 4 ? 900 : 1500; st.period = Math.min(st.period, st.periods - 1); st.el = ratio * st.len; st.next.t = T() + 148; st.planAt = T() - 200; buildPeriods(); renderClock(); renderIsland(); };
 </script>
 </body>
 </html>
