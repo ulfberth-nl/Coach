@@ -221,6 +221,7 @@ function OpponentSheet({ match, upcoming = [], onClose }) {
     onClose();
   };
   const [listOpen, setListOpen] = useState(false);
+  const [more, setMore] = useState(false);
   const current = upcoming.find((e) => e.id === match.scheduleId) || closestEntry(upcoming);
   const entryLine = (e) => `${dateLabel(e.date)}${e.time ? ' · ' + e.time : ''}${e.home === false ? ' · uit' : ' · thuis'}${e.field ? ' · ' + e.field : ''}`;
   return html`<${Sheet} onClose=${save} label="Wedstrijdgegevens">
@@ -235,11 +236,12 @@ function OpponentSheet({ match, upcoming = [], onClose }) {
       </button>
       <div class=${'collapse' + (listOpen ? ' open' : '')}><div>
         <div class="plist">
-          ${upcoming.map((e) => html`<button type="button" key=${e.id} class=${'prow2' + (match.scheduleId === e.id ? ' on' : '')} onClick=${() => choose(e)}>
+          ${(more ? upcoming : upcoming.slice(0, 4)).map((e) => html`<button type="button" key=${e.id} class=${'prow2' + (match.scheduleId === e.id ? ' on' : '')} onClick=${() => choose(e)}>
             <${OppBadge} name=${e.opponent} size=${30} />
             <span class="col grow" style="gap:1px;min-width:0"><span class="pr-name">${e.opponent || 'Tegenstander'}</span><span class="pr-meta">${entryLine(e)}</span></span>
             ${match.scheduleId === e.id && html`<span class="pr-check" aria-hidden="true">✓</span>`}
           </button>`)}
+          ${upcoming.length > 4 && html`<button type="button" class="morebtn" onClick=${() => setMore(!more)}>${more ? 'Minder tonen' : `Laat meer zien… (${upcoming.length - 4})`}</button>`}
         </div>
       </div></div>
       <span class="label" style="margin-top:6px">Of zelf invullen</span>
@@ -275,6 +277,21 @@ function LiveView({ match, team }) {
   const [sheet, setSheet] = useState(null);
   const zone = useRef(null);
   useWakeLock(true);
+  // doelpunt in het veld: 'who' (voor wie?) → 'scorer' (tik de speler); daarna een feestje met 'ongedaan maken'
+  const [goal, setGoal] = useState(null);
+  const [cele, setCele] = useState(null);
+  useEffect(() => { if (!cele) return undefined; const t = setTimeout(() => setCele(null), 6000); return () => clearTimeout(t); }, [cele]);
+  const scoreFor = (id) => {
+    mutate((m, t) => M.goal(m, t, id));
+    setGoal(null);
+    setCele({ us: true, id, key: Date.now() });
+  };
+  const oppScores = () => {
+    mutate((m, t) => M.oppGoal(m, t));
+    setGoal(null);
+    setCele({ us: false, key: Date.now() });
+  };
+  const undoGoal = () => { undoAction.run(); setCele(null); };
 
   const alerted = useRef({});
   useEffect(() => {
@@ -303,9 +320,10 @@ function LiveView({ match, team }) {
     mutate((m, t) => M.doSwap(m, t, out, inn, null));
     toast(`${nick(inn)} erin voor ${nick(out)}`, undoAction);
   };
-  useDragSwap(zone, !pending, onDrag);
+  useDragSwap(zone, !pending && !goal, onDrag);
 
   const tapField = (id) => {
+    if (goal === 'scorer') { scoreFor(id); return; }
     if (justDragged(zone)) return;
     if (pending) { setSheet({ type: 'break' }); return; }
     if (group.length > 1 && group.some((s) => s.out === id)) { setSheet({ type: 'group' }); return; }
@@ -354,22 +372,42 @@ function LiveView({ match, team }) {
           <span class="clockstate">${running ? html`<span class="rundot"></span>${M.periodLabel(team, match.clock.period)}` : html`<span class="stopdot"></span>stil · ${M.periodLabel(team, match.clock.period)}`}</span>
         </span>
         <span class="periods" aria-hidden="true">
-          <span class="ptrack">${Array.from({ length: team.periods }, (_, p) => (p < match.clock.period ? html`<i class="done"></i>`
+          <span class=${'ptrack' + (team.periods > 2 ? ' q' : '')}>${Array.from({ length: team.periods }, (_, p) => (p < match.clock.period ? html`<i class="done"></i>`
             : p === match.clock.period ? html`<i><b style=${`width:${Math.min(100, (el / L) * 100)}%`}></b></i>` : html`<i></i>`))}</span>
           <span class=${'premain' + (el > L ? ' over' : '')}>${el <= L ? 'nog ' + M.fmt(L - el) : '+' + M.fmt(el - L)}</span>
         </span>
       </button>
-      <button type="button" class=${'scorebtn ' + (d.score.us > d.score.them ? 'ahead' : d.score.us < d.score.them ? 'behind' : 'level')} onClick=${() => setSheet({ type: 'goal' })} aria-label=${`Stand ${d.score.us} tegen ${d.score.them}, tik bij een doelpunt`}>
+      <button type="button" class=${'scorebtn ' + (d.score.us > d.score.them ? 'ahead' : d.score.us < d.score.them ? 'behind' : 'level')} onClick=${() => { setCele(null); setGoal(goal ? null : 'who'); }} aria-label=${`Stand ${d.score.us} tegen ${d.score.them}, tik bij een doelpunt`}>
         <span class="num score bump" key=${d.score.us + '-' + d.score.them}>${d.score.us}<span class="sep2">:</span>${d.score.them}</span>
       </button>
     </div>
     <button type="button" class="nextbtn" onClick=${openNext} disabled=${bar.calm}>${barInner}</button>
     <div class="grow-field" ref=${zone}>
-      <div class="fieldbox">
+      <div class=${'fieldbox' + (goal ? ' goalmode' : '')}>
         <${Field} slots=${d.state.slots} lines=${team.lines} keeperId=${d.state.keeper} nick=${nick} height="auto"
-          onTap=${tapField} onKeeper=${!pending ? () => setSheet({ type: 'keeper' }) : null}
-          neon=${next && !pending ? group.map((s) => s.out) : []} sub=${(id) => M.fmt(d.state.played[id])} />
-        <button type="button" class="fieldtag right" onClick=${() => setSheet({ type: 'stand' })}>${STANDS.find(([v]) => v === stand)[1]}${match.standMode !== 'manual' && team.rules.autoStand ? ' · auto' : ''}</button>
+          onTap=${tapField} onKeeper=${goal === 'scorer' ? (id) => scoreFor(id) : !pending ? () => setSheet({ type: 'keeper' }) : null}
+          picking=${goal === 'scorer'} hot=${cele && cele.us ? cele.id : null} hotKey=${cele ? cele.key : 0}
+          neon=${next && !pending && !goal ? group.map((s) => s.out) : []} sub=${(id) => M.fmt(d.state.played[id])} />
+        ${!goal && html`<button type="button" class="fieldtag right" onClick=${() => setSheet({ type: 'stand' })}>${STANDS.find(([v]) => v === stand)[1]}${match.standMode !== 'manual' && team.rules.autoStand ? ' · auto' : ''}</button>`}
+        ${goal === 'who' && html`<div class="goalpick" role="dialog" aria-label="Doelpunt voor wie">
+          <span class="gp-title">Doelpunt voor…</span>
+          <div class="gp-tiles">
+            <button type="button" class="gp-tile us" onClick=${() => setGoal('scorer')}><${TeamBadge} team=${team} size=${64} /><span>${team.name}</span></button>
+            <button type="button" class="gp-tile them" onClick=${oppScores}><${OppBadge} name=${match.opponent} size=${64} /><span>${match.opponent || 'Tegenstander'}</span></button>
+          </div>
+          <button type="button" class="gp-x" aria-label="Annuleren" onClick=${() => setGoal(null)}><${Icon} name="x" size=${18} /></button>
+        </div>`}
+        ${goal === 'scorer' && html`<div class="goalbanner" role="status">
+          <span class="grow">Wie scoorde? <b>Tik op de speler</b></span>
+          <button type="button" class="gb-btn" onClick=${() => scoreFor(null)}>Weet ik niet</button>
+          <button type="button" class="gb-x" aria-label="Annuleren" onClick=${() => setGoal(null)}><${Icon} name="x" size=${16} /></button>
+        </div>`}
+        ${cele && html`<div class=${'goalcele' + (cele.us ? '' : ' them')} key=${cele.key} aria-live="polite">
+          <span class="gc-confetti" aria-hidden="true">${Array.from({ length: 16 }, (_, k) => html`<i style=${`--a:${k * 22.5 + (k % 2) * 9}deg;--d:${70 + (k % 4) * 22}px;--c:${['#F5A524', '#fff', '#2B57C9', '#F5A524'][k % 4]}`}></i>`)}</span>
+          <span class="gc-text">${cele.us ? 'Goal!' : 'Tegengoal'}</span>
+          <span class="gc-sub">${cele.us ? (cele.id ? nick(cele.id) + ' scoort' : 'voor ' + team.name) : d.score.us + ' : ' + d.score.them}</span>
+        </div>`}
+        ${cele && html`<button type="button" class="undopill" key=${'u' + cele.key} onClick=${undoGoal}><${Icon} name="undo" size=${16} /> Ongedaan maken</button>`}
       </div>
       <div class="benchrow">
         <span class="label">Bank</span>
@@ -391,7 +429,6 @@ function LiveView({ match, team }) {
     ${sheet && sheet.type === 'swap' && html`<${SwapSheet} match=${match} team=${team} d=${d} init=${sheet} counts=${counts} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'group' && html`<${GroupSwapSheet} match=${match} team=${team} d=${d} counts=${counts} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'bench' && html`<${BenchSheet} match=${match} team=${team} d=${d} id=${sheet.id} onClose=${() => setSheet(null)} openSwap=${(s) => setSheet({ type: 'swap', ...s, planned: false })} />`}
-    ${sheet && sheet.type === 'goal' && html`<${GoalSheet} match=${match} team=${team} d=${d} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'break' && html`<${BreakSheet} match=${match} team=${team} d=${d} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'join' && html`<${JoinSheet} match=${match} team=${team} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'keeper' && html`<${KeeperSheet} match=${match} team=${team} d=${d} onClose=${() => setSheet(null)} />`}

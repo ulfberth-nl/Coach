@@ -203,7 +203,7 @@ export function Icon({ name, size = 22 }) {
 
 // ---------- het veld ----------
 // slots: { V0: id, M0: id, A0: id, ... }  aanval boven, eigen doel (keeper) onder
-export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false }) {
+export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false, picking = false, hot = null, hotKey = 0 }) {
   const rows = ['V', 'M', 'A'].filter((l) => (lines[l] || 0) > 0);
   // linies gelijk verdeeld tussen de bovenrand en de keeper (middelpunten in %)
   const START = 5, END = 78;
@@ -219,13 +219,14 @@ export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = []
     const name = id ? nick(id) : '—';
     const isNeon = id && neon.indexOf(id) !== -1;
     const pill = html`<span class=${'pill ' + pillKind(id)} style=${pillStyle}>${name}</span>`;
-    return html`<button type="button" class="spot" key=${id || key} data-pid=${id || ''} style=${`left:${left};top:${top}`} disabled=${!onTap || !id} onClick=${() => onTap && id && onTap(id)} aria-label=${name}>
-      ${isNeon ? html`<${Neon}>${pill}</${Neon}>` : pill}
+    return html`<button type="button" class=${'spot' + (hot && hot === id ? ' scored' : '')} key=${(id || key) + (hot === id ? ':' + hotKey : '')} data-pid=${id || ''} style=${`left:${left};top:${top}`} disabled=${!onTap || !id} onClick=${() => onTap && id && onTap(id)} aria-label=${name}>
+      ${hot && hot === id && html`<span class="goalburst">Goal!</span>`}
+      ${isNeon && !picking ? html`<${Neon}>${pill}</${Neon}>` : pill}
       ${sub && id && sub(id) ? html`<span class="time">${sub(id)}</span>` : null}
       ${below && id ? below(id) : null}
     </button>`;
   };
-  return html`<div class=${'field sz-' + size} style=${`height:${typeof height === 'number' ? height + 'px' : height}`}>
+  return html`<div class=${'field sz-' + size + (picking ? ' picking' : '')} style=${`height:${typeof height === 'number' ? height + 'px' : height}`}>
     <span class="lines"></span>
     <span class="arc top"></span>
     <span class="arc bottom"></span>
@@ -233,7 +234,7 @@ export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = []
       const n = lines[l];
       return Array.from({ length: n }, (_, i) => spot(slots[l + i], `${((i + 1) / (n + 1)) * 100}%`, tops[r], l + i));
     })}
-    ${keeperId && html`<button type="button" class="spot keeperspot" key=${'k' + keeperId} style="left:50%;bottom:16px;top:auto" disabled=${!onKeeper} onClick=${() => onKeeper && onKeeper(keeperId)} aria-label=${'Keeper ' + nick(keeperId)}><${KeeperPill} name=${nick(keeperId)} /></button>`}
+    ${keeperId && html`<button type="button" class=${'spot keeperspot' + (hot && hot === keeperId ? ' scored' : '')} key=${'k' + keeperId + (hot === keeperId ? ':' + hotKey : '')} style="left:50%;bottom:16px;top:auto" disabled=${!onKeeper} onClick=${() => onKeeper && onKeeper(keeperId)} aria-label=${'Keeper ' + nick(keeperId)}><${KeeperPill} name=${nick(keeperId)} /></button>`}
   </div>`;
 }
 
