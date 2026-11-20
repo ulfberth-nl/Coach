@@ -35,10 +35,12 @@ Klaarzetten en spelen gebeuren op hetzelfde scherm, dat altijd in één beeld pa
 - **Takenoverzicht:** alle komende wedstrijden met keeper en taken in één bericht voor WhatsApp.
 - **Agenda-bestand (.ics):** alle wedstrijden of één wedstrijd, op de telefoon gemaakt, om in de agenda te zetten of te delen.
 - Het Wedstrijd-scherm zet automatisch de eerstvolgende wedstrijd uit het programma klaar. Via het affiche zie je de wedstrijd die het dichtst bij ligt; tik erop voor een lijst met de andere wedstrijden.
+- **Programma en uitslagen:** in Seizoen staat het programma op datum (dichtstbij eerst) en daaronder de uitslagen; tik een uitslag open voor doelpunten, speeltijd en posities. Lange lijsten tonen eerst 4 met *Laat meer zien…*.
 - **Seizoenen:** elke wedstrijd hoort bij een seizoen (aug–jul). Bovenin Seizoen kies je een eerder seizoen als archief, met uitslagen, minuten, posities en doelpunten.
 
 ## Tijdens de wedstrijd
 
+- **Doelpunt:** tik op de stand. In het veld kies je voor wie; bij een goal van ons tik je daarna de speler die scoorde (of *Weet ik niet*). Over de keeper verschijnt een paar seconden *Ongedaan maken*.
 - **Klok:** tik op de klok om te starten of te pauzeren. Blauw = loopt, oranje en knipperend = staat stil. Rechts zie je welke helft/welk kwart en hoeveel tijd er nog is.
 - **Wisselbalk:** SpaBo-blauw met een oranje voortgangspil. Vanaf 1 minuut voor de wissel knippert de pil, steeds sneller tot de wissel gedaan is; ben je te laat, dan staat er hoeveel (bijv. −1:33).
 - **Meerdere spelers tegelijk:** stel bij Team → Wisselen in hoeveel kinderen per wisselmoment wisselen (1–5; in de zaal standaard de hele veldploeg). Het wisselvenster toont dan alle paren; per paar kun je spelers kiezen, een paar weghalen of er een toevoegen.

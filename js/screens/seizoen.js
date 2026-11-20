@@ -147,35 +147,84 @@ export function Seizoen({ state }) {
     return { per, res, w, g, l, gf, ga };
   }, [state.matches, team, season]);
 
-  // programma + gespeelde wedstrijden in één lijst
+  // programma: nog te spelen, dichtstbij eerst (niet gespeelde wedstrijden uit het verleden onderaan)
   const today = todayISO();
   const schedule = schedAll.filter((e) => seasonOfEntry(e) === season);
-  const linked = new Set(finished.map((m) => m.scheduleId).filter(Boolean));
-  const rows = schedule.map((e) => ({ kind: 'plan', e, m: finished.find((x) => x.scheduleId === e.id) || null, date: e.date, time: e.time || '' }))
-    .concat(finished.filter((m) => !m.scheduleId || !schedule.some((e) => e.id === m.scheduleId)).map((m) => ({ kind: 'played', m, date: m.date, time: m.time || '' })));
-  // nieuwste bovenaan
-  const list = rows.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.time || '').localeCompare(a.time || ''));
-  void linked; void today;
+  const playedIds = new Set(allFinished.map((m) => m.scheduleId).filter(Boolean));
+  const asc = (a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || '');
+  const open = schedule.filter((e) => !playedIds.has(e.id));
+  const upcoming = open.filter((e) => e.date >= today).sort(asc).concat(open.filter((e) => e.date < today).sort((a, b) => asc(b, a)));
+  // uitslagen: nieuwste eerst
+  const results = finished.slice().sort((a, b) => asc(b, a));
+  const [moreP, setMoreP] = useState(false);
+  const [moreR, setMoreR] = useState(false);
+  const [openRes, setOpenRes] = useState(null);
+  const SHOW = 4;
   const newEntry = () => setEdit({ id: null, opponent: '', home: true, date: todayISO(), time: '', meet: '', field: '', season, keeperId: '', absent: [], tasks: { fluiten: [], fruit: [], bar: [] } });
 
   const players = team.players.filter((p) => data.per[p.id] || p.active !== false);
   const avgs = players.map((p) => (data.per[p.id] && data.per[p.id].matches ? data.per[p.id].sec / data.per[p.id].matches : 0));
   const maxAvg = Math.max(1, ...avgs);
 
-  const row = (r) => {
-    const name = r.e ? r.e.opponent : r.m.opponent;
-    const s = r.m && data.res[r.m.id];
-    const res = s ? (s.score.us > s.score.them ? 'win' : s.score.us === s.score.them ? 'draw' : 'loss') : null;
-    const d = new Date(r.date + 'T12:00:00');
-    const taskCount = r.e ? TASKS.reduce((a, t) => a + ((r.e.tasks && r.e.tasks[t.key]) || []).filter(Boolean).length, 0) : 0;
-    return html`<div class="mrow">
-      <span class="mdate"><b>${d.getDate()}</b><span>${d.toLocaleDateString('nl-NL', { month: 'short' }).replace('.', '')}</span></span>
-      <button type="button" class="mmain" onClick=${() => (r.e ? setEdit({ ...r.e, tasks: { ...(r.e.tasks || {}) } }) : (location.hash = '#/afloop/' + r.m.id))}>
-        <span class="mname"><${OppBadge} name=${name} size=${22} /> ${name || 'Tegenstander'}</span>
-        <span class="msub">${r.e ? (r.e.home === false ? 'Uit' : 'Thuis') : ''}${r.time ? (r.e ? ' · ' : '') + r.time : ''}${r.e && r.e.field ? ' · ' + r.e.field : ''}${r.e && !r.m ? (taskCount ? ` · ${taskCount} taken` : ' · taken nog open') : ''}</span>
+  const dateBadge = (iso) => { const d = new Date(iso + 'T12:00:00'); return html`<span class="mdate"><b>${d.getDate()}</b><span>${d.toLocaleDateString('nl-NL', { month: 'short' }).replace('.', '')}</span></span>`; };
+  const planRow = (e) => {
+    const taskCount = TASKS.reduce((a, t) => a + ((e.tasks && e.tasks[t.key]) || []).filter(Boolean).length, 0);
+    return html`<div class=${'mrow' + (e.date < today ? ' stale' : '')} key=${e.id}>
+      ${dateBadge(e.date)}
+      <button type="button" class="mmain" onClick=${() => setEdit({ ...e, tasks: { ...(e.tasks || {}) } })}>
+        <span class="mname"><${OppBadge} name=${e.opponent} size=${22} /> ${e.opponent || 'Tegenstander'}</span>
+        <span class="msub">${e.home === false ? 'Uit' : 'Thuis'}${e.time ? ' · ' + e.time : ''}${e.field ? ' · ' + e.field : ''}${e.date < today ? ' · niet gespeeld' : taskCount ? ` · ${taskCount} taken` : ' · taken nog open'}</span>
       </button>
-      ${s ? html`<a class=${'mscore ' + res} href=${'#/afloop/' + r.m.id}>${s.score.us} : ${s.score.them}</a>`
-        : html`<button type="button" class="iconbtn" aria-label="Bericht kopiëren" onClick=${() => copyText(buildMessage(team, r.e)).then((ok) => { if (!ok) setEdit({ ...r.e, tasks: { ...(r.e.tasks || {}) }, showText: true }); })}><${Icon} name="copy" size=${20} /></button>`}
+      <button type="button" class="iconbtn" aria-label="Bericht kopiëren" onClick=${() => copyText(buildMessage(team, e)).then((ok) => { if (!ok) setEdit({ ...e, tasks: { ...(e.tasks || {}) }, showText: true }); })}><${Icon} name="copy" size=${20} /></button>
+    </div>`;
+  };
+  // uitslag met uitklapbare details: wie scoorde, wie speelde hoe lang en waar
+  const resultRow = (m) => {
+    const s = data.res[m.id];
+    const res = s.score.us > s.score.them ? 'win' : s.score.us === s.score.them ? 'draw' : 'loss';
+    const isOpen = openRes === m.id;
+    const scorers = Object.keys(s.goals || {}).filter((id) => s.goals[id] > 0).sort((a, b) => s.goals[b] - s.goals[a]);
+    const unknown = s.score.us - scorers.reduce((a, id) => a + s.goals[id], 0);
+    // keeper: tijd in het doel telt hier mee als speeltijd (groen)
+    const ltOf = (id) => { const lt = { A: 0, M: 0, V: 0, K: 0, ...((s.lineTime && s.lineTime[id]) || {}) }; if (id === m.keeperId && !lt.K && !(s.state.played[id] > 0)) lt.K = s.T || 0; return lt; };
+    const timeOf = (id) => (s.state.played[id] || 0) + (s.state.played[id] > 0 ? 0 : ltOf(id).K);
+    const present = m.present.slice().sort((a, b) => timeOf(b) - timeOf(a));
+    const maxP = Math.max(1, ...present.map(timeOf));
+    const nick = (id) => M.nickOf(team, id);
+    return html`<div class=${'resrow' + (isOpen ? ' open' : '')} key=${m.id}>
+      <button type="button" class="mrow resmain" aria-expanded=${isOpen ? 'true' : 'false'} onClick=${() => setOpenRes(isOpen ? null : m.id)}>
+        ${dateBadge(m.date)}
+        <span class="mmain">
+          <span class="mname"><${OppBadge} name=${m.opponent} size=${22} /> ${m.opponent || 'Tegenstander'}</span>
+          <span class="msub">${scorers.length ? scorers.map((id) => nick(id) + (s.goals[id] > 1 ? ' ' + s.goals[id] + '×' : '')).join(', ') : s.score.us ? 'doelpunten zonder naam' : 'geen doelpunten'}</span>
+        </span>
+        <span class=${'mscore ' + res}>${s.score.us} : ${s.score.them}</span>
+      </button>
+      <div class=${'collapse' + (isOpen ? ' open' : '')}><div>
+        <div class="resdetail">
+          <div class="resgoals">
+            <span class="label">Doelpunten</span>
+            <div class="wrap">${scorers.map((id) => html`<span class="goalchip">${nick(id)}${s.goals[id] > 1 ? html` <b>${s.goals[id]}×</b>` : ''}</span>`)}
+              ${unknown > 0 && html`<span class="goalchip muted">onbekend${unknown > 1 ? ' ' + unknown + '×' : ''}</span>`}
+              ${!s.score.us && html`<span class="small">Geen doelpunten van ons</span>`}</div>
+          </div>
+          <span class="label">Speeltijd en posities</span>
+          ${present.map((id) => {
+            const lt = ltOf(id);
+            const tot = lt.A + lt.M + lt.V + lt.K || 1;
+            const p = timeOf(id);
+            return html`<div class="prow res">
+              <span class="pname">${nick(id)}${id === m.keeperId ? html`<span class="kbadge">K</span>` : ''}</span>
+              <span class="pbar"><span style=${`width:${(p / maxP) * 100}%`}>
+                ${['A', 'M', 'V', 'K'].map((k) => (lt[k] ? html`<i style=${`flex:${lt[k] / tot} 1 0;background:${k === 'K' ? '#14652A' : POS_COLORS[k]}`}></i>` : null))}
+              </span></span>
+              <span class="pnum num">${M.mins(p)}′</span>
+              <span class=${'pchip' + (s.goals[id] ? ' on' : '')}>${s.goals[id] || 0}</span>
+            </div>`;
+          })}
+          <a class="btn plain block" style="min-height:44px;margin-top:6px" href=${'#/afloop/' + m.id}>Volledig overzicht</a>
+        </div>
+      </div></div>
     </div>`;
   };
 
@@ -194,13 +243,22 @@ export function Seizoen({ state }) {
     </section>
 
     <section class="card" style="gap:4px">
-      <div class="between"><span class="h2">Wedstrijden</span><span class="small">${seasonLabel(season)}</span></div>
+      <div class="between"><span class="h2">Programma</span><span class="small">${seasonLabel(season)}</span></div>
       ${schedule.length > 0 && html`<div class="row" style="margin:4px 0 6px">
         <button type="button" class="btn plain grow" style="min-height:40px;font-size:14px" onClick=${() => { const entries = schedule.filter((x) => season !== current || x.date >= todayISO()).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || ''))); copyText(buildTaskOverview(team, entries.length ? entries : schedule, season), 'Takenoverzicht gekopieerd · plak het in WhatsApp'); }}><${Icon} name="copy" size=${16} /> Takenoverzicht</button>
         <button type="button" class="btn plain grow" style="min-height:40px;font-size:14px" onClick=${() => shareFile(`hockey-${team.name.replace(/[^A-Za-z0-9]+/g, '-')}-${season}.ics`, buildICS(team, schedule.slice().sort((a, b) => a.date.localeCompare(b.date))), 'text/calendar')}><${Icon} name="calendar" size=${16} /> Agenda</button>
       </div>`}
-      ${list.map(row)}
+      ${!upcoming.length && html`<span class="sub">Geen wedstrijden meer gepland.</span>`}
+      ${(moreP ? upcoming : upcoming.slice(0, SHOW)).map(planRow)}
+      ${upcoming.length > SHOW && html`<button type="button" class="morebtn" onClick=${() => setMoreP(!moreP)}>${moreP ? 'Minder tonen' : `Laat meer zien… (${upcoming.length - SHOW})`}</button>`}
       <button type="button" class="addtile" onClick=${newEntry}><${Icon} name="plus" size=${20} /> Wedstrijd toevoegen</button>
+    </section>
+
+    <section class="card" style="gap:4px">
+      <div class="between"><span class="h2">Uitslagen</span><span class="small">${seasonLabel(season)}</span></div>
+      ${!results.length && html`<span class="sub">Nog geen gespeelde wedstrijden dit seizoen.</span>`}
+      ${(moreR ? results : results.slice(0, SHOW)).map(resultRow)}
+      ${results.length > SHOW && html`<button type="button" class="morebtn" onClick=${() => setMoreR(!moreR)}>${moreR ? 'Minder tonen' : `Laat meer zien… (${results.length - SHOW})`}</button>`}
     </section>
 
     <section class="card" style="gap:2px">
