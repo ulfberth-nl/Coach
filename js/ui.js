@@ -110,6 +110,23 @@ export function Neon({ children, box, cls = '' }) {
   return html`<span class=${'neon ' + (box ? 'box ' : '') + cls}><span class="glow"></span><span class="ring"></span><span class="in">${children}</span></span>`;
 }
 
+// Rollende cijfers: elk teken schuift verend omhoog als het verandert
+function RollSlot({ c }) {
+  const r = useRef(null);
+  if (!r.current) r.current = { cur: c, prev: null, n: 0, at: 0 };
+  const s = r.current;
+  if (c !== s.cur) { s.prev = s.cur; s.cur = c; s.n++; s.at = Date.now(); }
+  const showOut = s.prev != null && Date.now() - s.at < 420;
+  return html`<span class=${'rslot' + (c === ':' ? ' colon' : '')}>
+    ${showOut ? html`<i key=${'o' + s.n} class="out">${s.prev}</i>` : null}
+    <i key=${'i' + s.n} class=${s.n ? 'in' : ''}>${c}</i>
+  </span>`;
+}
+export function Roll({ text, cls = '' }) {
+  const chars = [...String(text)];
+  return html`<span class=${'roll ' + cls} aria-label=${String(text)}>${chars.map((c, k) => html`<${RollSlot} key=${chars.length - k} c=${c} />`)}</span>`;
+}
+
 export function Pill({ name, neon, kind = '', title }) {
   const p = html`<span class=${'pill ' + kind} title=${title || name}>${name}</span>`;
   return neon ? html`<${Neon}>${p}</${Neon}>` : p;
@@ -203,7 +220,29 @@ export function Icon({ name, size = 22 }) {
 
 // ---------- het veld ----------
 // slots: { V0: id, M0: id, A0: id, ... }  aanval boven, eigen doel (keeper) onder
-export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false, picking = false, hot = null, hotKey = 0 }) {
+export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false, picking = false, hot = null, hotKey = 0, ghosts = null, animate = false }) {
+  // nieuwe speler op een plek: pil springt op en draait om; wie verschuift, glijdt naar zijn nieuwe plek
+  const sk = JSON.stringify(slots);
+  const mem = useRef(null);
+  if (!mem.current) mem.current = { sk, slots, flips: {} };
+  if (mem.current.sk !== sk) {
+    if (animate) {
+      const p = mem.current.slots || {};
+      const nowIds = new Set(Object.values(slots).filter(Boolean));
+      const prevIds = new Set(Object.values(p).filter(Boolean));
+      const gone = [...prevIds].filter((x) => !nowIds.has(x));
+      let gi = 0;
+      const t = Date.now();
+      for (const k of Object.keys(slots)) {
+        const id = slots[k];
+        if (!id || p[k] === id || prevIds.has(id)) continue;
+        const from = p[k] && !nowIds.has(p[k]) ? p[k] : gone[gi++] || p[k];
+        if (from) mem.current.flips[k] = { from, t };
+      }
+    }
+    mem.current.sk = sk; mem.current.slots = slots;
+  }
+  const flipOf = (k) => { const f = mem.current.flips[k]; return f && Date.now() - f.t < 1300 ? f : null; };
   const rows = ['V', 'M', 'A'].filter((l) => (lines[l] || 0) > 0);
   // linies gelijk verdeeld tussen de bovenrand en de keeper (middelpunten in %)
   const START = 5, END = 78;
@@ -218,10 +257,16 @@ export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = []
   const spot = (id, left, top, key) => {
     const name = id ? nick(id) : '—';
     const isNeon = id && neon.indexOf(id) !== -1;
-    const pill = html`<span class=${'pill ' + pillKind(id)} style=${pillStyle}>${name}</span>`;
-    return html`<button type="button" class=${'spot' + (hot && hot === id ? ' scored' : '')} key=${(id || key) + (hot === id ? ':' + hotKey : '')} data-pid=${id || ''} style=${`left:${left};top:${top}`} disabled=${!onTap || !id} onClick=${() => onTap && id && onTap(id)} aria-label=${name}>
+    const fl = id ? flipOf(key) : null;
+    const g = ghosts && id ? ghosts[id] : null;
+    const pill = fl
+      ? html`<span class="pcard flip"><span class=${'pill face front ' + pillKind(id)} style=${pillStyle}>${nick(fl.from)}</span><span class="pill face back" style=${pillStyle}>${name}</span></span>`
+      : html`<span class=${'pill ' + pillKind(id)} style=${pillStyle}>${name}</span>`;
+    const ghost = g ? html`<span class=${'ghost ' + g.kind + (g.hot ? ' hot' : '') + (parseFloat(left) > 50 ? ' right' : '')} aria-hidden="true"><b>${g.name}${g.dir ? html`<small>${g.dir}</small>` : ''}</b></span>` : null;
+    return html`<button type="button" class=${'spot' + (hot && hot === id ? ' scored' : '') + (fl ? ' flipping' : '') + (g ? ' has-ghost' : '')} key=${(id || key) + (hot === id ? ':' + hotKey : '')} data-pid=${id || ''} style=${`left:${left};top:${top}`} disabled=${!onTap || !id} onClick=${() => onTap && id && onTap(id)} aria-label=${name}>
       ${hot && hot === id && html`<span class="goalburst">Goal!</span>`}
-      ${isNeon && !picking ? html`<${Neon}>${pill}</${Neon}>` : pill}
+      ${ghost}
+      ${isNeon && !picking && !fl ? html`<${Neon}>${pill}</${Neon}>` : pill}
       ${sub && id && sub(id) ? html`<span class="time">${sub(id)}</span>` : null}
       ${below && id ? below(id) : null}
     </button>`;

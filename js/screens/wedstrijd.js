@@ -6,7 +6,7 @@ import { PlanView } from '../planview.js';
 import { keeperCounts, suggestKeeper, WHY_TEXT } from './home.js';
 import { nextScheduled, todayISO } from './seizoen.js';
 import { mutate, undoAction, SwapSheet, GroupSwapSheet, BenchSheet, GoalSheet, BreakSheet, JoinSheet, KeeperSheet } from './live.js';
-import { Field, Neon, Sheet, Confirm, Seg, Switch, Icon, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, beep, flash, unlockAudio, toast, go, STANDS } from '../ui.js';
+import { Field, Neon, Roll, Sheet, Confirm, Seg, Switch, Icon, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, beep, flash, unlockAudio, toast, go, STANDS } from '../ui.js';
 
 // ---------- concept-wedstrijd (nog niet begonnen) ----------
 export function newConcept(d) {
@@ -280,18 +280,38 @@ function LiveView({ match, team }) {
   // doelpunt in het veld: 'who' (voor wie?) → 'scorer' (tik de speler); daarna een feestje met 'ongedaan maken'
   const [goal, setGoal] = useState(null);
   const [cele, setCele] = useState(null);
-  useEffect(() => { if (!cele) return undefined; const t = setTimeout(() => setCele(null), 6000); return () => clearTimeout(t); }, [cele]);
+  useEffect(() => { if (!cele) return undefined; const t = setTimeout(() => setCele(null), 3000); return () => clearTimeout(t); }, [cele]);
+  // actiepil boven de keeper: ongedaan maken (en bij naar de bank: kan terug / rust / klaar)
+  const [act, setAct] = useState(null);
+  useEffect(() => { if (!act) return undefined; const t = setTimeout(() => setAct(null), act.out ? 7000 : 6000); return () => clearTimeout(t); }, [act && act.key, act && act.status]);
+  const showAct = (a) => { const v = { key: Date.now(), undos: 1, out: null, status: 'terug', top: false, ...a }; v.base = v.status !== 'terug' ? v.undos - (v.outs ? v.outs.length : 1) : v.undos; setAct(v); };
+  const undoAct = () => {
+    const n = act.undos;
+    mutate((m, t) => { for (let k = 0; k < n; k++) M.undo(m, t); });
+    setAct(null); setCele(null);
+  };
+  // status van wie eruit ging: 'terug' (kan terug), 'periode' (rust), 'wedstrijd' (klaar)
+  const setStatus = (v) => {
+    if (!act || v === act.status) return;
+    const ids = act.outs || [act.out];
+    mutate((m, t) => {
+      if (act.status !== 'terug') for (const id of ids) { const u = M.lastUndoable(m); if (u && u.ev.type === 'disable' && ids.indexOf(u.ev.playerId) !== -1) M.undo(m, t); }
+      if (v !== 'terug') for (const id of ids) M.disablePlayer(m, t, id, v);
+    });
+    setAct({ ...act, status: v, undos: act.base + (v !== 'terug' ? ids.length : 0) });
+  };
   const scoreFor = (id) => {
     mutate((m, t) => M.goal(m, t, id));
     setGoal(null);
     setCele({ us: true, id, key: Date.now() });
+    showAct({ top: !!id && id === d.state.keeper });
   };
   const oppScores = () => {
     mutate((m, t) => M.oppGoal(m, t));
     setGoal(null);
     setCele({ us: false, key: Date.now() });
+    showAct({});
   };
-  const undoGoal = () => { undoAction.run(); setCele(null); };
 
   const alerted = useRef({});
   useEffect(() => {
@@ -306,19 +326,22 @@ function LiveView({ match, team }) {
 
   const toggleClock = () => {
     unlockAudio();
+    if (timeUp) { setSheet({ type: 'end' }); return; }
     if (running) { mutate((m) => M.pauseClock(m)); return; }
     if (pending) { setSheet({ type: 'break' }); return; }
     mutate((m) => M.startClock(m));
   };
 
+  // slepen in het live-scherm = nu wisselen; de actiepil maakt het ongedaan
   const onDrag = (a, b) => {
     const aF = a in d.state.pos, bF = b in d.state.pos;
-    if (aF && bF) { mutate((m, t) => M.movePlayers(m, t, a, b)); toast(`${nick(a)} ↔ ${nick(b)} van plek gewisseld`, undoAction); return; }
+    if (aF && bF) { mutate((m, t) => M.movePlayers(m, t, a, b)); showAct({}); return; }
     if (aF === bF) return;
     const out = aF ? a : b, inn = aF ? b : a;
-    if (d.state.disabled[inn]) { toast(nick(inn) + ' is nu niet inzetbaar'); return; }
-    mutate((m, t) => M.doSwap(m, t, out, inn, null));
-    toast(`${nick(inn)} erin voor ${nick(out)}`, undoAction);
+    let undos = 1;
+    // weer inzetten van een speler met rust/klaar heft die status op
+    mutate((m, t) => { if (d.state.disabled[inn]) { M.enablePlayer(m, t, inn); undos = 2; } M.doSwap(m, t, out, inn, null); });
+    showAct({ out, undos });
   };
   useDragSwap(zone, !pending && !goal, onDrag);
 
@@ -339,55 +362,93 @@ function LiveView({ match, team }) {
     else if (next) setSheet({ type: 'swap', out: next.out, in: next.in, planned: true });
   };
 
-  // smalle balk met het volgende moment
-  let bar;
-  if (pending) bar = { hot: true, title: `Rust · opstelling ${M.periodLabel(team, match.clock.period)}`, sub: 'tik om klaar te zetten' };
-  else if (timeUp) bar = { hot: true, title: `Tijd! Einde ${M.periodLabel(team, match.clock.period)}`, sub: 'tik om af te sluiten' };
-  else if (next) bar = { hot: countdown <= 60, title: countdown <= 0 ? 'Nu wisselen' : 'Wissel over ' + M.fmt(countdown),
-    sub: (group.length > 1 ? `${group.length} tegelijk: ${group.map((s) => nick(s.in)).join(', ')} erin` : `${nick(next.in)} erin voor ${nick(next.out)}`) + (next.fixed ? ' · aangepast' : ''),
-    n: countdown < -0.5 ? null : `${counts.done + 1}/${counts.total}`,
-    blink: countdown <= 60 ? (countdown <= 0 ? 0.32 : 0.32 + (countdown / 60) * 1.0) : 0,
-    late: countdown < -0.5 ? '−' + M.fmt(-countdown) : null,
-    progress: Math.max(0, Math.min(1, (T - (match.plan ? match.plan.at : 0)) / Math.max(1, next.t - (match.plan ? match.plan.at : 0)))) };
-  else bar = { hot: false, title: `Geen wissels meer deze ${M.periodWord(team)}`, calm: true };
-  if (timeUp && bar.hot && !pending) { bar.progress = 1; bar.blink = 0.32; }
-  const barInner = html`<span class=${'nextbar' + (bar.calm ? ' calm' : ' blue')}>
-    <span class="nb-top">
-      <span class="col grow" style="gap:0;min-width:0"><span class="nb-title">${bar.title}</span>${bar.sub && html`<span class="nb-sub">${bar.sub}</span>`}</span>
-      ${bar.n && html`<span class="nb-n">${bar.n}</span>`}
-      ${bar.late && html`<span class="nb-late" aria-label=${'Te laat: ' + bar.late}>${bar.late}</span>`}
-    </span>
-    ${bar.progress != null && html`<span class=${'nb-pill' + (bar.blink ? ' blink' : '')} style=${bar.blink ? `--blink:${bar.blink.toFixed(2)}s` : ''}><span style=${`width:${Math.max(6, bar.progress * 100)}%`}></span></span>`}
-  </span>`;
+  // ---------- wissel-eiland ----------
+  const LORD = { V: 0, M: 1, A: 2 };
+  const pw = M.periodWord(team);
+  let isl;
+  if (pending) isl = { st: 'hot', k: 'Rust', t1: `Opstelling ${M.periodLabel(team, match.clock.period)}`, t2: 'Tik om de opstelling klaar te zetten', ring: 'rust', full: true };
+  else if (timeUp) isl = { st: 'hot', k: 'Tijd!', t1: `Einde ${M.periodLabel(team, match.clock.period)}`, t2: 'Tik om af te sluiten', ring: 'eind', full: true };
+  else if (next) {
+    const n = counts.done + 1;
+    const late = countdown < -0.5;
+    const s0 = next;
+    const lineName = (id) => ({ V: 'voor', M: 'midden', A: 'achter' }[d.state.pos[id]] || '');
+    isl = {
+      st: late ? 'hot late' : countdown <= 60 ? 'hot' : '',
+      k: late ? `Te laat · wissel ${n}` : countdown <= 60 ? `Bijna · wissel ${n} van ${counts.total}` : `Volgende wissel · ${n} van ${counts.total}`,
+      t1: group.length > 1 ? html`${group.length} spelers tegelijk` : html`<em>${nick(s0.in)}</em> erin voor ${nick(s0.out)}`,
+      t2: (s0.fixed ? 'Aangepast · ' : '') + (group.length > 1 ? group.map((s) => nick(s.in)).join(', ') + ' erin'
+        : s0.shift && s0.shift.id in d.state.pos ? `${nick(s0.shift.id)} schuift door naar ${lineName(s0.out)}` : `${nick(s0.in)} gaat naar ${lineName(s0.out)}`),
+      ring: countdown <= 0 ? 'nu' : M.fmt(countdown),
+      late: late ? '−' + M.fmt(-countdown) : null,
+      frac: Math.max(0, Math.min(1, (T - (match.plan ? match.plan.at : 0)) / Math.max(1, next.t - (match.plan ? match.plan.at : 0)))),
+      breathe: countdown <= 0 ? 0.55 : 0.55 + (Math.max(0, countdown) / 60) * 1.1,
+    };
+  } else isl = { st: 'calm', k: 'Geen wissels meer', t1: `deze ${pw}`, t2: '', ring: null };
+  const C = 207.3;
+  const island = html`<button type="button" class=${'island jelly ' + isl.st} onClick=${openNext} disabled=${isl.st === 'calm'} style=${isl.breathe ? `--breathe:${isl.breathe.toFixed(2)}s` : ''}>
+    <span class="i-txt"><span class="i-k">${isl.k}</span><span class="i-t1">${isl.t1}</span>${isl.t2 && html`<span class="i-t2">${isl.t2}</span>`}</span>
+    ${isl.ring && html`<span class="i-ring"><svg viewBox="0 0 80 80" aria-hidden="true"><circle class="track" cx="40" cy="40" r="33" /><circle class="arc" cx="40" cy="40" r="33" stroke-dasharray=${C} stroke-dashoffset=${isl.full || countdown <= 0 ? 0 : (C * (isl.frac || 0)).toFixed(1)} /></svg><span class="i-lbl">${isl.ring}</span></span>`}
+    ${isl.late && html`<span class="i-late">${isl.late}</span>`}
+  </button>`;
+
+  // zwevende wisselspelers achter de plekken die gaan veranderen
+  const ghosts = {};
+  if (next && !pending && !goal && !timeUp) {
+    const hot = countdown <= 60;
+    for (const s of group) {
+      if (s.shift && s.shift.id in d.state.pos) {
+        const from = d.state.pos[s.shift.id], to = s.shift.to;
+        ghosts[s.out] = { name: nick(s.shift.id), kind: 'shift', dir: LORD[to] < LORD[from] ? '↑' : LORD[to] > LORD[from] ? '↓' : '↔', hot };
+        ghosts[s.shift.id] = { name: nick(s.in), kind: 'in', hot };
+      } else ghosts[s.out] = { name: nick(s.in), kind: 'in', hot };
+    }
+  }
+  // wie net naar de bank ging, valt erin
+  const benchMem = useRef({ ids: d.state.bench, at: {} });
+  for (const id of d.state.bench) if (benchMem.current.ids.indexOf(id) === -1) benchMem.current.at[id] = Date.now();
+  benchMem.current.ids = d.state.bench;
+  const dropped = (id) => Date.now() - (benchMem.current.at[id] || 0) < 900;
+
+  // ---------- scorebord ----------
+  const nextLabel = M.periodLabel(team, match.clock.period);
+  const startable = !running && !pending && el < 1 && match.clock.period > 0;
+  const bState = running ? (timeUp ? 'Tijd!' : nextLabel) : pending ? 'Rust' : startable ? 'Klaar voor de ' + nextLabel : 'Pauze · ' + nextLabel;
+  const bRight = pending ? 'tik: opstelling ' + nextLabel : timeUp ? 'tik om af te sluiten' : startable ? 'tik: start ' + nextLabel : el <= L ? 'nog ' + M.fmt(L - el) : '+' + M.fmt(el - L);
+  const scoreCls = d.score.us > d.score.them ? 'ahead' : d.score.us < d.score.them ? 'behind' : 'level';
+  const board = html`<section class=${'board' + (running ? '' : ' paused') + (timeUp ? ' over' : '')}>
+    <div class="b-top">
+      <button type="button" class="b-clock jelly" onClick=${toggleClock} aria-label=${running ? 'Klok loopt, tik om te pauzeren' : 'Klok staat stil, tik om te starten'}>
+        <${Roll} cls="b-digits" text=${M.fmt(Math.min(el, L))} />
+        <span class="b-state"><span class="b-dot"></span>${bState}</span>
+      </button>
+      <span class="b-div" aria-hidden="true"></span>
+      <button type="button" class=${'b-score jelly ' + scoreCls} onClick=${() => { setCele(null); setGoal(goal ? null : 'who'); }} aria-label=${`Stand ${d.score.us} tegen ${d.score.them}, tik bij een doelpunt`}>
+        <span class=${'b-sc' + (cele ? ' pop' : '')}><${Roll} cls="b-digits" text=${String(d.score.us)} /><span class="b-colon"><i></i><i></i></span><${Roll} cls="b-digits" text=${String(d.score.them)} /></span>
+        <span class="b-badges"><${TeamBadge} team=${team} size=${20} /><span class="b-tap">${goal ? 'annuleren' : 'tik bij goal'}</span><${OppBadge} name=${match.opponent} size=${22} /></span>
+      </button>
+    </div>
+    <button type="button" class="b-bottom" onClick=${toggleClock} tabindex="-1" aria-hidden="true">
+      <span class="b-periods" style=${`grid-template-columns:repeat(${team.periods},1fr)`}>${Array.from({ length: team.periods }, (_, p) => (p < match.clock.period ? html`<i class="done"><b></b></i>`
+        : p === match.clock.period ? html`<i><b style=${`width:${Math.min(100, (el / L) * 100)}%`}></b></i>` : html`<i><b></b></i>`))}</span>
+      <span class="b-plabel"><span>${pw} ${match.clock.period + 1} van ${team.periods}</span><span class="b-right">${bRight}</span></span>
+    </button>
+  </section>`;
 
   return html`<main class="matchscreen live">
     <${Affiche} match=${match} team=${team} onClick=${() => setSheet({ type: 'menu' })}>
       <button type="button" class="iconbtn" aria-label="Laatste actie ongedaan maken" disabled=${!M.lastUndoable(match)} onClick=${undoAction.run}><${Icon} name="undo" size=${20} /></button>
       <button type="button" class="iconbtn" aria-label="Menu" onClick=${() => setSheet({ type: 'menu' })}><${Icon} name="more" size=${22} /></button>
     </${Affiche}>
-    <div class="clockrow">
-      <button type="button" class=${'clockbtn ' + (running ? 'running' : 'stopped')} onClick=${toggleClock} aria-label=${running ? 'Klok loopt, tik om te pauzeren' : 'Klok staat stil, tik om te starten'}>
-        <span class="clockmain">
-          <span class="num clock" style=${el > L ? 'color:#B26A00' : ''}>${M.fmt(el)}</span>
-          <span class="clockstate">${running ? html`<span class="rundot"></span>${M.periodLabel(team, match.clock.period)}` : html`<span class="stopdot"></span>stil · ${M.periodLabel(team, match.clock.period)}`}</span>
-        </span>
-        <span class="periods" aria-hidden="true">
-          <span class=${'ptrack' + (team.periods > 2 ? ' q' : '')}>${Array.from({ length: team.periods }, (_, p) => (p < match.clock.period ? html`<i class="done"></i>`
-            : p === match.clock.period ? html`<i><b style=${`width:${Math.min(100, (el / L) * 100)}%`}></b></i>` : html`<i></i>`))}</span>
-          <span class=${'premain' + (el > L ? ' over' : '')}>${el <= L ? 'nog ' + M.fmt(L - el) : '+' + M.fmt(el - L)}</span>
-        </span>
-      </button>
-      <button type="button" class=${'scorebtn ' + (d.score.us > d.score.them ? 'ahead' : d.score.us < d.score.them ? 'behind' : 'level')} onClick=${() => { setCele(null); setGoal(goal ? null : 'who'); }} aria-label=${`Stand ${d.score.us} tegen ${d.score.them}, tik bij een doelpunt`}>
-        <span class="num score bump" key=${d.score.us + '-' + d.score.them}>${d.score.us}<span class="sep2">:</span>${d.score.them}</span>
-      </button>
-    </div>
-    <button type="button" class="nextbtn" onClick=${openNext} disabled=${bar.calm}>${barInner}</button>
+    ${board}
+    ${island}
     <div class="grow-field" ref=${zone}>
       <div class=${'fieldbox' + (goal ? ' goalmode' : '')}>
         <${Field} slots=${d.state.slots} lines=${team.lines} keeperId=${d.state.keeper} nick=${nick} height="auto"
           onTap=${tapField} onKeeper=${goal === 'scorer' ? (id) => scoreFor(id) : !pending ? () => setSheet({ type: 'keeper' }) : null}
           picking=${goal === 'scorer'} hot=${cele && cele.us ? cele.id : null} hotKey=${cele ? cele.key : 0}
-          neon=${next && !pending && !goal ? group.map((s) => s.out) : []} sub=${(id) => M.fmt(d.state.played[id])} />
+          neon=${next && !pending && !goal && !timeUp ? group.map((s) => s.out) : []} sub=${(id) => M.fmt(d.state.played[id])}
+          ghosts=${ghosts} animate />
         ${!goal && html`<button type="button" class="fieldtag right" onClick=${() => setSheet({ type: 'stand' })}>${STANDS.find(([v]) => v === stand)[1]}${match.standMode !== 'manual' && team.rules.autoStand ? ' · auto' : ''}</button>`}
         ${goal === 'who' && html`<div class="goalpick" role="dialog" aria-label="Doelpunt voor wie">
           <span class="gp-title">Doelpunt voor…</span>
@@ -407,7 +468,11 @@ function LiveView({ match, team }) {
           <span class="gc-text">${cele.us ? 'Goal!' : 'Tegengoal'}</span>
           <span class="gc-sub">${cele.us ? (cele.id ? nick(cele.id) + ' scoort' : 'voor ' + team.name) : d.score.us + ' : ' + d.score.them}</span>
         </div>`}
-        ${cele && html`<button type="button" class="undopill" key=${'u' + cele.key} onClick=${undoGoal}><${Icon} name="undo" size=${16} /> Ongedaan maken</button>`}
+        ${act && html`<div class=${'actpill' + (act.top ? ' top' : '') + (act.out || act.outs ? ' wide' : '')} key=${'a' + act.key} role="status">
+          ${(act.out || act.outs) && html`<span class="ap-who">${act.outs ? 'Eruit' : nick(act.out)}</span>
+            <span class="ap-seg" role="group" aria-label="Daarna">${[['terug', 'Kan terug'], ['periode', 'Rust'], ['wedstrijd', 'Klaar']].map(([v, l]) => html`<button type="button" class=${act.status === v ? 'on' : ''} aria-pressed=${act.status === v} onClick=${() => setStatus(v)}>${l}</button>`)}</span>`}
+          <button type="button" class="ap-undo" onClick=${undoAct} aria-label="Ongedaan maken"><${Icon} name="undo" size=${16} />${act.out || act.outs ? '' : html`<span>Ongedaan maken</span>`}</button>
+        </div>`}
       </div>
       <div class="benchrow">
         <span class="label">Bank</span>
@@ -415,7 +480,7 @@ function LiveView({ match, team }) {
           ${d.state.bench.map((id) => {
             const dis = d.state.disabled[id];
             const isNext = next && !pending && group.some((s) => s.in === id);
-            const pill = html`<button type="button" key=${id} data-pid=${id} class=${'benchpill' + (dis ? ' off' : '')} onClick=${() => tapBench(id)}>
+            const pill = html`<button type="button" key=${id} data-pid=${id} class=${'benchpill' + (dis ? ' off' : '') + (dropped(id) ? ' drop' : '')} onClick=${() => tapBench(id)}>
               ${nick(id)}<span class="t">${dis ? (dis === 'wedstrijd' ? 'klaar' : 'rust') : isNext ? 'klaarmaken' : M.mins(d.state.played[id]) + ' min'}</span>
             </button>`;
             return isNext ? html`<${Neon} key=${'n' + id}>${pill}</${Neon}>` : pill;
@@ -426,8 +491,8 @@ function LiveView({ match, team }) {
       </div>
     </div>
 
-    ${sheet && sheet.type === 'swap' && html`<${SwapSheet} match=${match} team=${team} d=${d} init=${sheet} counts=${counts} onClose=${() => setSheet(null)} />`}
-    ${sheet && sheet.type === 'group' && html`<${GroupSwapSheet} match=${match} team=${team} d=${d} counts=${counts} onClose=${() => setSheet(null)} />`}
+    ${sheet && sheet.type === 'swap' && html`<${SwapSheet} match=${match} team=${team} d=${d} init=${sheet} counts=${counts} onClose=${() => setSheet(null)} onDone=${showAct} />`}
+    ${sheet && sheet.type === 'group' && html`<${GroupSwapSheet} match=${match} team=${team} d=${d} counts=${counts} onClose=${() => setSheet(null)} onDone=${showAct} />`}
     ${sheet && sheet.type === 'bench' && html`<${BenchSheet} match=${match} team=${team} d=${d} id=${sheet.id} onClose=${() => setSheet(null)} openSwap=${(s) => setSheet({ type: 'swap', ...s, planned: false })} />`}
     ${sheet && sheet.type === 'break' && html`<${BreakSheet} match=${match} team=${team} d=${d} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'join' && html`<${JoinSheet} match=${match} team=${team} onClose=${() => setSheet(null)} />`}
