@@ -2,7 +2,7 @@ import { html, useEffect, useMemo, useRef, useState } from '../../vendor/preact-
 import { update, currentMatch } from '../store.js';
 import * as M from '../match.js';
 import { LINE_NAMES } from '../planner.js';
-import { Field, Neon, Sheet, Confirm, Seg, Switch, Icon, TeamBadge, OppBadge, useNow, useWakeLock, useDragSwap, justDragged, beep, flash, unlockAudio, toast, go, STANDS, POS_COLORS } from '../ui.js';
+import { Field, accentFor, Neon, Sheet, Confirm, Seg, Switch, Icon, TeamBadge, OppBadge, useNow, useWakeLock, useDragSwap, justDragged, beep, flash, unlockAudio, toast, go, STANDS, POS_COLORS, POS_NAMES } from '../ui.js';
 
 
 // Pas de huidige wedstrijd aan (in één keer opgeslagen).
@@ -23,6 +23,12 @@ export const undoAction = { label: 'Ongedaan', run: () => { const ev = mutate((m
 // ---------- wissel: schets bovenin (tik een tegel om te kiezen), knoppen in vaste balk ----------
 // Labels: "plan" = de volgende wissel uit het actuele plan (dat na elke afwijking opnieuw wordt berekend);
 // "advies" = kies je zelf een andere speler, dan is dit de beste partner voor die keuze.
+// dominante rol als klein gekleurd label achter de naam
+function domChip(team, id) {
+  const p = team.players.find((x) => x.id === id);
+  return p && p.main ? html` <span class="dom" style=${'--acc:' + POS_COLORS[p.main]}>${POS_NAMES[p.main]}</span>` : null;
+}
+
 export function SwapSheet({ match, team, d, init, counts, onClose, onDone }) {
   const st = d.state;
   const pending = M.lineupPending(match, team);
@@ -81,7 +87,7 @@ export function SwapSheet({ match, team, d, init, counts, onClose, onDone }) {
     return html`<button type="button" key=${side + id} class=${'prow2' + (side === 'out' ? ' warm' : '') + (on ? ' on' : '')} onClick=${() => choose(side, id)}>
       <span class="ldot" style=${`background:${st.pos[id] ? POS_COLORS[st.pos[id]] : 'var(--line-2)'}`}></span>
       <span class="col grow" style="gap:1px;min-width:0">
-        <span class="pr-name">${nick(id)}${tag && html` <span class=${'tag ' + tag}>${tag}</span>`}</span>
+        <span class="pr-name">${nick(id)}${domChip(team, id)}${tag && html` <span class=${'tag ' + tag}>${tag}</span>`}</span>
         <span class="pr-meta">${st.pos[id] ? LINE_NAMES[st.pos[id]] + ' · ' : ''}${M.mins(st.played[id])} min · ${t ? t + '× gewisseld' : 'nog niet gewisseld'}</span>
       </span>
       ${on && html`<span class="pr-check" aria-hidden="true">✓</span>`}
@@ -198,7 +204,7 @@ export function GroupSwapSheet({ match, team, d, counts, onClose, onDone }) {
     return html`<button type="button" key=${side + id} class=${'prow2' + (side === 'out' ? ' warm' : '') + (cur === id ? ' on' : '')} onClick=${() => setPair(i, side, id)}>
       <span class="ldot" style=${`background:${st.pos[id] ? POS_COLORS[st.pos[id]] : 'var(--line-2)'}`}></span>
       <span class="col grow" style="gap:1px;min-width:0">
-        <span class="pr-name">${nick(id)}${tag && html` <span class="tag plan">plan</span>`}</span>
+        <span class="pr-name">${nick(id)}${domChip(team, id)}${tag && html` <span class="tag plan">plan</span>`}</span>
         <span class="pr-meta">${st.pos[id] ? LINE_NAMES[st.pos[id]] + ' · ' : ''}${M.mins(st.played[id])} min · ${t ? t + '× gewisseld' : 'nog niet gewisseld'}</span>
       </span>
       ${cur === id && html`<span class="pr-check" aria-hidden="true">✓</span>`}
@@ -338,11 +344,11 @@ export function BreakSheet({ match, team, d, onClose }) {
     <span class="h2" style="font-size:22px">Opstelling ${M.periodLabel(team, match.clock.period)}</span>
     <span class="sub" style="color:var(--ink)">${comingIn.length ? html`<span class="chg in">Erin: ${comingIn.map(nick).join(', ')}</span> <span class="chg out">Eruit: ${goingOut.map(nick).join(', ')}</span>` : 'Dezelfde spelers, posities opnieuw verdeeld.'}</span>
     <div ref=${zone} class="col" style="gap:8px">
-      <${Field} slots=${lu.slots} lines=${team.lines} keeperId=${d.state.keeper} nick=${nick} height=${360} onTap=${() => {}} neon=${comingIn} />
+      <${Field} slots=${lu.slots} lines=${team.lines} keeperId=${d.state.keeper} nick=${nick} height=${360} onTap=${() => {}} neon=${comingIn} accent=${accentFor(team)} />
       <div class="benchrow">
         <span class="label">Bank</span>
         <div class="scroll">
-          ${lu.bench.map((id) => html`<button type="button" key=${id} data-pid=${id} class="benchpill">${nick(id)}<span class="t">${M.mins(d.state.played[id])} min</span></button>`)}
+          ${lu.bench.map((id) => html`<button type="button" key=${id} data-pid=${id} class=${'benchpill' + (accentFor(team)(id) ? ' acc' : '')} style=${accentFor(team)(id) ? '--acc:' + accentFor(team)(id) : ''}>${nick(id)}<span class="t">${M.mins(d.state.played[id])} min</span></button>`)}
         </div>
       </div>
     </div>

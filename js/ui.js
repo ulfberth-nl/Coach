@@ -223,33 +223,41 @@ export function Icon({ name, size = 22 }) {
 
 // ---------- het veld ----------
 // slots: { V0: id, M0: id, A0: id, ... }  aanval boven, eigen doel (keeper) onder
-export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false, picking = false, hot = null, hotKey = 0, ghosts = null, animate = false }) {
-  // nieuwe speler op een plek: pil springt op en draait om; wie verschuift, glijdt naar zijn nieuwe plek
+export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false, picking = false, hot = null, hotKey = 0, ghosts = null, animate = false, accent = null, badges = null, cheer = null }) {
+  const rows = ['V', 'M', 'A'].filter((l) => (lines[l] || 0) > 0);
+  // linies gelijk verdeeld tussen de bovenrand en de keeper (middelpunten in %)
+  const START = 5, END = 78;
+  const tops = rows.map((_, r) => `${START + ((r + 0.5) * (END - START)) / rows.length}%`);
+  const where = (k) => { const l = k[0], i = +k.slice(1), r = rows.indexOf(l); return r === -1 ? null : { left: `${((i + 1) / (lines[l] + 1)) * 100}%`, top: tops[r] }; };
+  // wissel: wie eruit gaat zakt weg richting bank, wie erin komt stapt vanaf zijn zweefplek in; doorschuivers glijden
   const sk = JSON.stringify(slots);
   const mem = useRef(null);
-  if (!mem.current) mem.current = { sk, slots, flips: {} };
+  if (!mem.current) mem.current = { sk, slots, enters: {}, exits: [], ever: {} };
   if (mem.current.sk !== sk) {
     if (animate) {
       const p = mem.current.slots || {};
       const nowIds = new Set(Object.values(slots).filter(Boolean));
       const prevIds = new Set(Object.values(p).filter(Boolean));
-      const gone = [...prevIds].filter((x) => !nowIds.has(x));
-      let gi = 0;
       const t = Date.now();
+      let n = 0;
+      for (const k of Object.keys(p)) {
+        const id = p[k];
+        if (!id || nowIds.has(id)) continue;
+        const w = where(k);
+        if (w) mem.current.exits.push({ id, name: nick(id), ...w, t, i: n++ });
+      }
+      n = 0;
       for (const k of Object.keys(slots)) {
         const id = slots[k];
-        if (!id || p[k] === id || prevIds.has(id)) continue;
-        const from = p[k] && !nowIds.has(p[k]) ? p[k] : gone[gi++] || p[k];
-        if (from) mem.current.flips[k] = { from, t };
+        if (id && !prevIds.has(id)) { mem.current.enters[id] = { t, i: n++ }; mem.current.ever[id] = 1; }
       }
     }
     mem.current.sk = sk; mem.current.slots = slots;
   }
-  const flipOf = (k) => { const f = mem.current.flips[k]; return f && Date.now() - f.t < 1300 ? f : null; };
-  const rows = ['V', 'M', 'A'].filter((l) => (lines[l] || 0) > 0);
-  // linies gelijk verdeeld tussen de bovenrand en de keeper (middelpunten in %)
-  const START = 5, END = 78;
-  const tops = rows.map((_, r) => `${START + ((r + 0.5) * (END - START)) / rows.length}%`);
+  const now = Date.now();
+  mem.current.exits = mem.current.exits.filter((x) => now - x.t < 1900);
+  for (const id in mem.current.enters) if (now - mem.current.enters[id].t > 2500) delete mem.current.enters[id];
+  const enterOf = (id) => { const e = mem.current.enters[id]; return e && now - e.t < 1700 ? e : null; };
   const total = rows.reduce((a, l) => a + lines[l], 0);
   const widest = Math.max(1, ...rows.map((l) => lines[l]));
   let size = total <= 6 ? 'l' : total <= 8 ? 'm' : total <= 10 ? 's' : 'xs';
@@ -257,33 +265,51 @@ export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = []
   const maxPx = { l: 116, m: 92, s: 76, xs: 66 }[size];
   const pillKind = (id) => (dashed.indexOf(id) !== -1 ? 'dashed' : '') + (muted.indexOf(id) !== -1 ? ' muted' : '') + (selected === id ? ' orange' : '');
   const pillStyle = `max-width:min(${maxPx}px, calc(${(100 / (widest + 1)).toFixed(2)}cqw - 6px))`;
+  const accStyle = (id) => { const c = accent && id ? accent(id) : null; return c ? `;--acc:${c}` : ''; };
+  const goalMark = (id) => (hot && hot === id
+    ? html`<span class="ripple" aria-hidden="true"></span><span class="ripple r2" aria-hidden="true"></span><span class="goalburst">+1</span>`
+    : badges && badges[id] ? html`<span class="gbadge" aria-label=${badges[id] + ' doelpunt' + (badges[id] > 1 ? 'en' : '')}>${badges[id]}</span>` : null);
   const spot = (id, left, top, key) => {
     const name = id ? nick(id) : '—';
     const isNeon = id && neon.indexOf(id) !== -1;
-    const fl = id ? flipOf(key) : null;
+    const en = id ? enterOf(id) : null;
     const g = ghosts && id ? ghosts[id] : null;
-    const pill = fl
-      ? html`<span class="pcard flip"><span class=${'pill face front ' + pillKind(id)} style=${pillStyle}>${nick(fl.from)}</span><span class="pill face back" style=${pillStyle}>${name}</span></span>`
-      : html`<span class=${'pill ' + pillKind(id)} style=${pillStyle}>${name}</span>`;
-    const ghost = g ? html`<span class=${'ghost ' + g.kind + (g.hot ? ' hot' : '') + (parseFloat(left) > 50 ? ' right' : '')} aria-hidden="true"><b>${g.name}${g.dir ? html`<small>${g.dir}</small>` : ''}</b></span>` : null;
-    return html`<button type="button" class=${'spot' + (hot && hot === id ? ' scored' : '') + (fl ? ' flipping' : '') + (g ? ' has-ghost' : '')} key=${(id || key) + (hot === id ? ':' + hotKey : '')} data-pid=${id || ''} style=${`left:${left};top:${top}`} disabled=${!onTap || !id} onClick=${() => onTap && id && onTap(id)} aria-label=${name}>
-      ${hot && hot === id && html`<span class="ripple" aria-hidden="true"></span><span class="ripple r2" aria-hidden="true"></span><span class="goalburst">+1</span>`}
+    const right = parseFloat(left) > 50;
+    const acc = accStyle(id);
+    const pill = html`<span class=${'pill ' + pillKind(id) + (acc ? ' acc' : '')} style=${pillStyle + acc}>${name}</span>`;
+    const ghost = g ? html`<span class=${'ghost ' + g.kind + (g.hot ? ' hot' : '') + (right ? ' right' : '')} aria-hidden="true"><b>${g.name}${g.dir ? html`<small>${g.dir}</small>` : ''}</b></span>` : null;
+    // 'e' blijft staan zodat de binnenkom-animatie niet terugvalt op de pop-animatie
+    const cls = 'spot' + (hot && hot === id ? ' scored' : '') + (id && mem.current.ever[id] ? ' e' : '') + (right ? ' from-left' : '') + (g ? ' has-ghost' : '');
+    return html`<button type="button" class=${cls} key=${(id || key) + (hot === id ? ':' + hotKey : '')} data-pid=${id || ''} data-line=${key[0]}
+      style=${`left:${left};top:${top};--ci:${key.slice(1)}` + (en ? `;--d:${(0.3 + en.i * 0.18).toFixed(2)}s` : '')} disabled=${!onTap || !id} onClick=${() => onTap && id && onTap(id)} aria-label=${name}>
+      ${goalMark(id)}
       ${ghost}
-      ${isNeon && !picking && !fl ? html`<${Neon}>${pill}</${Neon}>` : pill}
-      ${sub && id && sub(id) ? html`<span class="time">${sub(id)}</span>` : null}
-      ${below && id ? below(id) : null}
+      <span class=${'sp-in' + (en ? ' entering' : '')}>
+        ${isNeon && !picking && !en ? html`<${Neon}>${pill}</${Neon}>` : pill}
+        ${sub && id && sub(id) ? html`<span class="time">${sub(id)}</span>` : null}
+        ${below && id ? below(id) : null}
+      </span>
     </button>`;
   };
-  return html`<div class=${'field sz-' + size + (picking ? ' picking' : '')} style=${`height:${typeof height === 'number' ? height + 'px' : height}`}>
+  const cheerCls = cheer ? ' cheer-' + cheer.line + (cheer.n % 2 ? ' ca' : ' cb') : '';
+  return html`<div class=${'field sz-' + size + (picking ? ' picking' : '') + cheerCls} style=${`height:${typeof height === 'number' ? height + 'px' : height}`}>
     <span class="lines"></span>
     <span class="arc top"></span>
     <span class="arc bottom"></span>
+    ${mem.current.exits.map((x) => html`<span class="spot exitspot" key=${'x' + x.id + x.t} style=${`left:${x.left};top:${x.top};--d:${(x.i * 0.18).toFixed(2)}s`} aria-hidden="true"><span class="pill" style=${pillStyle}>${x.name}</span></span>`)}
     ${rows.flatMap((l, r) => {
       const n = lines[l];
       return Array.from({ length: n }, (_, i) => spot(slots[l + i], `${((i + 1) / (n + 1)) * 100}%`, tops[r], l + i));
     })}
-    ${keeperId && html`<button type="button" class=${'spot keeperspot' + (hot && hot === keeperId ? ' scored' : '')} key=${'k' + keeperId + (hot === keeperId ? ':' + hotKey : '')} style="left:50%;bottom:16px;top:auto" disabled=${!onKeeper} onClick=${() => onKeeper && onKeeper(keeperId)} aria-label=${'Keeper ' + nick(keeperId)}>${hot && hot === keeperId && html`<span class="ripple" aria-hidden="true"></span><span class="ripple r2" aria-hidden="true"></span><span class="goalburst">+1</span>`}<${KeeperPill} name=${nick(keeperId)} /></button>`}
+    ${keeperId && html`<button type="button" class=${'spot keeperspot' + (hot && hot === keeperId ? ' scored' : '')} key=${'k' + keeperId + (hot === keeperId ? ':' + hotKey : '')} style="left:50%;bottom:16px;top:auto" disabled=${!onKeeper} onClick=${() => onKeeper && onKeeper(keeperId)} aria-label=${'Keeper ' + nick(keeperId)}>${goalMark(keeperId)}<${KeeperPill} name=${nick(keeperId)} /></button>`}
   </div>`;
+}
+
+// kleur van de dominante rol (zelfde kleuren als bij de speler), voor een accent links in de pil
+export function accentFor(team) {
+  const byId = {};
+  for (const p of team.players) byId[p.id] = p;
+  return (id) => { const p = byId[id]; return p && p.main ? POS_COLORS[p.main] : null; };
 }
 
 export function PosBar({ parts }) {

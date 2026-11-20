@@ -3,7 +3,7 @@
 import { html, useState, useMemo, useRef, useEffect } from '../vendor/preact-htm.js';
 import * as M from './match.js';
 import { LINE_NAMES } from './planner.js';
-import { Field, Icon, POS_COLORS, useDragSwap } from './ui.js';
+import { Field, Icon, POS_COLORS, useDragSwap, accentFor } from './ui.js';
 
 const BENCH = '#DCE2EE';
 
@@ -181,12 +181,12 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
     <div ref=${zone} class="scrubzone">
       <div class=${'fieldbox' + (live && i < nowIndex ? ' past' : '')}>
         <${Field} slots=${c.slots} lines=${team.lines} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
-          onTap=${() => {}} neon=${ch.in} dashed=${ch.shift ? [ch.shift.id] : []} />
+          onTap=${() => {}} neon=${ch.in} dashed=${ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} />
       </div>
       <div class="benchrow">
         <span class="label">Bank</span>
         <div class="scroll">
-          ${c.bench.map((id) => html`<button type="button" class=${'benchpill' + (ch.out.indexOf(id) !== -1 ? ' wasout' : '')} key=${id} data-pid=${id}>${nick(id)}${ch.out.indexOf(id) !== -1 ? html`<span class="t">eruit</span>` : ''}</button>`)}
+          ${c.bench.map((id) => { const ac = accentFor(team)(id); return html`<button type="button" class=${'benchpill' + (ch.out.indexOf(id) !== -1 ? ' wasout' : '') + (ac ? ' acc' : '')} style=${ac ? '--acc:' + ac : ''} key=${id} data-pid=${id}>${nick(id)}${ch.out.indexOf(id) !== -1 ? html`<span class="t">eruit</span>` : ''}</button>`; })}
           ${!c.bench.length && html`<span class="small">niemand</span>`}
         </div>
       </div>

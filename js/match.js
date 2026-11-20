@@ -558,6 +558,19 @@ export function oppGoal(match, team) {
   replan(match, team);
 }
 
+// Stand handmatig aanpassen: haal het laatste doelpunt van deze speler (null = onbekend) of de laatste tegengoal weg.
+export function removeGoal(match, team, scorer, opp = false) {
+  for (let i = match.events.length - 1; i >= 0; i--) {
+    const e = match.events[i];
+    if (opp ? e.type === 'oppgoal' : e.type === 'goal' && (e.scorer || null) === (scorer || null)) {
+      match.events.splice(i, 1);
+      replan(match, team);
+      return true;
+    }
+  }
+  return false;
+}
+
 export function setScorer(match, eventId, scorer) {
   const ev = match.events.find((e) => e.id === eventId);
   if (ev) ev.scorer = scorer || null;
