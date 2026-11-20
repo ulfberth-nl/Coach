@@ -212,7 +212,10 @@ export function Icon({ name, size = 22 }) {
     more: 'M5 12h.01M12 12h.01M19 12h.01',
     copy: 'M9 9h11v12H9zM5 15V3h11',
     calendar: 'M4 6h16v15H4zM4 10h16M8 3v5M16 3v5',
-    clock: 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2'
+    clock: 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2',
+    up2: 'M7 12l5-5 5 5M7 18l5-5 5 5',
+    down2: 'M7 6l5 5 5-5M7 12l5 5 5-5',
+    even: 'M6 9.5h12M6 14.5h12'
   };
   const filled = name === 'play' || name === 'pause';
   return html`<svg width=${size} height=${size} viewBox="0 0 24 24" fill=${filled ? 'currentColor' : 'none'} stroke=${filled ? 'none' : 'currentColor'} stroke-width=${name === 'more' ? 3.6 : 2.2} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${paths[name]} /></svg>`;
@@ -264,7 +267,7 @@ export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = []
       : html`<span class=${'pill ' + pillKind(id)} style=${pillStyle}>${name}</span>`;
     const ghost = g ? html`<span class=${'ghost ' + g.kind + (g.hot ? ' hot' : '') + (parseFloat(left) > 50 ? ' right' : '')} aria-hidden="true"><b>${g.name}${g.dir ? html`<small>${g.dir}</small>` : ''}</b></span>` : null;
     return html`<button type="button" class=${'spot' + (hot && hot === id ? ' scored' : '') + (fl ? ' flipping' : '') + (g ? ' has-ghost' : '')} key=${(id || key) + (hot === id ? ':' + hotKey : '')} data-pid=${id || ''} style=${`left:${left};top:${top}`} disabled=${!onTap || !id} onClick=${() => onTap && id && onTap(id)} aria-label=${name}>
-      ${hot && hot === id && html`<span class="goalburst">Goal!</span>`}
+      ${hot && hot === id && html`<span class="ripple" aria-hidden="true"></span><span class="ripple r2" aria-hidden="true"></span><span class="goalburst">+1</span>`}
       ${ghost}
       ${isNeon && !picking && !fl ? html`<${Neon}>${pill}</${Neon}>` : pill}
       ${sub && id && sub(id) ? html`<span class="time">${sub(id)}</span>` : null}
@@ -279,7 +282,7 @@ export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = []
       const n = lines[l];
       return Array.from({ length: n }, (_, i) => spot(slots[l + i], `${((i + 1) / (n + 1)) * 100}%`, tops[r], l + i));
     })}
-    ${keeperId && html`<button type="button" class=${'spot keeperspot' + (hot && hot === keeperId ? ' scored' : '')} key=${'k' + keeperId + (hot === keeperId ? ':' + hotKey : '')} style="left:50%;bottom:16px;top:auto" disabled=${!onKeeper} onClick=${() => onKeeper && onKeeper(keeperId)} aria-label=${'Keeper ' + nick(keeperId)}><${KeeperPill} name=${nick(keeperId)} /></button>`}
+    ${keeperId && html`<button type="button" class=${'spot keeperspot' + (hot && hot === keeperId ? ' scored' : '')} key=${'k' + keeperId + (hot === keeperId ? ':' + hotKey : '')} style="left:50%;bottom:16px;top:auto" disabled=${!onKeeper} onClick=${() => onKeeper && onKeeper(keeperId)} aria-label=${'Keeper ' + nick(keeperId)}>${hot && hot === keeperId && html`<span class="ripple" aria-hidden="true"></span><span class="ripple r2" aria-hidden="true"></span><span class="goalburst">+1</span>`}<${KeeperPill} name=${nick(keeperId)} /></button>`}
   </div>`;
 }
 

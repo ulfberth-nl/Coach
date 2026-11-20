@@ -5,7 +5,7 @@ import { suggestKeeper } from './home.js';
 import { rebuildConcept } from './wedstrijd.js';
 import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, toast, STANDS } from '../ui.js';
 
-export const APP_VERSION = '0.12.0';
+export const APP_VERSION = '0.12.1';
 
 // Eerlijkheid in drie standen; zetten de onderliggende regels in één keer
 const FAIR = {

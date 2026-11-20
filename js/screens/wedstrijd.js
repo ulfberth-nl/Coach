@@ -6,7 +6,7 @@ import { PlanView } from '../planview.js';
 import { keeperCounts, suggestKeeper, WHY_TEXT } from './home.js';
 import { nextScheduled, todayISO } from './seizoen.js';
 import { mutate, undoAction, SwapSheet, GroupSwapSheet, BenchSheet, GoalSheet, BreakSheet, JoinSheet, KeeperSheet } from './live.js';
-import { Field, Neon, Roll, Sheet, Confirm, Seg, Switch, Icon, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, beep, flash, unlockAudio, toast, go, STANDS } from '../ui.js';
+import { Field, Neon, Roll, Sheet, Confirm, Seg, Icon, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, beep, flash, unlockAudio, toast, go } from '../ui.js';
 
 // ---------- concept-wedstrijd (nog niet begonnen) ----------
 export function newConcept(d) {
@@ -258,6 +258,50 @@ function OpponentSheet({ match, upcoming = [], onClose }) {
 }
 
 // ================= live =================
+// ---------- focus van de opstelling: verticale rail langs het veld ----------
+// Boven = aanvallen, midden = balans, onder = verdedigen (zoals het veld: aanval boven, eigen doel onder).
+const FOCUS = [['aanvallen', 'Aanvallen', 'up2'], ['balans', 'Balans', 'even'], ['verdedigen', 'Verdedigen', 'down2']];
+function FocusRail({ stand, auto, canAuto, onSet, onAuto }) {
+  const [open, setOpen] = useState(false);
+  const [drag, setDrag] = useState(null);
+  const track = useRef(null);
+  const st = useRef(null);
+  const idx = Math.max(0, FOCUS.findIndex(([v]) => v === stand));
+  useEffect(() => { if (!open) return undefined; const t = setTimeout(() => setOpen(false), 7000); return () => clearTimeout(t); }, [open, stand, auto]);
+  const fracAt = (y) => { const r = track.current.getBoundingClientRect(); return Math.max(0, Math.min(1, (y - r.top) / r.height)); };
+  const down = (e) => { e.stopPropagation(); st.current = { y: e.clientY, moved: false }; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) { /* oud toestel */ } };
+  const move = (e) => {
+    const s = st.current; if (!s) return;
+    if (!s.moved && Math.abs(e.clientY - s.y) < 6) return;
+    s.moved = true; setDrag(fracAt(e.clientY));
+  };
+  const up = (e) => {
+    const s = st.current; st.current = null; if (!s) return;
+    if (!s.moved) { setOpen(!open); return; }
+    const k = Math.round(fracAt(e.clientY) * 2);
+    setDrag(null);
+    if (FOCUS[k][0] !== stand || auto) onSet(FOCUS[k][0]);
+  };
+  const frac = drag != null ? drag : idx / 2;
+  const [, label, icon] = FOCUS[idx];
+  return html`${open && html`<button type="button" class="f-scrim" aria-label="Sluiten" onClick=${() => setOpen(false)}></button>`}
+  <div class=${'focus f-' + stand + (open ? ' open' : '') + (drag != null ? ' dragging' : '')}>
+    <div class="f-track" ref=${track}>
+      <span class="f-line"></span>
+      ${FOCUS.map(([v, l], k) => html`<button type="button" class=${'f-stop' + (k === idx ? ' on' : '')} style=${`top:${k * 50}%`} tabindex=${open ? 0 : -1}
+        onClick=${() => { if (v !== stand || auto) onSet(v); setTimeout(() => setOpen(false), 650); }} aria-label=${l}><i></i><span class="f-lbl">${l}</span></button>`)}
+      <button type="button" class="f-thumb" style=${`top:${(frac * 100).toFixed(1)}%`} onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${() => { st.current = null; setDrag(null); }}
+        aria-label=${'Focus: ' + label + (auto ? ', automatisch op de stand' : '') + '. Tik om te kiezen of sleep omhoog of omlaag.'}>
+        <${Icon} name=${icon} size=${18} />${auto && html`<b class="f-auto">A</b>`}
+      </button>
+    </div>
+    ${open && html`<div class="f-foot">
+      ${canAuto && html`<button type="button" class=${'f-autobtn' + (auto ? ' on' : '')} aria-pressed=${auto} onClick=${() => onAuto(!auto)}><span class="f-sw"><i></i></span>Auto op stand</button>`}
+      <span class="f-hint">Geldt vanaf de volgende wissel</span>
+    </div>`}
+  </div>`;
+}
+
 function LiveView({ match, team }) {
   const now = useNow(match.clock.running ? 500 : 1000);
   const L = M.periodLen(team);
@@ -304,13 +348,13 @@ function LiveView({ match, team }) {
     mutate((m, t) => M.goal(m, t, id));
     setGoal(null);
     setCele({ us: true, id, key: Date.now() });
-    showAct({ top: !!id && id === d.state.keeper });
+    showAct({ label: id ? 'Goal ' + nick(id) : 'Goal', top: !!id && id === d.state.keeper });
   };
   const oppScores = () => {
     mutate((m, t) => M.oppGoal(m, t));
     setGoal(null);
     setCele({ us: false, key: Date.now() });
-    showAct({});
+    showAct({ label: 'Tegengoal' });
   };
 
   const alerted = useRef({});
@@ -363,6 +407,7 @@ function LiveView({ match, team }) {
   };
 
   // ---------- wissel-eiland ----------
+  const short = (s, n = 12) => (s && s.length > n ? s.slice(0, n - 1) + '…' : s);
   const LORD = { V: 0, M: 1, A: 2 };
   const pw = M.periodWord(team);
   let isl;
@@ -386,7 +431,11 @@ function LiveView({ match, team }) {
     };
   } else isl = { st: 'calm', k: 'Geen wissels meer', t1: `deze ${pw}`, t2: '', ring: null };
   const C = 207.3;
-  const island = html`<button type="button" class=${'island jelly ' + isl.st} onClick=${openNext} disabled=${isl.st === 'calm'} style=${isl.breathe ? `--breathe:${isl.breathe.toFixed(2)}s` : ''}>
+  const island = goal === 'scorer' ? html`<div class="island hot goalask" role="status">
+    <span class="i-txt"><span class="i-k">Goal voor ${short(team.name, 18)}</span><span class="i-t1">Wie scoorde?</span><span class="i-t2">Tik de speler in het veld</span></span>
+    <button type="button" class="ga-btn jelly" onClick=${() => scoreFor(null)}>Weet ik <br />niet</button>
+    <button type="button" class="ga-x jelly" aria-label="Annuleren" onClick=${() => setGoal(null)}><${Icon} name="x" size=${18} /></button>
+  </div>` : html`<button type="button" class=${'island jelly ' + isl.st} onClick=${openNext} disabled=${isl.st === 'calm'} style=${isl.breathe ? `--breathe:${isl.breathe.toFixed(2)}s` : ''}>
     <span class="i-txt"><span class="i-k">${isl.k}</span><span class="i-t1">${isl.t1}</span>${isl.t2 && html`<span class="i-t2">${isl.t2}</span>`}</span>
     ${isl.ring && html`<span class="i-ring"><svg viewBox="0 0 80 80" aria-hidden="true"><circle class="track" cx="40" cy="40" r="33" /><circle class="arc" cx="40" cy="40" r="33" stroke-dasharray=${C} stroke-dashoffset=${isl.full || countdown <= 0 ? 0 : (C * (isl.frac || 0)).toFixed(1)} /></svg><span class="i-lbl">${isl.ring}</span></span>`}
     ${isl.late && html`<span class="i-late">${isl.late}</span>`}
@@ -416,8 +465,12 @@ function LiveView({ match, team }) {
   const bState = running ? (timeUp ? 'Tijd!' : nextLabel) : pending ? 'Rust' : startable ? 'Klaar voor de ' + nextLabel : 'Pauze · ' + nextLabel;
   const bRight = pending ? 'tik: opstelling ' + nextLabel : timeUp ? 'tik om af te sluiten' : startable ? 'tik: start ' + nextLabel : el <= L ? 'nog ' + M.fmt(L - el) : '+' + M.fmt(el - L);
   const scoreCls = d.score.us > d.score.them ? 'ahead' : d.score.us < d.score.them ? 'behind' : 'level';
-  const board = html`<section class=${'board' + (running ? '' : ' paused') + (timeUp ? ' over' : '')}>
-    <div class="b-top">
+  const board = html`<section class=${'board' + (running ? '' : ' paused') + (timeUp ? ' over' : '') + (goal === 'who' ? ' goalwho' : '') + (cele ? ' cele ' + (cele.us ? 'us' : 'them') : '')} key="board">
+    ${cele && html`<span class="b-shine" key=${'sh' + cele.key} aria-hidden="true"></span>`}
+    ${goal === 'who' ? html`<div class="b-goal" role="group" aria-label="Doelpunt voor wie?">
+      <button type="button" class="bg-side jelly" onClick=${() => setGoal('scorer')}><${TeamBadge} team=${team} size=${34} /><span class="bg-n">${short(team.name)}</span><span class="bg-plus">+1</span></button>
+      <button type="button" class="bg-side them jelly" onClick=${oppScores}><${OppBadge} name=${match.opponent} size=${36} /><span class="bg-n">${short(match.opponent || 'Tegenstander')}</span><span class="bg-plus">+1</span></button>
+    </div>` : html`<div class="b-top">
       <button type="button" class="b-clock jelly" onClick=${toggleClock} aria-label=${running ? 'Klok loopt, tik om te pauzeren' : 'Klok staat stil, tik om te starten'}>
         <${Roll} cls="b-digits" text=${M.fmt(Math.min(el, L))} />
         <span class="b-state"><span class="b-dot"></span>${bState}</span>
@@ -425,13 +478,14 @@ function LiveView({ match, team }) {
       <span class="b-div" aria-hidden="true"></span>
       <button type="button" class=${'b-score jelly ' + scoreCls} onClick=${() => { setCele(null); setGoal(goal ? null : 'who'); }} aria-label=${`Stand ${d.score.us} tegen ${d.score.them}, tik bij een doelpunt`}>
         <span class=${'b-sc' + (cele ? ' pop' : '')}><${Roll} cls="b-digits" text=${String(d.score.us)} /><span class="b-colon"><i></i><i></i></span><${Roll} cls="b-digits" text=${String(d.score.them)} /></span>
-        <span class="b-badges"><${TeamBadge} team=${team} size=${20} /><span class="b-tap">${goal ? 'annuleren' : 'tik bij goal'}</span><${OppBadge} name=${match.opponent} size=${22} /></span>
+        <span class="b-badges"><${TeamBadge} team=${team} size=${20} /><span class="b-tap">${goal ? 'wie scoorde?' : 'tik bij goal'}</span><${OppBadge} name=${match.opponent} size=${22} /></span>
       </button>
-    </div>
-    <button type="button" class="b-bottom" onClick=${toggleClock} tabindex="-1" aria-hidden="true">
+    </div>`}
+    <button type="button" class="b-bottom" onClick=${goal === 'who' ? () => setGoal(null) : toggleClock} tabindex="-1" aria-hidden=${goal === 'who' ? 'false' : 'true'}>
       <span class="b-periods" style=${`grid-template-columns:repeat(${team.periods},1fr)`}>${Array.from({ length: team.periods }, (_, p) => (p < match.clock.period ? html`<i class="done"><b></b></i>`
         : p === match.clock.period ? html`<i><b style=${`width:${Math.min(100, (el / L) * 100)}%`}></b></i>` : html`<i><b></b></i>`))}</span>
-      <span class="b-plabel"><span>${pw} ${match.clock.period + 1} van ${team.periods}</span><span class="b-right">${bRight}</span></span>
+      ${goal === 'who' ? html`<span class="b-plabel"><span>Doelpunt voor wie?</span><span class="b-right b-cancel">✕ annuleren</span></span>`
+        : html`<span class="b-plabel"><span>${pw} ${match.clock.period + 1} van ${team.periods}</span><span class="b-right">${bRight}</span></span>`}
     </button>
   </section>`;
 
@@ -443,35 +497,19 @@ function LiveView({ match, team }) {
     ${board}
     ${island}
     <div class="grow-field" ref=${zone}>
-      <div class=${'fieldbox' + (goal ? ' goalmode' : '')}>
+      <div class=${'fieldbox fx-' + stand + (goal ? ' goalmode' : '')}>
         <${Field} slots=${d.state.slots} lines=${team.lines} keeperId=${d.state.keeper} nick=${nick} height="auto"
           onTap=${tapField} onKeeper=${goal === 'scorer' ? (id) => scoreFor(id) : !pending ? () => setSheet({ type: 'keeper' }) : null}
           picking=${goal === 'scorer'} hot=${cele && cele.us ? cele.id : null} hotKey=${cele ? cele.key : 0}
           neon=${next && !pending && !goal && !timeUp ? group.map((s) => s.out) : []} sub=${(id) => M.fmt(d.state.played[id])}
           ghosts=${ghosts} animate />
-        ${!goal && html`<button type="button" class="fieldtag right" onClick=${() => setSheet({ type: 'stand' })}>${STANDS.find(([v]) => v === stand)[1]}${match.standMode !== 'manual' && team.rules.autoStand ? ' · auto' : ''}</button>`}
-        ${goal === 'who' && html`<div class="goalpick" role="dialog" aria-label="Doelpunt voor wie">
-          <span class="gp-title">Doelpunt voor…</span>
-          <div class="gp-tiles">
-            <button type="button" class="gp-tile us" onClick=${() => setGoal('scorer')}><${TeamBadge} team=${team} size=${64} /><span>${team.name}</span></button>
-            <button type="button" class="gp-tile them" onClick=${oppScores}><${OppBadge} name=${match.opponent} size=${64} /><span>${match.opponent || 'Tegenstander'}</span></button>
-          </div>
-          <button type="button" class="gp-x" aria-label="Annuleren" onClick=${() => setGoal(null)}><${Icon} name="x" size=${18} /></button>
-        </div>`}
-        ${goal === 'scorer' && html`<div class="goalbanner" role="status">
-          <span class="grow">Wie scoorde? <b>Tik op de speler</b></span>
-          <button type="button" class="gb-btn" onClick=${() => scoreFor(null)}>Weet ik niet</button>
-          <button type="button" class="gb-x" aria-label="Annuleren" onClick=${() => setGoal(null)}><${Icon} name="x" size=${16} /></button>
-        </div>`}
-        ${cele && html`<div class=${'goalcele' + (cele.us ? '' : ' them')} key=${cele.key} aria-live="polite">
-          <span class="gc-confetti" aria-hidden="true">${Array.from({ length: 16 }, (_, k) => html`<i style=${`--a:${k * 22.5 + (k % 2) * 9}deg;--d:${70 + (k % 4) * 22}px;--c:${['#F5A524', '#fff', '#2B57C9', '#F5A524'][k % 4]}`}></i>`)}</span>
-          <span class="gc-text">${cele.us ? 'Goal!' : 'Tegengoal'}</span>
-          <span class="gc-sub">${cele.us ? (cele.id ? nick(cele.id) + ' scoort' : 'voor ' + team.name) : d.score.us + ' : ' + d.score.them}</span>
-        </div>`}
-        ${act && html`<div class=${'actpill' + (act.top ? ' top' : '') + (act.out || act.outs ? ' wide' : '')} key=${'a' + act.key} role="status">
+        ${!goal && !pending && html`<${FocusRail} stand=${stand} auto=${team.rules.autoStand && match.standMode !== 'manual'} canAuto=${!!team.rules.autoStand}
+          onSet=${(v) => mutate((m, t) => M.setStand(m, t, 'manual', v))} onAuto=${(on) => mutate((m, t) => M.setStand(m, t, on ? 'auto' : 'manual', stand))} />`}
+        ${act && html`<div class=${'actpill' + (act.top ? ' top' : '') + (act.out || act.outs ? ' wide' : '') + (act.label ? ' labeled' : '')} key=${'a' + act.key} role="status">
+          ${act.label && html`<span class="ap-who">${act.label}</span>`}
           ${(act.out || act.outs) && html`<span class="ap-who">${act.outs ? 'Eruit' : nick(act.out)}</span>
             <span class="ap-seg" role="group" aria-label="Daarna">${[['terug', 'Kan terug'], ['periode', 'Rust'], ['wedstrijd', 'Klaar']].map(([v, l]) => html`<button type="button" class=${act.status === v ? 'on' : ''} aria-pressed=${act.status === v} onClick=${() => setStatus(v)}>${l}</button>`)}</span>`}
-          <button type="button" class="ap-undo" onClick=${undoAct} aria-label="Ongedaan maken"><${Icon} name="undo" size=${16} />${act.out || act.outs ? '' : html`<span>Ongedaan maken</span>`}</button>
+          <button type="button" class="ap-undo" onClick=${undoAct} aria-label="Ongedaan maken"><${Icon} name="undo" size=${16} />${act.out || act.outs ? '' : html`<span>${act.label ? 'Ongedaan' : 'Ongedaan maken'}</span>`}</button>
         </div>`}
       </div>
       <div class="benchrow">
@@ -498,7 +536,6 @@ function LiveView({ match, team }) {
     ${sheet && sheet.type === 'join' && html`<${JoinSheet} match=${match} team=${team} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'keeper' && html`<${KeeperSheet} match=${match} team=${team} d=${d} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'opp' && html`<${OpponentSheet} match=${match} onClose=${() => setSheet(null)} />`}
-    ${sheet && sheet.type === 'stand' && html`<${StandSheet} match=${match} team=${team} stand=${stand} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'menu' && html`<${GameMenu} match=${match} team=${team} live onClose=${() => setSheet(null)} onSheet=${(t) => setSheet({ type: t })} />`}
     ${sheet && sheet.type === 'end' && html`<${Confirm} title=${'Einde ' + M.periodLabel(team, match.clock.period) + '?'}
       text=${match.clock.period + 1 >= team.periods ? 'Daarna zie je het overzicht van de wedstrijd.' : 'De klok stopt. Daarna zet je de opstelling voor de volgende ' + M.periodWord(team) + ' klaar.'}
@@ -516,16 +553,6 @@ function LiveView({ match, team }) {
   </main>`;
 }
 
-function StandSheet({ match, team, stand, onClose }) {
-  return html`<${Sheet} onClose=${onClose} label="Opstellingsstand">
-    <span class="h2" style="font-size:22px">Opstelling</span>
-    <span class="sub">Geldt vanaf de volgende wissel.</span>
-    ${team.rules.autoStand && html`<div class="setting"><div class="col" style="gap:1px"><span class="t">Automatisch op de stand</span><span class="small">Achterstand: ${team.rules.standAchter} · gelijk: ${team.rules.standGelijk} · voorsprong: ${team.rules.standVoor}</span></div>
-      <${Switch} label="Automatisch" on=${match.standMode !== 'manual'} onChange=${(v) => mutate((m, t) => M.setStand(m, t, v ? 'auto' : 'manual', stand))} /></div>`}
-    <${Seg} label="Opstellingsstand" value=${stand} options=${STANDS} onChange=${(v) => mutate((m, t) => M.setStand(m, t, 'manual', v))} />
-    <button type="button" class="btn plain block" onClick=${onClose}>Klaar</button>
-  </${Sheet}>`;
-}
 
 // ---------- menu (⋯) ----------
 function GameMenu({ match, team, live, onClose, onSheet }) {
