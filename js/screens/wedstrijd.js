@@ -261,7 +261,7 @@ function OpponentSheet({ match, upcoming = [], onClose }) {
 // ---------- focus van de opstelling: verticale rail langs het veld ----------
 // Boven = aanvallen, midden = balans, onder = verdedigen (zoals het veld: aanval boven, eigen doel onder).
 const FOCUS = [['aanvallen', 'Aanvallen', 'up2'], ['balans', 'Balans', 'even'], ['verdedigen', 'Verdedigen', 'down2']];
-const FOCUS_TXT = { aanvallen: 'Meer kracht voorin', balans: 'Kracht gelijk over de linies', verdedigen: 'Meer kracht achterin' };
+const FOCUS_TXT = { aanvallen: 'Meer kracht voorin', balans: 'Kracht gelijk verdeeld', verdedigen: 'Meer kracht achterin' };
 function FocusRail({ stand, auto, canAuto, onSet, onAuto }) {
   const [open, setOpen] = useState(false);
   const [drag, setDrag] = useState(null);
@@ -483,7 +483,7 @@ function LiveView({ match, team }) {
   const island = noteOk ? html`<button type="button" class=${'island focusnote f-' + focusNote.stand} key=${'fn' + focusNote.key} onClick=${() => setFocusNote(null)}>
     <span class="i-txt"><span class="i-k">Focus${focusNote.auto ? ' · automatisch bij ' + (d.score.us > d.score.them ? 'voorsprong' : d.score.us < d.score.them ? 'achterstand' : 'gelijke stand') : ''}</span>
       <span class="i-t1">${{ aanvallen: 'Aanvallen', balans: 'Balans', verdedigen: 'Verdedigen' }[focusNote.stand]}</span>
-      <span class="i-t2">${FOCUS_TXT[focusNote.stand]} vanaf de volgende wissel</span></span>
+      <span class="i-t2">Volgende wissel: ${FOCUS_TXT[focusNote.stand].toLowerCase()}</span></span>
     <span class="fn-icon"><${Icon} name=${fIcon[focusNote.stand]} size=${26} /></span>
   </button>` : goal === 'scorer' ? html`<div class="island goalask" role="status">
     <span class="i-txt"><span class="i-k">Goal voor ${short(team.name, 18)}</span><span class="i-t1">Wie scoorde?</span><span class="i-t2">Tik de speler in het veld <span class="ga-arrow" aria-hidden="true">↓</span></span></span>
