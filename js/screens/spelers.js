@@ -182,15 +182,15 @@ export function Spelers({ state }) {
 // Alleen hier, achter de pincode. Tik = naar het dichtstbijzijnde punt; slepen = elk punt geeft een tikje.
 // De 9 niveaus van Raymond: label boven de balk, omschrijving eronder. Alleen hier, achter de pincode.
 export const KR_LEVELS = [
-  ['Beginner', 'Je bent nog veel aan het leren en ontdekt hoe leuk het spel is. De basis (stick vasthouden, lopen met de bal) is nog zoekende, maar elke fout is nu pure winst.'],
-  ['Startende Speler', 'Je begint gevoel te krijgen voor de bal en de lijnen van het veld. Je kijkt soms nog naar je stick in plaats van om je heen, maar je inzet en leergierigheid maken veel goed.'],
-  ['Zoekende Basisspeler', 'Je kunt een bal redelijk aannemen en inspelen onder lichte druk. Positie kiezen blijft soms lastig en de timing mag scherper, maar je durft steeds vaker mee te doen.'],
-  ['Betrouwbare Schakel', 'Je voert je taak uit en valt niet uit de toon in het team. Je mag nog wat vaker de oplossing vooruit zoeken in plaats van op safe te spelen, maar je bent een fijne kracht om op te bouwen.'],
-  ['Stevige Middenmotor', 'Je hebt een prima basisniveau en houdt het goed vol. Om de volgende stap te zetten moet je handelingssnelheid omhoog en je coaching naar medespelers wat duidelijker zijn.'],
-  ['Waardevolle Teamspeler', 'Je brengt energie, overzicht en kwaliteit in het spel en helpt anderen beter te worden. Soms laat je nog een kans liggen om zelf het initiatief te nemen op beslissende momenten.'],
-  ['Bepalende Speler', 'Je maakt het verschil in acties, keuzes of afronding en kantelt regelmatig fases. De kritische noot zit in de regelmaat: op mindere dagen mag je nog iets minder snel wegzakken.'],
-  ['Motor van het Team', 'Je houdt het tempo en de energie hoog en trekt de groep mee vooruit als het stroef loopt. Het kost veel energie om dat te blijven leveren, en soms wil je té veel zelf oplossen.'],
-  ['Draagt Het Hele Team', 'Je bent onmisbaar op het veld: je stuurt, verdedigt, valt aan en houdt iedereen scherp. De enige valkuil is dat het team soms te veel op jou leunt en zelf minder initiatief toont.']
+  ['Beginner', 'Ontdekt het spel met aandacht en inzet. De basis (stick vasthouden, lopen met de bal) is er nog niet helemaal, patronen en het overzicht zijn nog in opbouw.'],
+  ['Startende Speler', 'Rent enthousiast mee en raakt steeds vaker de bal, terwijl de blik nog geregeld omlaag gaat en het overzicht bij drukte soms wegglijdt.'],
+  ['Zoekende Basisspeler', 'Pakt in rustige fases de bal op en speelt die door, al wordt er soms nog wat laat geschakeld of gezocht naar de juiste plek op het veld.'],
+  ['Betrouwbare Schakel', 'Blijft netjes in de eigen zone en houdt het spel simpel met breedte- en terugballen, terwijl het zoeken naar voorwaartse opties nog groeit.'],
+  ['Stevige Middenmotor', 'Blijft volop in beweging over het veld en houdt het tempo goed bij, met nog ruimte om sneller om te gaan schakelen en vaker beslissend te zijn.'],
+  ['Vaste Waarde', 'Je brengt energie, overzicht en kwaliteit in het spel, zoekt teamgenoten op en houdt het spel levendig, soms laat je nog een kans liggen op intensieve momenten.'],
+  ['Bepalende Speler', 'Vraagt actief om de bal, zet gerichte acties of passes in en brengt beweging in het spel, met fases waarin het tempo iets kan terugzakken.'],
+  ['Motor van het Team', 'Houdt het tempo hoog, zet door als het spel stokt en trekt anderen mee, al vraagt dat veel energie en wordt de bal soms iets langer vastgehouden.'],
+  ['Draagt Het Hele Team', 'Is op veel plekken aanwezig, verdedigt, valt aan en stuurt het spel met veel initiatief, waarbij het lastig kan zijn om alles gedoseerd te houden en niet te veel naar zich toe te trekken.']
 ];
 const levelOf = (kracht) => Math.max(0, Math.min(8, Math.round(kracht / 12.5)));
 const KR_KEY = Math.round(KEY_KRACHT / 12.5);

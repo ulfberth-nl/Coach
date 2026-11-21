@@ -171,6 +171,18 @@ select.input { appearance: none; -webkit-appearance: none; }
 .benchrow { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .benchrow .scroll { flex: 1 1 auto; min-width: 0; display: flex; gap: 10px; align-items: center; overflow-x: auto; padding: 18px 16px; margin: -14px -8px; scrollbar-width: none; }
 .benchrow .scroll::-webkit-scrollbar { display: none; }
+/* volle bank: zachte randen waar nog spelers achter zitten, en per speler vastklikken */
+.benchrow .scroll.ovf { --fl: 30px; --fr: 34px; margin-left: -2px; scroll-snap-type: x proximity; scroll-padding-inline: 16px; overscroll-behavior-x: contain;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%); }
+.benchrow .scroll.ovf.at-start { --fl: 0px; }
+.benchrow .scroll.ovf.at-end { --fr: 0px; }
+.benchrow .scroll.ovf > * { scroll-snap-align: start; }
+@property --fl { syntax: '<length>'; inherits: false; initial-value: 0px; }
+@property --fr { syntax: '<length>'; inherits: false; initial-value: 0px; }
+.benchrow .scroll { transition: --fl var(--t-small) ease, --fr var(--t-small) ease; }
+/* tijdens het slepen niet vastklikken (het automatisch doorscrollen moet soepel lopen) */
+.dragging .benchrow .scroll.ovf { scroll-snap-type: none; }
 .benchpill { flex: 0 0 auto; display: inline-flex; align-items: baseline; gap: 6px; padding: 7px 12px; border-radius: 999px; background: #fff; border: 1px solid var(--line); font-size: 13px; font-weight: 800; white-space: nowrap; }
 .benchpill .t { font-size: 11px; font-weight: 700; color: var(--muted); }
 .benchpill.off { opacity: 0.55; border-style: dashed; }
@@ -377,7 +389,10 @@ select.input { appearance: none; -webkit-appearance: none; }
 .tabbar a.live::after { content: ''; position: absolute; top: 8px; left: calc(50% + 10px); width: 9px; height: 9px; border-radius: 999px; background: var(--orange); animation: dotPulse 1.6s infinite; }
 
 /* slepen: het veld en de bank zijn 'op slot' voor scrollen en zoomen */
+/* slepen: het veld en de bank zijn 'op slot' voor scrollen en zoomen; een volle bank mag wel opzij scrollen
+   (opzij vegen = scrollen, omhoog = een speler pakken) */
 .draggable, .draggable .field, .draggable .benchrow, .draggable .scroll, .draggable [data-pid], .scrubzone, .scrubzone * { touch-action: none !important; }
+.benchrow .scroll.ovf, .benchrow .scroll.ovf * { touch-action: pan-x !important; }
 .pill, .benchpill { -webkit-user-drag: none; }
 .keeperspot { background: none; border: none; padding: 0; }
 
@@ -704,7 +719,7 @@ button.duo-side[aria-expanded="true"] .duo-chev { transform: rotate(-90deg); opa
 @keyframes actIn { from { opacity: 0; transform: translate(-50%, 24px) scale(.85); } to { opacity: 1; transform: translate(-50%, 0); } }
 @keyframes actInTop { from { opacity: 0; transform: translate(-50%, -24px) scale(.85); } to { opacity: 1; transform: translate(-50%, 0); } }
 .ap-who { padding-left: 10px; font-size: 14px; font-weight: 900; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
-.actpill.labeled .ap-who { padding: 0 4px 0 12px; font-size: 15px; }
+.actpill.labeled .ap-who { padding: 0 4px 0 12px; font-size: 15px; max-width: 180px; }
 .actpill.labeled .ap-undo { background: rgba(255,255,255,.14); color: #fff; }
 .ap-seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: rgba(255,255,255,.12); }
 .ap-seg button { min-height: 34px; padding: 0 10px; border: none; border-radius: 999px; background: none; color: rgba(255,255,255,.8); font: inherit; font-size: 13px; font-weight: 800; transition: background .25s, color .25s; }
@@ -941,7 +956,8 @@ button.duo-side[aria-expanded="true"] .duo-chev { transform: rotate(-90deg); opa
 .badge.lvbadge { font-size: 11px; padding: 2px 8px; }
 
 /* ================= v0.14 · tikje op de iPhone: onzichtbaar label met schakelaar over elke knop (js/motion.js) ================= */
-:where(button, a[href]):has(> .hx) { position: relative; isolation: isolate; }
+/* zonder eigen gewicht (:where), zodat knoppen die zelf absoluut of vast staan (focusbalk, scrim) dat blijven */
+:where(button, a[href]):where(:has(> .hx)) { position: relative; isolation: isolate; }
 .hx { position: absolute; inset: 0; z-index: 9; margin: 0; padding: 0; border-radius: inherit; cursor: inherit; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .hx > input { position: absolute; left: 0; top: 0; width: 1px; height: 1px; margin: 0; visibility: hidden; pointer-events: none; }
 button:disabled > .hx, .no-hx .hx { display: none; }
@@ -1083,3 +1099,57 @@ html[data-vt="start"]::view-transition-new(board) { animation: vtDrop .55s var(-
 html[data-vt="start"]::view-transition-new(island) { animation: vtDrop .55s var(--spring-play) .07s both; }
 html[data-vt="start"]::view-transition-old(tabbar) { animation: vtSink var(--t-out-screen) var(--ease-in) both; }
 @keyframes vtDrop { from { opacity: 0; translate: 0 -28px; scale: .94; } }
+
+/* ================= opstelling veranderen door te slepen ================= */
+/* banen per linie en lege plekken verschijnen zodra je een veldspeler oppakt */
+.field .lane { position: absolute; left: 6px; right: 6px; z-index: 0; pointer-events: none; border-radius: 14px; background: rgba(255,255,255,0); opacity: 0;
+  transition: opacity var(--t-out-small) ease, background var(--t-small) ease; }
+.field .lane b { position: absolute; left: 8px; top: 4px; font: 800 9.5px/1 Inter, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.72); }
+.drag-field .field .lane { opacity: 1; background: rgba(255,255,255,.05); transition: opacity var(--t-small) ease calc(var(--r) * 40ms), background var(--t-small) ease; }
+.drag-field[data-drag-line="V"] .field .lane[data-l="V"], .drag-field[data-drag-line="M"] .field .lane[data-l="M"], .drag-field[data-drag-line="A"] .field .lane[data-l="A"] { background: rgba(0,0,0,.08); }
+.drag-field[data-aim-line="V"] .field .lane[data-l="V"], .drag-field[data-aim-line="M"] .field .lane[data-l="M"], .drag-field[data-aim-line="A"] .field .lane[data-l="A"] {
+  background: linear-gradient(90deg, rgba(255,255,255,.05), rgba(255,255,255,.2) 50%, rgba(255,255,255,.05)); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.35); }
+
+.field .addslot { position: absolute; z-index: 1; width: 34px; height: 34px; translate: -50% -50%; border-radius: 999px; pointer-events: none;
+  border: 2px dashed rgba(255,255,255,.8); background: rgba(255,255,255,.1); opacity: 0; scale: .3;
+  transition: opacity var(--t-out-small) ease, scale var(--t-out-small) ease, background var(--t-small) ease, border-color var(--t-small) ease, box-shadow var(--t-small) ease; }
+.field .addslot::before, .field .addslot::after { content: ''; position: absolute; left: 50%; top: 50%; width: 12px; height: 2.5px; border-radius: 2px; background: #fff; translate: -50% -50%; transition: background var(--t-small) ease; }
+.field .addslot::after { rotate: 90deg; }
+.drag-field .field .addslot { opacity: 1; scale: 1; transition: opacity var(--t-small) ease calc(var(--r) * 50ms + var(--k) * 35ms), scale var(--t-screen) var(--spring-play) calc(var(--r) * 50ms + var(--k) * 35ms), background var(--t-small) ease, border-color var(--t-small) ease, box-shadow var(--t-small) ease; }
+.drag-field .field .addslot.off, .drag-field[data-drag-line="V"] .field .addslot[data-l="V"], .drag-field[data-drag-line="M"] .field .addslot[data-l="M"], .drag-field[data-drag-line="A"] .field .addslot[data-l="A"] { opacity: 0; scale: .3; }
+.drag-field .field .addslot.drop-target { scale: 1.45; background: #fff; border-style: solid; border-color: #fff; box-shadow: 0 0 0 6px rgba(255,255,255,.22), 0 0 26px rgba(255,255,255,.75); }
+.field .addslot.drop-target::before, .field .addslot.drop-target::after { background: var(--navy, #1F3C88); }
+.drag-field .field .addslot.drop-target { animation: slotBreathe 1.3s ease-in-out .3s infinite; }
+@keyframes slotBreathe { 0%, 100% { box-shadow: 0 0 0 6px rgba(255,255,255,.22), 0 0 26px rgba(255,255,255,.75); } 50% { box-shadow: 0 0 0 10px rgba(255,255,255,.12), 0 0 34px rgba(255,255,255,.9); } }
+/* buren maken ruimte */
+.field .spot .sp-in { transition: translate var(--t-screen) var(--spring-play); }
+.field .spot.nudge .sp-in { translate: var(--nx, 0) 0; }
+/* tijdens het slepen van een veldspeler: de rest van het veld iets rustiger */
+.drag-field .field .spot:not(.drag-src):not(.drop-target):not(.nudge) .pill { opacity: .9; }
+.drag-tip.form { background: #fff; color: var(--ink); box-shadow: 0 0 0 2px var(--orange), 0 10px 24px rgba(17,24,39,.32); }
+
+/* nieuwe opstelling: iedereen schuift vlot naar zijn nieuwe plek, de gesleepte speler landt */
+.field.reform .spot, .matchscreen.live .field.reform .spot { transition: left .62s var(--spring-soft), top .62s var(--spring-soft); }
+.field .spot.landing .sp-in { animation: landIn .55s var(--spring-play) .3s both; }
+@keyframes landIn { 0% { opacity: 0; scale: 1.02; } 22% { opacity: 1; scale: 1.06 .94; } 100% { opacity: 1; scale: 1; } }
+.field .spot.landing .pill { animation: landGlow 1.2s ease-out .3s both; }
+@keyframes landGlow { 0% { box-shadow: 0 0 0 0 rgba(255,255,255,.9); } 100% { box-shadow: 0 0 0 16px rgba(255,255,255,0); } }
+.reduce .field .addslot, .reduce .field .lane, .reduce .field .spot .sp-in, .reduce .field.reform .spot { transition-duration: .01s !important; transition-delay: 0s !important; }
+.reduce .field .spot.landing .sp-in, .reduce .field .spot.landing .pill, .reduce .field .addslot.drop-target { animation-duration: .01s !important; animation-delay: 0s !important; }
+
+/* ================= focusbalk: binnen het veld, soepel slepen ================= */
+/* de rail staat net binnen de zijlijn, zodat de witte rand om de duim altijd tegen het blauw valt */
+.focus { left: 8px; }
+.f-track { container-type: size; }
+/* de duim hangt aan --f (0 = aanvallen, .5 = balans, 1 = verdedigen); tijdens slepen zonder overgang */
+.f-thumb, .f-aanvallen .f-thumb, .f-balans .f-thumb, .f-verdedigen .f-thumb { top: 0; translate: 0 calc(var(--f, .5) * 100cqh);
+  box-shadow: 0 6px 14px rgba(0,0,0,.3), 0 0 0 2.5px #fff, 0 0 0 3.5px rgba(13,27,69,.3);
+  transition: translate .7s var(--jelly), background .35s, color .35s, transform .25s var(--jelly); will-change: translate; }
+.focus.dragging .f-thumb { transition: background .35s, color .35s, transform .25s var(--jelly); }
+.f-bubble.live { top: calc(var(--f, .5) * 100%); transition: none; animation: bubbleIn .35s var(--jelly) both; }
+.f-stop i { transition: scale var(--t-small) ease; }
+.f-stop.aim i { scale: 1.7; transition: scale var(--t-screen) var(--spring-play); }
+.reduce .f-thumb { transition-duration: .01s !important; }
+/* tijdens het slepen van een speler stapt de focusbalk even opzij */
+.focus { transition: opacity var(--t-small) ease; }
+.dragging .focus { opacity: 0; pointer-events: none; }

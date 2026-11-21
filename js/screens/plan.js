@@ -4,6 +4,7 @@ import * as M from '../match.js';
 import { PlanView } from '../planview.js';
 import { PlanSummary } from './home.js';
 import { mutate, SwapSheet, GroupSwapSheet } from './live.js';
+import { conceptDrop } from './wedstrijd.js';
 import { Icon, toast, useNow } from '../ui.js';
 
 export function Plan({ state }) {
@@ -33,7 +34,7 @@ function PlanInner({ match, team }) {
       ${match.plan && html`<${PlanSummary} plan=${match.plan} team=${team} />`}
       <${PlanView} match=${match} team=${team} initialIndex=${Math.max(0, nowIndex)} nowIndex=${match.started ? nowIndex : -1}
         liveT=${T} onSwapNow=${openSwap}
-        editable=${editable} onSwap=${(a, b) => { mutate((m, t) => M.swapInStartLineup(m, t, a, b)); toast(`${M.nickOf(team, a)} ↔ ${M.nickOf(team, b)} · plan opnieuw berekend`); }} />
+        editable=${editable} onSwap=${(a, b) => conceptDrop((fn) => mutate((m, t, d) => fn(m, d)), team, a, b)} />
     </section>
     ${swap && !swap.group && html`<${SwapSheet} match=${match} team=${team} d=${M.derive(match, team, T)} init=${swap} counts=${M.swapCounts(match)} onClose=${() => setSwap(null)} />`}
     ${swap && swap.group && html`<${GroupSwapSheet} match=${match} team=${team} d=${M.derive(match, team, T)} counts=${M.swapCounts(match)} onClose=${() => setSwap(null)} />`}

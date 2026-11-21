@@ -1,5 +1,5 @@
 // Eén Wedstrijd-scherm: voorbereiden → live → afgelopen. Past op één scherm, zonder scrollen.
-import { html, useEffect, useMemo, useRef, useState } from '../../vendor/preact-htm.js';
+import { html, useEffect, useLayoutEffect, useMemo, useRef, useState } from '../../vendor/preact-htm.js';
 import { update, activeTeam, currentMatch } from '../store.js';
 import * as M from '../match.js';
 import { PlanView } from '../planview.js';
@@ -7,9 +7,22 @@ import { keeperCounts, suggestKeeper, WHY_TEXT } from './home.js';
 import { nextScheduled, todayISO } from './seizoen.js';
 import { matchRules } from '../profiles.js';
 import { scheduleRefresh } from '../refresh.js';
-import { viewTransition } from '../motion.js';
+import { viewTransition, haptic } from '../motion.js';
 import { mutate, undoAction, SwapSheet, GroupSwapSheet, BenchSheet, GoalSheet, BreakSheet, JoinSheet, KeeperSheet } from './live.js';
-import { Field, Neon, Roll, Sheet, Confirm, Seg, Stepper, Icon, accentFor, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, beep, flash, unlockAudio, toast, go } from '../ui.js';
+import { Field, Neon, Roll, Sheet, Confirm, Seg, Stepper, Icon, accentFor, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, BenchScroll, beep, flash, unlockAudio, toast, go } from '../ui.js';
+
+// slepen in de startopstelling: twee spelers ruilen, of een speler naar een lege plek in een andere linie
+// (dan verandert de opstelling voor deze wedstrijd). Het plan rekent daarna opnieuw.
+export function conceptDrop(mut, team, a, b) {
+  if (b.slice(0, 5) === 'line:') {
+    const [, to, at] = b.split(':');
+    const lines = mut((m, d) => M.changeFormation(m, d.teams.find((t) => t.id === m.teamId), a, to, +at));
+    if (lines) toast(`Opstelling ${M.formationText(lines)} · plan opnieuw berekend`);
+    return;
+  }
+  mut((m, d) => M.swapInStartLineup(m, d.teams.find((t) => t.id === m.teamId), a, b));
+  toast(`${M.nickOf(team, a)} ↔ ${M.nickOf(team, b)} · plan opnieuw berekend`);
+}
 
 // ---------- concept-wedstrijd (nog niet begonnen) ----------
 export function newConcept(d) {
@@ -63,7 +76,9 @@ export function rebuildConcept(d, changes = {}) {
   let keeperId = 'keeperId' in changes ? changes.keeperId : m.keeperId;
   if (!t.keeper) keeperId = null;
   else if (present.indexOf(keeperId) === -1) keeperId = suggestKeeper(t, present, keeperCounts(d, t));
-  const n = M.createMatch(t, { present, keeperId, priority: changes.priority || m.priority, opponent: m.opponent, date: m.date, rules: matchRules(t, present, keeperId) });
+  // eigen opstelling (gesleept) blijft staan, behalve als de coach om een nieuw voorstel vraagt
+  const lines = changes.resetLines ? null : m.lines || null;
+  const n = M.createMatch(t, { present, keeperId, priority: changes.priority || m.priority, opponent: m.opponent, date: m.date, lines, rules: matchRules(t, present, keeperId) });
   n.id = m.id;
   n.setup = m.setup || { present: false, keeper: false, opponent: false };
   for (const k of ['scheduleId', 'time', 'meet', 'field', 'home', 'season']) if (m[k] !== undefined) n[k] = m[k];
@@ -90,7 +105,7 @@ function closestEntry(list) {
   return best;
 }
 
-const mutateConcept = (fn) => update((d) => { const m = d.matches.find((x) => x.id === d.currentMatchId); if (m) fn(m, d); });
+const mutateConcept = (fn) => { let r; update((d) => { const m = d.matches.find((x) => x.id === d.currentMatchId); if (m) r = fn(m, d); }); return r; };
 const dateLabel = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
 
 export function Wedstrijd({ state }) {
@@ -160,7 +175,7 @@ function PrepView({ state, match, team }) {
           <${Icon} name="chev" size=${16} />
         </button>
         <div class="grow-field"><${PlanView} match=${match} team=${team} compact editable
-          onSwap=${(a, b) => { mutateConcept((m, d) => M.swapInStartLineup(m, d.teams.find((t) => t.id === m.teamId), a, b)); toast(`${M.nickOf(team, a)} ↔ ${M.nickOf(team, b)} · plan opnieuw berekend`); }} /></div>`}
+          onSwap=${(a, b) => conceptDrop(mutateConcept, team, a, b)} /></div>`}
     <button type="button" class="btn primary block startbtn" disabled=${tooFew} onClick=${() => (todo.length ? setSheet('confirm') : start())}>
       <${Icon} name="play" size=${18} /> Start · tik bij de aftrap
     </button>
@@ -272,39 +287,65 @@ const FOCUS = [['aanvallen', 'Aanvallen', 'up2'], ['balans', 'Balans', 'even'], 
 const FOCUS_TXT = { aanvallen: 'Meer kracht voorin', balans: 'Kracht gelijk verdeeld', verdedigen: 'Meer kracht achterin' };
 function FocusRail({ stand, auto, canAuto, onSet, onAuto }) {
   const [open, setOpen] = useState(false);
-  const [drag, setDrag] = useState(null);
+  // stop waar de duim nu boven hangt tijdens het slepen (null = niet aan het slepen)
+  const [hk, setHk] = useState(null);
   const track = useRef(null);
   const st = useRef(null);
   const idx = Math.max(0, FOCUS.findIndex(([v]) => v === stand));
   useEffect(() => { if (!open) return undefined; const t = setTimeout(() => setOpen(false), 8000); return () => clearTimeout(t); }, [open, stand, auto]);
+  // de duim staat via een CSS-variabele op de rail: tijdens het slepen schrijven we die direct (geen herteken per beweging)
+  const setF = (f) => { if (track.current) track.current.style.setProperty('--f', f.toFixed(4)); };
+  useLayoutEffect(() => { if (!st.current || !st.current.moved) setF(idx / 2); }, [idx]);
   const fracAt = (y) => { const r = track.current.getBoundingClientRect(); return Math.max(0, Math.min(1, (y - r.top) / r.height)); };
-  const down = (e) => { e.stopPropagation(); st.current = { y: e.clientY, moved: false }; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) { /* oud toestel */ } };
+  const paint = () => {
+    const s = st.current;
+    if (!s) return;
+    s.raf = 0;
+    const f = fracAt(s.py);
+    setF(f);
+    const k = Math.round(f * 2);
+    if (k !== s.k) { s.k = k; setHk(k); if (s.moved) haptic('select'); }
+  };
+  const down = (e) => { e.stopPropagation(); st.current = { y: e.clientY, py: e.clientY, moved: false, k: null, raf: 0 }; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) { /* oud toestel */ } };
   const move = (e) => {
     const s = st.current; if (!s) return;
-    if (!s.moved && Math.abs(e.clientY - s.y) < 6) return;
-    s.moved = true; setDrag(fracAt(e.clientY));
+    s.py = e.clientY;
+    if (!s.moved) {
+      if (Math.abs(e.clientY - s.y) < 6) return;
+      s.moved = true;
+      s.k = idx;
+      track.current.parentElement.classList.add('dragging');
+      setHk(idx);
+    }
+    if (!s.raf) s.raf = requestAnimationFrame(paint);
   };
   const up = (e) => {
     const s = st.current; st.current = null; if (!s) return;
+    if (s.raf) cancelAnimationFrame(s.raf);
     if (!s.moved) { setOpen(!open); return; }
     const k = Math.round(fracAt(e.clientY) * 2);
-    setDrag(null);
+    // eerst de overgang weer aanzetten, dan veert de duim vanaf je vinger naar de stop
+    const box = track.current.parentElement;
+    box.classList.remove('dragging');
+    void box.offsetWidth;
+    setF(k / 2);
+    setHk(null);
     if (FOCUS[k][0] !== stand || auto) onSet(FOCUS[k][0]);
   };
-  const frac = drag != null ? drag : idx / 2;
+  const cancel = () => { const s = st.current; st.current = null; if (s && s.raf) cancelAnimationFrame(s.raf); if (track.current) track.current.parentElement.classList.remove('dragging'); setF(idx / 2); setHk(null); };
   const [, label, icon] = FOCUS[idx];
-  const hover = drag != null ? FOCUS[Math.round(drag * 2)] : null;
+  const hover = hk != null ? FOCUS[hk] : null;
   return html`${open && html`<button type="button" class="f-scrim" aria-label="Sluiten" onClick=${() => setOpen(false)}></button>`}
-  <div class=${'focus f-' + stand + (open ? ' open' : '') + (drag != null ? ' dragging' : '')}>
+  <div class=${'focus f-' + stand + (open ? ' open' : '') + (hk != null ? ' dragging' : '')}>
     <div class="f-track" ref=${track}>
       <span class="f-line"></span>
-      ${FOCUS.map(([v, l], k) => html`<button type="button" class=${'f-stop' + (k === idx ? ' on' : '')} style=${`top:${k * 50}%`} tabindex=${open ? 0 : -1}
+      ${FOCUS.map(([v, l], k) => html`<button type="button" class=${'f-stop' + (k === idx ? ' on' : '') + (hover && k === hk ? ' aim' : '')} style=${`top:${k * 50}%`} tabindex=${open ? 0 : -1}
         onClick=${() => { setOpen(false); if (v !== stand || auto) setTimeout(() => onSet(v), 260); }} aria-label=${l}><i></i><span class="f-lbl"><b>${l}</b><small>${FOCUS_TXT[v]}</small></span></button>`)}
-      <button type="button" class="f-thumb" style=${`top:${(frac * 100).toFixed(1)}%`} onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${() => { st.current = null; setDrag(null); }}
+      <button type="button" class="f-thumb" onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${cancel}
         aria-label=${'Focus: ' + label + (auto ? ', automatisch op de stand' : '') + '. Tik om te kiezen of sleep omhoog of omlaag.'}>
         <${Icon} name=${icon} size=${18} />${auto && html`<b class="f-auto">A</b>`}
       </button>
-      ${hover && html`<span class="f-bubble live" style=${`top:${(frac * 100).toFixed(1)}%`}><b>${hover[1]}</b><small>${FOCUS_TXT[hover[0]]}</small></span>`}
+      ${hover && html`<span class="f-bubble live" key=${'b' + hk}><b>${hover[1]}</b><small>${FOCUS_TXT[hover[0]]}</small></span>`}
     </div>
     ${open && html`<div class="f-foot">
       ${canAuto && html`<button type="button" class=${'f-autobtn' + (auto ? ' on' : '')} aria-pressed=${auto} onClick=${() => onAuto(!auto)}><span class="f-sw"><i></i></span><span class="col" style="gap:0"><b>Auto op stand</b><small>Volgt de stand van de wedstrijd</small></span></button>`}
@@ -432,6 +473,12 @@ function LiveView({ match, team }) {
 
   // slepen in het live-scherm = nu wisselen; de actiepil maakt het ongedaan
   const onDrag = (a, b) => {
+    if (b.slice(0, 5) === 'line:') {
+      const [, to, at] = b.split(':');
+      const lines = mutate((m, t) => M.changeFormation(m, t, a, to, +at));
+      if (lines) showAct({ label: 'Opstelling ' + M.formationText(lines) });
+      return;
+    }
     const aF = a in d.state.pos, bF = b in d.state.pos;
     if (aF && bF) { mutate((m, t) => M.movePlayers(m, t, a, b)); showAct({}); return; }
     if (aF === bF) return;
@@ -443,6 +490,7 @@ function LiveView({ match, team }) {
   };
   // wat er gebeurt als je hier loslaat (boven de zwevende speler)
   const dragHint = (a, b) => {
+    if (b.slice(0, 5) === 'line:') return a in d.state.pos ? M.formationLabel(M.linesOf(match, team), d.state.pos[a], b.split(':')[1]) : null;
     const aF = a in d.state.pos, bF = b in d.state.pos;
     if (aF && bF) return 'Ruil met ' + nick(b);
     if (aF === bF) return null;
@@ -568,7 +616,7 @@ function LiveView({ match, team }) {
     ${island}
     <div class="grow-field" ref=${zone}>
       <div class=${'fieldbox' + (goal ? ' goalmode' : '')}>
-        <${Field} slots=${d.state.slots} lines=${team.lines} keeperId=${d.state.keeper} nick=${nick} height="auto"
+        <${Field} slots=${d.state.slots} lines=${M.linesOf(match, team)} keeperId=${d.state.keeper} nick=${nick} height="auto" formable=${!pending && !goal}
           onTap=${tapField} onKeeper=${goal === 'scorer' ? (id) => scoreFor(id) : !pending ? () => setSheet({ type: 'keeper' }) : null}
           picking=${goal === 'scorer'} hot=${cele && cele.us ? cele.id : null} hotKey=${cele ? cele.key : 0}
           neon=${next && !pending && !goal && !timeUp ? group.map((s) => s.out) : []} sub=${(id) => M.fmt(d.state.played[id])}
@@ -584,7 +632,7 @@ function LiveView({ match, team }) {
       </div>
       <div class="benchrow">
         <span class="label">Bank</span>
-        <div class="scroll">
+        <${BenchScroll} focus=${next && !pending ? (group.find((s) => d.state.bench.indexOf(s.in) !== -1) || {}).in : null}>
           ${d.state.bench.map((id) => {
             const dis = d.state.disabled[id];
             const isNext = next && !pending && group.some((s) => s.in === id);
@@ -595,7 +643,7 @@ function LiveView({ match, team }) {
             return isNext ? html`<${Neon} key=${'n' + id}>${pill}</${Neon}>` : pill;
           })}
           ${!d.state.bench.length && html`<span class="small">Niemand</span>`}
-        </div>
+        </${BenchScroll}>
         <button type="button" class="iconbtn" aria-label="Speler later gekomen" onClick=${() => setSheet({ type: 'join' })}><${Icon} name="plus" size=${18} /></button>
       </div>
     </div>
@@ -652,7 +700,7 @@ function GameMenu({ match, team, live, onClose, onSheet }) {
     ${live && item('Einde ' + M.periodLabel(team, match.clock.period), null, () => onSheet('end'))}
     ${live && item('Stand aanpassen', 'Doelpunten per speler en tegengoals', () => onSheet('score'))}
     ${live && item('Wedstrijdgegevens', 'Tegenstander, tijd, veld', () => onSheet('opp'))}
-    ${!live && item('Opstelling opnieuw laten voorstellen', 'Je eigen sleepwerk vervalt', () => { update((d) => rebuildConcept(d)); onClose(); })}
+    ${!live && item('Opstelling opnieuw laten voorstellen', 'Je eigen sleepwerk vervalt', () => { update((d) => rebuildConcept(d, { resetLines: true })); onClose(); })}
     ${live && item('Wedstrijd nu afsluiten', 'Bewaren en naar het overzicht', () => onSheet('finish'))}
     ${live && item('Wedstrijd stoppen en weggooien', 'Niets bewaren', () => onSheet('delete'), true)}
     <div class="row">

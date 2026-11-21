@@ -2,7 +2,7 @@ import { html, useEffect, useMemo, useRef, useState } from '../../vendor/preact-
 import { update, currentMatch } from '../store.js';
 import * as M from '../match.js';
 import { LINE_NAMES } from '../planner.js';
-import { Field, accentFor, Neon, Sheet, Confirm, Seg, Switch, Icon, TeamBadge, OppBadge, useNow, useWakeLock, useDragSwap, justDragged, beep, flash, unlockAudio, toast, go, STANDS, POS_COLORS, POS_NAMES } from '../ui.js';
+import { Field, accentFor, Neon, Sheet, Confirm, Seg, Switch, Icon, TeamBadge, OppBadge, useNow, useWakeLock, useDragSwap, justDragged, BenchScroll, beep, flash, unlockAudio, toast, go, STANDS, POS_COLORS, POS_NAMES } from '../ui.js';
 
 
 // Pas de huidige wedstrijd aan (in één keer opgeslagen).
@@ -17,7 +17,7 @@ export function mutate(fn) {
   return result;
 }
 
-const UNDO_TEXT = { swap: 'wissel', goal: 'goal', oppgoal: 'tegengoal', disable: 'uitschakelen', enable: 'weer inzetbaar', join: 'later gekomen', move: 'plekken ruilen', keeper: 'keeperwissel' };
+const UNDO_TEXT = { swap: 'wissel', goal: 'goal', oppgoal: 'tegengoal', disable: 'uitschakelen', enable: 'weer inzetbaar', join: 'later gekomen', move: 'plekken ruilen', keeper: 'keeperwissel', formation: 'opstelling' };
 export const undoAction = { label: 'Ongedaan', run: () => { const ev = mutate((m, t) => M.undo(m, t)); if (ev) toast('Ongedaan: ' + UNDO_TEXT[ev.type]); } };
 
 // ---------- wissel: schets bovenin (tik een tegel om te kiezen), knoppen in vaste balk ----------
@@ -344,12 +344,12 @@ export function BreakSheet({ match, team, d, onClose }) {
     <span class="h2" style="font-size:22px">Opstelling ${M.periodLabel(team, match.clock.period)}</span>
     <span class="sub" style="color:var(--ink)">${comingIn.length ? html`<span class="chg in">Erin: ${comingIn.map(nick).join(', ')}</span> <span class="chg out">Eruit: ${goingOut.map(nick).join(', ')}</span>` : 'Dezelfde spelers, posities opnieuw verdeeld.'}</span>
     <div ref=${zone} class="col" style="gap:8px">
-      <${Field} slots=${lu.slots} lines=${team.lines} keeperId=${d.state.keeper} nick=${nick} height=${360} onTap=${() => {}} neon=${comingIn} accent=${accentFor(team)} />
+      <${Field} slots=${lu.slots} lines=${M.linesOf(match, team)} keeperId=${d.state.keeper} nick=${nick} height=${360} onTap=${() => {}} neon=${comingIn} accent=${accentFor(team)} />
       <div class="benchrow">
         <span class="label">Bank</span>
-        <div class="scroll">
+        <${BenchScroll}>
           ${lu.bench.map((id) => html`<button type="button" key=${id} data-pid=${id} class=${'benchpill' + (accentFor(team)(id) ? ' acc' : '')} style=${accentFor(team)(id) ? '--acc:' + accentFor(team)(id) : ''}>${nick(id)}<span class="t">${M.mins(d.state.played[id])} min</span></button>`)}
-        </div>
+        </${BenchScroll}>
       </div>
     </div>
     <span class="small">Sleep spelers om te ruilen.</span>
