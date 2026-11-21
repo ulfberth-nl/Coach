@@ -64,7 +64,7 @@ async function run() {
   let keeperId = m.keeperId;
   if (!t.keeper) keeperId = null;
   else if (m.present.indexOf(keeperId) === -1) keeperId = suggestKeeper(t, m.present, keeperCounts(s, t));
-  const opts = { present: m.present, keeperId, priority: m.priority, opponent: m.opponent, date: m.date, lines: m.lines || null, pins: m.pins, fairness: m.fairness, standMode: m.standMode, manualStand: m.manualStand, planMode: m.planMode, periodLineups: m.periodLineups, ownStash: m.ownStash, planStyle: m.planStyle, planRhythm: m.planRhythm, ownSteps: m.ownSteps };
+  const opts = { present: m.present, keeperId, priority: m.priority, opponent: m.opponent, date: m.date, lines: m.lines || null, pins: m.pins, fairness: m.fairness, standMode: m.standMode, manualStand: m.manualStand, planMode: m.planMode, periodLineups: m.periodLineups, ownStash: m.ownStash, planStyle: m.planStyle, planRhythm: m.planRhythm, ownSteps: m.ownSteps, gameplan: m.gameplan };
   let res;
   try { res = await compute('concept', { team: t, tuneKey, opts }); } catch (e) { return; }
   if (my !== gen) return;
@@ -77,7 +77,7 @@ async function run() {
     // intussen iets veranderd (bijv. startopstelling gesleept)? dan niet overschrijven
     if (cur.started || cur.present.join() !== m.present.join() || cur.priority !== m.priority || !same(cur.lines, m.lines) || !same(cur.events, m.events) ||
       !same(cur.pins, m.pins) || cur.fairness !== m.fairness || cur.standMode !== m.standMode || cur.manualStand !== m.manualStand ||
-      cur.planMode !== m.planMode || !same(cur.periodLineups, m.periodLineups) || !same(cur.ownStash, m.ownStash) || cur.planStyle !== m.planStyle || cur.planRhythm !== m.planRhythm || !same(cur.ownSteps, m.ownSteps)) return;
+      cur.planMode !== m.planMode || !same(cur.periodLineups, m.periodLineups) || !same(cur.ownStash, m.ownStash) || cur.planStyle !== m.planStyle || cur.planRhythm !== m.planRhythm || !same(cur.ownSteps, m.ownSteps) || !same(cur.gameplan, m.gameplan)) return;
     const n = res.match;
     n.id = cur.id;
     n.setup = cur.setup || { present: false, keeper: false, opponent: false };

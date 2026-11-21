@@ -8,29 +8,31 @@ import { PlanView } from '../planview.js';
 import { lineStatus } from '../planner.js';
 import { WHY_TEXT } from './home.js';
 import { mutate, liveAct } from './live.js';
-import { OwnPlanner } from './ownplan.js';
+import { GamePlan } from './gameplan.js';
 import { Icon, Seg, Switch, toast, useNow, useWakeLock, beep, flash, go } from '../ui.js';
 import { haptic } from '../motion.js';
 
-// Wie maakt het plan voor deze wedstrijd: de app, of de coach zelf (eigen plan, advies op verzoek). Terug naar de
-// app bewaart je eigen plan; zelf plannen begint met je bewaarde plan, of anders met dat van de app.
-export function switchPlanMode(mode) {
+// Hoe wissel je deze wedstrijd: het standaardplan (de app, volgens de teaminstellingen) of een game plan (de coach
+// legt de puzzel zelf). Terug naar standaard bewaart je game plan; een game plan begin je met je bewaarde bord.
+export function switchPlanMode(mode, quiet = false) {
   const back = mutate((m, t) => {
-    const stash = !!(m.ownStash && (m.ownStash.pins.length || m.ownStash.periodLineups));
+    const stash = !!(m.ownStash && (m.ownStash.pins.length || m.ownStash.periodLineups)) || !!(m.gameplan && m.gameplan.base);
     if (mode === 'eigen' && !stash && !m.started) { m.pins = []; m.periodLineups = null; m.ownSteps = null; }
     M.setPlanMode(m, t, mode, false);
+    // het bord is leidend: het plan volgt weer precies wat erop staat
+    if (mode === 'eigen' && m.gameplan && m.gameplan.base && !m.started) M.gpSync(m, t);
     return stash;
   });
   haptic('success');
-  toast(mode === 'eigen' ? (back ? 'Je eigen plan is terug' : 'Je maakt nu zelf het plan, in een paar stappen.') : 'De app maakt het plan weer. Jouw plan blijft bewaard.');
+  if (!quiet) toast(mode === 'eigen' ? (back ? 'Je game plan is terug' : 'Je maakt nu een game plan.') : 'Je wisselt met het standaardplan. Je game plan blijft bewaard.');
 }
 
 export function Plan({ state }) {
   const match = currentMatch(state);
   if (!match) return html`<main class="screen"><div class="empty"><p>Er is geen wedstrijd klaargezet.</p><a class="btn primary" href="#/">Wedstrijd klaarzetten</a></div></main>`;
   const team = state.teams.find((t) => t.id === match.teamId);
-  // eigen plan: de coach plant zelf per periode, advies alleen op verzoek
-  if (M.isOwn(match, team)) return html`<${OwnPlanner} match=${match} team=${team} />`;
+  // game plan: de coach legt de puzzel zelf op het liniebord
+  if (M.isOwn(match, team)) return html`<${GamePlan} match=${match} team=${team} />`;
   return html`<${Planner} match=${match} team=${team} />`;
 }
 
@@ -58,6 +60,7 @@ export function NextBar({ match, team, cards }) {
   const pending = live && M.lineupPending(match, team);
   const next = live && !pending ? M.nextSwap(match, team) : null;
   const group = live && !pending ? M.nextGroup(match, team) : [];
+  const moves = live && !pending ? M.nextMoves(match, team) : [];
   const countdown = next ? next.t - T : null;
   const alerted = useRef({});
   useEffect(() => {
@@ -84,7 +87,7 @@ export function NextBar({ match, team, cards }) {
         <a class="btn primary" href="#/">Naar de wedstrijd</a>`
       : html`<span class=${'ps-txt' + (countdown <= 0 ? ' due' : countdown <= 60 ? ' soon' : '')}>
           <b>Wissel ${nextNo} · ${countdown > 0 ? M.fmt(countdown) : 'nu!'}</b>
-          <span>${group.map((s) => nick(s.in)).join(', ')} erin${group.length === 1 ? ' voor ' + nick(group[0].out) : ''}${next.pinned && !match.plan.own ? ' · vastgezet' : ''}</span>
+          <span>${group.map((s) => nick(s.in)).join(', ')} erin${group.length === 1 ? ' voor ' + nick(group[0].out) : ''}${moves.length ? ` · ${moves.length === 1 ? '1 plekwissel' : moves.length + ' plekwissels'}` : ''}${next.pinned && !match.plan.own ? ' · vastgezet' : ''}</span>
         </span>
         <button type="button" class="btn plain" onClick=${later} aria-label="1 minuut later">+1′</button>
         <button type="button" class="btn primary" onClick=${swapNow}>Wissel nu</button>`}
@@ -157,7 +160,6 @@ function Planner({ match, team }) {
 
     <section class="card plset">
       <span class="label">Voor deze wedstrijd</span>
-      <${Seg} label="Wie maakt het plan" value="app" options=${[['app', 'De app'], ['eigen', 'Ikzelf']]} onChange=${(v) => v === 'eigen' && switchPlanMode('eigen')} />
       <${Seg} label="Focus" value=${stand} options=${FOCUS_OPTS} onChange=${setFocus} />
       ${team.rules.autoStand && html`<div class="between"><span class="sub">Focus volgt de stand</span><${Switch} on=${auto} onChange=${setAuto} label="Focus volgt de stand" /></div>`}
       <${Seg} label="Eerlijkheid" value=${match.fairness || 'team'} options=${FAIR_OPTS} onChange=${setFair} />
