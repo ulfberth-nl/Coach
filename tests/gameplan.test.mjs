@@ -1,0 +1,141 @@
+// Run: node tests/gameplan.test.mjs  (game plan: liniebord met blokken, omgezet naar het plan en live uitgevoerd)
+import assert from 'node:assert/strict';
+globalThis.localStorage = { getItem: () => null, setItem: () => {} };
+const store = await import('../js/store.js');
+const M = await import('../js/match.js');
+let fakeNow = 5_000_000;
+Date.now = () => fakeNow;
+const team = store.newTeam();
+team.players[0].main = 'A'; team.players[1].main = 'M'; team.players[2].main = 'V';
+const ids = team.players.map((p) => p.id);
+const keeperId = team.keeper ? ids[ids.length - 1] : null;
+const L = M.periodLen(team);
+const sameLines = (a, b) => Object.keys(a).length === Object.keys(b).length && Object.keys(a).every((id) => a[id] === b[id]);
+
+// ---------- gpDiff: wissels met doorschuiver en plekwissels ----------
+{
+  const A = { a: 'V', b: 'V', c: 'M', d: 'A', e: 'A' };
+  // f erin voor a, zelfde linie
+  let d = M.gpDiff(A, { f: 'V', b: 'V', c: 'M', d: 'A', e: 'A' });
+  assert.deepEqual(d.pairs, [{ out: 'a', in: 'f' }]);
+  assert.equal(d.moves.length, 0);
+  // f erin achter, d schuift naar voor (doorschuiver)
+  d = M.gpDiff(A, { d: 'V', b: 'V', c: 'M', f: 'A', e: 'A' });
+  assert.equal(d.pairs.length, 1);
+  assert.equal(d.pairs[0].out, 'a');
+  assert.deepEqual(d.pairs[0].shift, { id: 'd', to: 'V' });
+  assert.equal(d.moves.length, 0);
+  // alleen twee spelers ruilen van linie
+  d = M.gpDiff(A, { a: 'M', b: 'V', c: 'V', d: 'A', e: 'A' });
+  assert.equal(d.pairs.length, 0);
+  assert.equal(d.moves.length, 1);
+  // niets veranderd
+  d = M.gpDiff(A, { ...A });
+  assert.equal(d.pairs.length + d.moves.length, 0);
+}
+
+// ---------- leeg bord → startopstelling loopt door ----------
+const match = M.createMatch(team, { opponent: 'Bord', present: ids, keeperId, planMode: 'eigen' });
+assert.ok(M.isOwn(match, team));
+const field = M.gpFieldIds(match);
+const lines = M.linesOf(match, team);
+const F = Object.values(lines).reduce((a, b) => a + b, 0);
+M.gpEnsure(match, team, 4);
+let blocks = M.gpBlocks(match, team);
+assert.equal(blocks.length, 4 * team.periods);
+assert.ok(blocks.every((b) => b.t % 30 === 0), 'blokgrenzen op halve minuten');
+if (team.periods > 1) assert.equal(blocks[4].t, L, 'tweede periode begint met een nieuw blok');
+// startopstelling half neerzetten: nog geen basis
+const start = {};
+let k = 0;
+for (const l of ['V', 'M', 'A']) for (let i = 0; i < (lines[l] || 0); i++) start[field[k++]] = l;
+const half = { ...start }; delete half[field[0]];
+M.gpSetBlock(match, team, 0, half);
+assert.equal(match.gameplan.base, false, 'onvolledig: nog geen basis');
+assert.equal(match.gameplan.grid[1], null);
+M.gpSetBlock(match, team, 0, start);
+assert.equal(match.gameplan.base, true, 'vol: basis');
+assert.ok(match.gameplan.grid.every((p) => sameLines(p, start)), 'eerste blok loopt door tot het eind');
+assert.equal(match.plan.steps.filter((s) => s.type === 'swap').length, 0, 'zelfde blokken: geen wissels');
+assert.ok(sameLines(match.events[0].pos, start), 'startopstelling = eerste blok');
+
+// ---------- een blok aanpassen werkt niet door ----------
+const bench = field.filter((id) => !(id in start));
+const outV = Object.keys(start).find((id) => start[id] === 'V');
+const b1 = { ...start }; delete b1[outV]; b1[bench[0]] = 'V';
+M.gpSetBlock(match, team, 1, b1);
+assert.ok(sameLines(match.gameplan.grid[2], start), 'blok 3 blijft zoals het was');
+let st = M.gpStats(match, team);
+assert.equal(st.blocks[1].swaps, 1);
+assert.equal(st.blocks[2].swaps, 1, 'terug naar de basis is ook een wissel');
+let sw = match.plan.steps.filter((s) => s.type === 'swap');
+assert.deepEqual(sw.map((s) => [s.t, s.out, s.in]), [[blocks[1].t, outV, bench[0]], [blocks[2].t, bench[0], outV]]);
+// doortrekken tot het eind van de periode
+const n = M.gpExtend(match, team, 1, false);
+assert.equal(n, 2);
+assert.ok(sameLines(match.gameplan.grid[3], b1));
+st = M.gpStats(match, team);
+assert.equal(st.blocks[2].swaps + st.blocks[3].swaps, 0);
+assert.equal(st.kids[bench[0]].blocks, 3, 'drie blokken gespeeld');
+
+// ---------- onvolledig blok telt als ongewijzigd ----------
+const inc = { ...b1 }; delete inc[bench[0]];
+M.gpSetBlock(match, team, 2, inc);
+st = M.gpStats(match, team);
+assert.equal(st.blocks[2].ok, false);
+assert.ok(!match.plan.steps.some((s) => s.type === 'swap' && s.t === blocks[2].t), 'geen wissel naar een onvolledig blok');
+
+// ---------- plekwissel zonder wissel ----------
+M.gpSetBlock(match, team, 2, b1);
+const x = Object.keys(b1).find((id) => b1[id] === 'V'), y = Object.keys(b1).find((id) => b1[id] === 'A');
+const b3 = { ...b1, [x]: b1[y], [y]: b1[x] };
+M.gpSetBlock(match, team, 3, b3);
+const moves = match.plan.steps.filter((s) => s.type === 'move');
+assert.equal(moves.length, 1, 'plekwissel staat in het plan');
+assert.equal(moves[0].t, blocks[3].t);
+
+// ---------- voorzet: eerlijk, coachblokken blijven staan ----------
+const m2 = M.createMatch(team, { opponent: 'Voorzet', present: ids, keeperId, planMode: 'eigen' });
+const rec = M.gpRecommend(m2, team);
+assert.ok(M.GP_SIZES.indexOf(rec.recommended) !== -1);
+M.gpEnsure(m2, team, rec.recommended);
+const filled = M.gpFill(m2, team);
+assert.equal(filled, M.gpBlocks(m2, team).length);
+const s2 = M.gpStats(m2, team);
+assert.ok(s2.blocks.every((b) => b.ok), 'voorzet vult elk blok');
+assert.ok(s2.max - s2.min <= 5 * 60, 'voorzet is eerlijk binnen 5 min');
+assert.ok(m2.gameplan.src.every((s) => s === 'ai'));
+// coach zet blok 1 vast, vul aan laat dat staan
+const fixed = { ...m2.gameplan.grid[1] };
+M.gpSetBlock(m2, team, 1, fixed);
+const again = M.gpFill(m2, team);
+assert.equal(again, M.gpBlocks(m2, team).length - 1);
+assert.ok(sameLines(m2.gameplan.grid[1], fixed));
+assert.equal(m2.gameplan.src[1], 'coach');
+
+// ---------- live: Wissel nu volgt het bord precies ----------
+M.startClock(m2);
+const B = M.gpBlocks(m2, team);
+for (let b = 1; b < Math.min(4, B.length); b++) {
+  if (B[b].i === 0) break;
+  fakeNow += (B[b].t - M.gameTime(m2, team)) * 1000;
+  const grp = M.nextGroup(m2, team);
+  if (!grp.length) continue;
+  M.doPlannedMoment(m2, team);
+  const d = M.derive(m2, team, M.gameTime(m2, team));
+  assert.ok(sameLines(d.state.pos, m2.gameplan.grid[b]), `live na moment ${b} = blok ${b + 1}`);
+}
+// één keer ongedaan maken haalt het hele moment terug
+const before = M.derive(m2, team, M.gameTime(m2, team)).state.pos;
+M.undo(m2, team);
+const after = M.derive(m2, team, M.gameTime(m2, team)).state.pos;
+assert.ok(!sameLines(before, after), 'ongedaan maken draait het moment terug');
+
+// ---------- afwezig na het plannen: bord wordt opgeschoond ----------
+const m3 = M.createMatch(team, { opponent: 'Weg', present: ids, keeperId, planMode: 'eigen' });
+M.gpEnsure(m3, team, 4); M.gpFill(m3, team);
+const gone = M.gpFieldIds(m3)[0];
+const m4 = M.createMatch(team, { opponent: 'Weg', present: ids.filter((id) => id !== gone), keeperId, planMode: 'eigen', gameplan: m3.gameplan });
+assert.ok(m4.gameplan.grid.every((p) => !p || !(gone in p)), 'afwezige speler is van het bord');
+
+console.log('gameplan ok');

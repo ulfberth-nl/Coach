@@ -181,7 +181,7 @@ function applyLineupS(state, lu, t) {
 // { t, type: 'free', emit } | { t, type: 'freeLineup', emit }]. Op een vrij moment worden een paar mogelijke
 // keuzes vooruit doorgespeeld tot het eind (vooruitkijken); de keuze met de beste uitkomst telt. Geeft de gekozen
 // wissels (alleen bij emit), de opstellingen en de eindstand terug.
-export function project({ start, T0, ctx, items, k, style, lookahead = true }) {
+export function project({ start, T0, ctx, items, k, style, lookahead = true, snaps = false }) {
   const end = ctx.periods * ctx.periodLen;
   const isL = (x) => (x.type === 'lineup' || x.type === 'freeLineup' ? 1 : 0);
   const sorted = items.filter((x) => x.t >= T0 && x.t < end).sort((a, b) => a.t - b.t || isL(b) - isL(a));
@@ -189,9 +189,9 @@ export function project({ start, T0, ctx, items, k, style, lookahead = true }) {
   const ids = Object.keys(st.pos).concat(st.bench);
   const acc = { fit: 0, field: 0, stretch: {}, swaps: 0, moments: new Set() };
   for (const id of ids) acc.stretch[id] = 0;
-  const out = { emitted: [], lineups: [] };
+  const out = { emitted: [], lineups: [], snaps: snaps ? { [T0]: { ...st.pos } } : null };
   const fin = run(st, T0, acc, sorted, 0, { ctx, k, style, end, lookahead, out });
-  return { emitted: out.emitted, lineups: out.lineups, final: fin };
+  return { emitted: out.emitted, lineups: out.lineups, final: fin, snaps: out.snaps };
 }
 
 function cloneAcc(a) { return { fit: a.fit, field: a.field, stretch: { ...a.stretch }, swaps: a.swaps, moments: new Set(a.moments) }; }
@@ -286,6 +286,7 @@ function run(st, now, acc, sorted, from, o) {
       for (const id of st.bench) if (id in lu.pos) noteBench(id, it.t);
       applyLineupS(st, lu, it.t);
       if (it.emit && o.out) o.out.lineups.push({ t: it.t, pos: { ...lu.pos } });
+      if (o.out && o.out.snaps) o.out.snaps[it.t] = { ...st.pos };
       continue;
     }
     let pairs;
@@ -320,6 +321,7 @@ function run(st, now, acc, sorted, from, o) {
     }
     doPairs(pairs, it.t);
     if (it.emit && it.type === 'free' && o.out) o.out.emitted.push({ t: it.t, pairs });
+    if (o.out && o.out.snaps) o.out.snaps[it.t] = { ...st.pos };
   }
   advanceTo(end);
   return outcome(st, acc, ctx, end);

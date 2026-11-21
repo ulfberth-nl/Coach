@@ -527,7 +527,8 @@ export function Icon({ name, size = 22 }) {
     edit: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
     spark: 'M12 3.5l1.9 5.2 5.6 1.8-5.6 1.8L12 17.5l-1.9-5.2-5.6-1.8 5.6-1.8zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z',
     shield: 'M12 3l7 3v5.2c0 4.3-2.9 8-7 9.8-4.1-1.8-7-5.5-7-9.8V6z',
-    warn: 'M12 4l9 16H3zM12 10v4.5M12 17.5v.3'
+    warn: 'M12 4l9 16H3zM12 10v4.5M12 17.5v.3',
+    rotate: 'M8 3.5h8a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5H8A1.5 1.5 0 0 1 6.5 19V5A1.5 1.5 0 0 1 8 3.5zM3 9.5a9 9 0 0 1 2-4M21 14.5a9 9 0 0 1-2 4M1.8 7.2 3 9.6l2.3-1.1M22.2 16.8 21 14.4l-2.3 1.1'
   };
   const filled = name === 'play' || name === 'pause';
   return html`<svg width=${size} height=${size} viewBox="0 0 24 24" fill=${filled ? 'currentColor' : 'none'} stroke=${filled ? 'none' : 'currentColor'} stroke-width=${name === 'more' ? 3.6 : 2.2} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${paths[name]} /></svg>`;

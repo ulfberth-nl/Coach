@@ -567,6 +567,13 @@ export function planOwn(start, ctx, T, pins, lineups) {
       applySwap(state, sw, pin.t);
       used.add(pr.out); used.add(pr.in);
     }
+    // game plan: veldspelers die van linie ruilen (zonder wissel), na de wissels van dit moment
+    for (const mv of pin.moves || []) {
+      if (!(mv.a in state.pos) || !(mv.b in state.pos)) { broken.push({ t: pin.t, move: true, out: mv.a, in: mv.b }); continue; }
+      const pos = { ...state.pos, [mv.a]: state.pos[mv.b], [mv.b]: state.pos[mv.a] };
+      state.pos = pos;
+      steps.push({ type: 'move', t: pin.t, a: mv.a, b: mv.b, pos: { ...pos }, own: true });
+    }
   }
   while (p < periods - 1) { p++; lineupAt(p * periodLen, p); }
   advance(state, now, end);
@@ -585,6 +592,7 @@ export function stateAt(start, T, steps, t, inclusive = false) {
     advance(state, now, s.t);
     now = s.t;
     if (s.type === 'lineup') applyLineup(state, { pos: s.pos, bench: s.bench }, s.t);
+    else if (s.type === 'move') state.pos = { ...s.pos };
     else applySwap(state, s, s.t);
   }
   advance(state, now, t);

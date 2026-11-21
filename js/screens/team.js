@@ -8,7 +8,7 @@ import { PROFILES, PROFILE_ORDER, profileOf, cachedTune, rememberTune, consequen
 import { compute } from '../compute.js';
 import { scheduleRefresh } from '../refresh.js';
 
-export const APP_VERSION = '0.21.0';
+export const APP_VERSION = '0.22.0';
 
 // regels die het wisselprofiel bepaalt; zet je er zelf een, dan wordt het profiel 'Eigen'
 const TUNED = ['marge', 'equalTime', 'evenOften', 'maxBenchOn', 'maxBench', 'minInterval', 'turnsPerPeriod', 'priority', 'strongBias'];
@@ -237,11 +237,11 @@ export function Team({ state }) {
 
     <section class="card">
       <span class="h2">Wisselen</span>
-      <span class="label">Wie maakt het plan</span>
-      <${Seg} label="Wie maakt het plan" value=${r.planMode === 'eigen' ? 'eigen' : 'app'} onChange=${(v) => setRule('planMode', v)} options=${[['app', 'De app'], ['eigen', 'Ikzelf']]} />
+      <span class="label">Nieuwe wedstrijd begint met</span>
+      <${Seg} label="Nieuwe wedstrijd begint met" value=${r.planMode === 'eigen' ? 'eigen' : 'app'} onChange=${(v) => setRule('planMode', v)} options=${[['app', 'Standaardplan'], ['eigen', 'Game plan']]} />
       <span class="small">${r.planMode === 'eigen'
-        ? 'Je maakt zelf het plan in een paar stappen. Per wedstrijd kies je hoe je speelt: Sterkste opstelling (iedereen in zijn kracht, wisselen binnen de linies) of Gebalanceerd (eerlijke speeltijd, met oog voor voorkeuren). De app adviseert alleen als je erom vraagt.'
-        : 'De app maakt het plan; jij kunt momenten vastzetten. Per wedstrijd kun je ook zelf plannen.'}</span>
+        ? 'Je legt per wedstrijd zelf de puzzel op het liniebord: startopstelling, dan wie waar speelt per blok. De app rekent mee en kan een voorzet doen.'
+        : 'De app maakt het plan volgens de instellingen hieronder. Per wedstrijd kun je ook een game plan maken.'}</span>
       <span class="sub">Kies hoe je wilt wisselen. De app rekent het door voor je ${squad.length} spelers, en per wedstrijd opnieuw met wie er is.</span>
       <div class="profiles" role="radiogroup" aria-label="Wisselprofiel">
         ${PROFILE_ORDER.map((k) => html`<${ProfileCard} key=${k} k=${k} on=${prof === k} r=${profs[k]} stale=${profBusy} ref0=${profs.balans && profs.balans.stats} n=${squad.length} onPick=${() => pickProfile(k)} />`)}

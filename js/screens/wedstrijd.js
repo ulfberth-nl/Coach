@@ -9,6 +9,7 @@ import { matchRules } from '../profiles.js';
 import { scheduleRefresh } from '../refresh.js';
 import { viewTransition, haptic, reduced, T as TEMPO } from '../motion.js';
 import { switchPlanMode } from './plan.js';
+import { Rooster } from './gameplan.js';
 import { mutate, undoAction, liveAct, SwapSheet, GroupSwapSheet, BenchSheet, GoalSheet, JoinSheet, KeeperSheet } from './live.js';
 import { Field, Neon, Roll, Sheet, Confirm, Seg, Stepper, Icon, accentFor, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, BenchScroll, beep, flash, unlockAudio, toast, go } from '../ui.js';
 
@@ -79,7 +80,7 @@ export function rebuildConcept(d, changes = {}) {
   else if (present.indexOf(keeperId) === -1) keeperId = suggestKeeper(t, present, keeperCounts(d, t));
   // eigen opstelling (gesleept) blijft staan, behalve als de coach om een nieuw voorstel vraagt
   const lines = changes.resetLines ? null : m.lines || null;
-  const keep = changes.resetLines ? { planMode: m.planMode } : { pins: m.pins, fairness: m.fairness, standMode: m.standMode, manualStand: m.manualStand, planMode: m.planMode, periodLineups: m.periodLineups, ownStash: m.ownStash, planStyle: m.planStyle, planRhythm: m.planRhythm, ownSteps: m.ownSteps };
+  const keep = changes.resetLines ? { planMode: m.planMode } : { pins: m.pins, fairness: m.fairness, standMode: m.standMode, manualStand: m.manualStand, planMode: m.planMode, periodLineups: m.periodLineups, ownStash: m.ownStash, planStyle: m.planStyle, planRhythm: m.planRhythm, ownSteps: m.ownSteps, gameplan: m.gameplan };
   const n = M.createMatch(t, { present, keeperId, priority: changes.priority || m.priority, opponent: m.opponent, date: m.date, lines, rules: matchRules(t, present, keeperId), ...keep });
   n.id = m.id;
   n.setup = m.setup || { present: false, keeper: false, opponent: false };
@@ -152,7 +153,7 @@ function PrepView({ state, match, team }) {
   const plan = match.plan;
   const swaps = plan ? new Set(plan.steps.filter((s) => s.type === 'swap').map((s) => s.t)).size : 0;
   const perMoment = Math.max(1, Math.min(5, team.rules.perMoment || 1));
-  const every = swaps ? Math.round((M.matchEnd(team) / (swaps + team.periods)) / 30) / 2 : 0;
+  const emptyGp = M.isOwn(match, team) && !(match.gameplan && match.gameplan.base);
   const todo = [!setup.present && 'wie er is', team.keeper && !setup.keeper && 'de keeper', !setup.opponent && 'de tegenstander'].filter(Boolean);
   // aftrap: het veld en het affiche gaan vloeiend over in het live-scherm, het scorebord valt erin
   const start = () => {
@@ -171,14 +172,10 @@ function PrepView({ state, match, team }) {
     ${tooFew
       ? html`<div class="card" style="flex:1 1 auto;justify-content:center;text-align:center"><span class="h2">Te weinig spelers</span><span class="sub">Je hebt ${F} veldspelers nodig${team.keeper ? ' plus een keeper' : ''}. Tik op "spelers".</span></div>`
       : html`
-        ${M.isOwn(match, team) ? html`<${OwnLine} match=${match} team=${team} />` : html`<button type="button" class="planline" onClick=${() => go('/plan')}>
-          ${html`<span>${swaps ? `${swaps} ${perMoment > 1 ? 'momenten (tot ' + perMoment + ' tegelijk)' : 'wissels'} · ~${String(every).replace('.', ',')} min · ${M.mins(plan.fair.minPlayed)}–${M.mins(plan.fair.maxPlayed)} min p.p. · ${plan.fair.minTurns === plan.fair.maxTurns ? plan.fair.minTurns + '×' : plan.fair.minTurns + '–' + plan.fair.maxTurns + '×'}` : 'Geen wissels nodig'}</span>`}
-          ${!plan.ok && html`<span class="warnicon" title=${(plan.why || []).map((w) => WHY_TEXT[w]).join(', ')}>!</span>`}
-          <${Icon} name="chev" size=${16} />
-        </button>`}
-        <div class="grow-field"><${PlanView} match=${match} team=${team} compact editable
+        <${PlanChoice} match=${match} team=${team} swaps=${swaps} perMoment=${perMoment} />
+        <div class="grow-field"><${PlanView} match=${match} team=${team} compact editable=${!M.isOwn(match, team)}
           onSwap=${(a, b) => conceptDrop(mutateConcept, team, a, b)} /></div>`}
-    <button type="button" class="btn primary block startbtn" disabled=${tooFew} onClick=${() => (todo.length ? setSheet('confirm') : start())}>
+    <button type="button" class="btn primary block startbtn" disabled=${tooFew} onClick=${() => (emptyGp ? setSheet('gpleeg') : todo.length ? setSheet('confirm') : start())}>
       <${Icon} name="play" size=${18} /> Start · tik bij de aftrap
     </button>
 
@@ -187,6 +184,7 @@ function PrepView({ state, match, team }) {
     ${sheet === 'opp' && html`<${OpponentSheet} match=${match} upcoming=${upcomingFor(team, state.matches)} onClose=${() => setSheet(null)} />`}
     ${sheet === 'menu' && html`<${GameMenu} match=${match} team=${team} onClose=${() => setSheet(null)} onSheet=${setSheet} />`}
     ${sheet === 'confirm' && html`<${Confirm} title="Toch starten?" text=${'Nog niet bevestigd: ' + todo.join(', ') + '.'} yes="Start" onYes=${start} onClose=${() => setSheet(null)} />`}
+    ${sheet === 'gpleeg' && html`<${Confirm} title="Je game plan is nog leeg" text="Er staan nog geen wissels gepland. Maak eerst je game plan, of kies het standaardplan." yes="Toch starten" onYes=${start} onClose=${() => setSheet(null)} />`}
   </main>`;
 }
 
@@ -417,7 +415,7 @@ function LiveView({ match, team }) {
       liveAct.run = null;
       setTimeout(() => {
         const ps = run.pairs;
-        mutate((m, t) => (ps.length > 1 ? M.doSwapGroup(m, t, ps) : M.doSwap(m, t, ps[0].out, ps[0].in, ps[0].shift)));
+        mutate((m, t) => (M.isOwn(m, t) ? M.doPlannedMoment(m, t) : ps.length > 1 ? M.doSwapGroup(m, t, ps) : M.doSwap(m, t, ps[0].out, ps[0].in, ps[0].shift)));
         showAct(ps.length > 1 ? { outs: ps.map((p) => p.out), undos: 1 } : { out: ps[0].out, undos: 1 });
       }, reduced() ? 60 : TEMPO.screen + 150);
     }
@@ -620,7 +618,8 @@ function LiveView({ match, team }) {
     setPeek(false);
     haptic('success');
     setTimeout(() => {
-      mutate((m, t) => (pairs.length > 1 ? M.doSwapGroup(m, t, pairs) : M.doSwap(m, t, pairs[0].out, pairs[0].in, pairs[0].shift)));
+      // game plan: precies zoals gepland (met doorschuiver en plekwissels); anders zoals altijd
+      mutate((m, t) => (M.isOwn(m, t) ? M.doPlannedMoment(m, t) : pairs.length > 1 ? M.doSwapGroup(m, t, pairs) : M.doSwap(m, t, pairs[0].out, pairs[0].in, pairs[0].shift)));
       showAct(pairs.length > 1 ? { outs: pairs.map((p) => p.out), undos: 1 } : { out: pairs[0].out, undos: 1 });
       setSpinning(false);
       const r = document.querySelector('.islandwrap > .i-ring');
@@ -668,15 +667,22 @@ function LiveView({ match, team }) {
   useEffect(() => { if (!canPeek && peek) setPeek(false); }, [canPeek]);
   const lines = M.linesOf(match, team);
   const peekStory = canPeek ? M.swapStory(d.state.slots, lines, group.map((s) => ({ out: s.out, in: s.in, shift: s.shift }))) : [];
+  // game plan: plekwissels die met dit moment meegaan
+  const movesNow = next ? M.nextMoves(match, team) : [];
+  const peekMoves = canPeek && movesNow.length ? M.moveStory(M.slotsAfter(d.state.slots, group), lines, movesNow) : [];
   let after = null;
   if (canPeek && match.plan) {
-    const rest = match.plan.steps.slice(group.length);
+    const rest = match.plan.steps.filter((s) => s.type !== 'move' && group.indexOf(s) === -1);
     if (rest[0] && rest[0].type === 'lineup') after = { lineup: true, t: rest[0].t };
     else if (rest[0]) {
       const g2 = rest.filter((s) => s.type === 'swap' && s.t === rest[0].t);
       after = { t: rest[0].t, story: M.swapStory(M.slotsAfter(d.state.slots, group), lines, g2.map((s) => ({ out: s.out, in: s.in, shift: s.shift }))) };
     }
   }
+  const moveLine = (st) => html`<div class="pk-line" key=${'mv' + st.a + st.b}>
+    <span class="pk-main"><span class="chg sh">↔ ${nick(st.a)}</span> en <span class="chg sh">${nick(st.b)}</span> ruilen van linie</span>
+    ${st.aPos && html`<span class="pk-sub">${nick(st.a)} ${st.aPos.naar} · ${nick(st.b)} ${st.bPos.naar}</span>`}
+  </div>`;
   const storyLine = (st, small) => html`<div class=${'pk-line' + (small ? ' pk-next' : '')} key=${st.in + st.out}>
     <span class="pk-main"><span class="chg in">↑ ${nick(st.in)}</span> erin voor <span class="chg out">↓ ${nick(st.out)}</span></span>
     ${(st.shift || st.inPos) && html`<span class="pk-sub">${st.shift
@@ -685,8 +691,9 @@ function LiveView({ match, team }) {
   </div>`;
   const drawer = canPeek && html`<div class=${'isl-drawer' + (peek ? ' open' : '')}>
     <div class="dr-clip"><div class="dr-body" aria-hidden=${!peek} role="status"><div class="dr-in">
-      <span class="pk-when">Zo gaat de wissel${next.fixed ? ' · vastgezet' : ''}</span>
+      <span class="pk-when">Zo gaat de wissel${next.fixed && !next.own ? ' · vastgezet' : ''}</span>
       ${peekStory.map((st) => storyLine(st, false))}
+      ${peekMoves.map(moveLine)}
       ${after && html`<span class="pk-when pk-after">Daarna · over ${M.fmt(Math.max(0, after.t - T))}</span>`}
       ${after && (after.lineup ? html`<div class="pk-line pk-next"><span class="pk-main">Rust: nieuwe opstelling</span></div>` : after.story.map((st) => storyLine(st, true)))}
     </div></div></div>
@@ -714,7 +721,8 @@ function LiveView({ match, team }) {
       k: late ? `Te laat · wissel ${n}` : countdown <= 60 ? `Bijna · wissel ${n} van ${counts.total}` : `Volgende wissel · ${n} van ${counts.total}`,
       t1: group.length > 1 ? html`${group.length} spelers tegelijk` : html`<em>${nick(s0.in)}</em> erin voor ${nick(s0.out)}`,
       t2: (s0.fixed && !s0.own ? 'Aangepast · ' : '') + (group.length > 1 ? group.map((s) => nick(s.in)).join(', ') + ' erin'
-        : story.shift ? `${nick(story.shift)} ${story.shiftPos ? story.shiftPos.naar : 'schuift door'}` : story.inPos ? `${nick(s0.in)} ${story.inPos.op}` : ''),
+        : story.shift ? `${nick(story.shift)} ${story.shiftPos ? story.shiftPos.naar : 'schuift door'}` : story.inPos ? `${nick(s0.in)} ${story.inPos.op}` : '') +
+        (movesNow.length ? ` · ${movesNow.length === 1 ? '1 plekwissel' : movesNow.length + ' plekwissels'}` : ''),
       ring: countdown <= 0 ? 'nu' : M.fmt(countdown),
       late: late ? '−' + M.fmt(-countdown) : null,
       frac: Math.max(0, Math.min(1, (T - (match.plan ? match.plan.at : 0)) / Math.max(1, next.t - (match.plan ? match.plan.at : 0)))),
@@ -750,7 +758,7 @@ function LiveView({ match, team }) {
       <div class="rp-row">
         <div class=${'rp-seg' + (rest.kind === 'eigen' || rest.kind === 'advies' ? ' none' : '')}>
           <${Seg} label="Opstelling na de rust" value=${rest.kind} onChange=${pickRest}
-            options=${[['aanbevolen', own ? 'Jouw plan' : 'Aanbevolen'], ['start', 'Als start'], ['eind', 'Als eind']]} />
+            options=${[['aanbevolen', own ? 'Game plan' : 'Aanbevolen'], ['start', 'Als start'], ['eind', 'Als eind']]} />
         </div>
         ${own && html`<button type="button" class=${'rp-advise' + (rest.kind === 'advies' ? ' on' : '')} aria-pressed=${rest.kind === 'advies' ? 'true' : 'false'} onClick=${() => { haptic('select'); pickRest('advies'); }}><${Icon} name="spark" size=${16} />Advies</button>`}
       </div>
@@ -924,15 +932,13 @@ function GameMenu({ match, team, live, onClose, onSheet }) {
       </div>
       <button type="button" class="link" onClick=${() => { mutate((m, t) => M.setClock(m, t, 0)); toast('Klok op 0:00'); }}>Klok op 0:00 zetten</button>
     </div>`}
-    ${!live && html`<div class="col"><span class="label">Voorrang deze wedstrijd</span>
+    ${!live && !M.isOwn(match, team) && html`<div class="col"><span class="label">Voorrang deze wedstrijd</span>
       <${Seg} label="Voorrang" value=${match.priority} onChange=${(v) => update((d) => rebuildConcept(d, { priority: v }))} options=${[['eerlijk', 'Eerlijkheid'], ['bezetting', 'Beste bezetting']]} /></div>`}
-    <div class="col"><span class="label">Wie maakt het plan</span>
-      <${Seg} label="Wie maakt het plan" value=${M.isOwn(match, team) ? 'eigen' : 'app'} onChange=${(v) => { switchPlanMode(v); onClose(); go('/plan'); }} options=${[['app', 'De app'], ['eigen', 'Ikzelf']]} /></div>
-    ${item(M.isOwn(match, team) ? 'Jouw plan' : 'Wedstrijdplan', M.isOwn(match, team) ? 'Opstelling en wissels per periode' : 'Alle wissels en het rooster per kind', () => go('/plan'))}
+    ${item(M.isOwn(match, team) ? 'Game plan' : 'Standaardplan', M.isOwn(match, team) ? 'Je liniebord: wie speelt waar, per blok' : 'Alle wissels en het rooster per kind', () => go('/plan'))}
     ${live && item('Einde ' + M.periodLabel(team, match.clock.period), null, () => onSheet('end'))}
     ${live && item('Stand aanpassen', 'Doelpunten per speler en tegengoals', () => onSheet('score'))}
     ${live && item('Wedstrijdgegevens', 'Tegenstander, tijd, veld', () => onSheet('opp'))}
-    ${!live && item('Opstelling opnieuw laten voorstellen', 'Je eigen sleepwerk vervalt', () => { update((d) => rebuildConcept(d, { resetLines: true })); onClose(); })}
+    ${!live && !M.isOwn(match, team) && item('Opstelling opnieuw laten voorstellen', 'Je eigen sleepwerk vervalt', () => { update((d) => rebuildConcept(d, { resetLines: true })); onClose(); })}
     ${live && item('Wedstrijd nu afsluiten', 'Bewaren en naar het overzicht', () => onSheet('finish'))}
     ${live && item('Wedstrijd stoppen en weggooien', 'Niets bewaren', () => onSheet('delete'), true)}
     <div class="row">
@@ -956,18 +962,55 @@ function DoneView({ match, team }) {
   </main>`;
 }
 
-// Planregel bij een eigen plan: waar je bent in de stappen, en één knop om verder te gaan.
-function OwnLine({ match, team }) {
-  const steps = M.ownSteps(team);
-  const done = (match.ownSteps && match.ownSteps.done) || {};
-  const n = steps.filter((k) => done[k]).length;
-  const fresh = !match.ownSteps || !n;
-  const finished = done.rapport;
-  const at = match.ownSteps && match.ownSteps.at;
-  const label = at === 'aanpak' ? 'aanpak' : at === 'rapport' ? 'rapport' : at ? (at[0] === 'o' ? 'opstelling ' : 'wissels ') + M.periodLabel(team, +at.split(':')[1]) : '';
-  return html`<button type="button" class=${'planline own' + (fresh ? ' fresh' : '') + (finished ? ' done' : '')} onClick=${() => go('/plan')}>
-    <span class="pl-ring" style=${'--p:' + (n / steps.length)} aria-hidden="true"><i></i></span>
-    <span class="pl-txt"><b class="pl-own">Jouw plan</b><span>${finished ? 'klaar · bekijk het rapport' : fresh ? `maak je plan in ${steps.length} stappen` : `stap ${Math.min(steps.length, n + 1)} van ${steps.length} · ${label}`}</span></span>
-    <span class="pl-cta">${finished ? 'Bekijk' : fresh ? 'Begin' : 'Verder'}<${Icon} name="chev" size=${15} /></span>
-  </button>`;
+// Hoe wissel je deze wedstrijd? Twee manieren naast elkaar, de actieve zichtbaar gemarkeerd.
+function PlanChoice({ match, team, swaps, perMoment }) {
+  const own = M.isOwn(match, team);
+  const plan = match.plan;
+  const [sheet, setSheet] = useState(null);
+  const gp = match.gameplan;
+  const st = useMemo(() => (own && gp && gp.base ? M.gpStats(match, team) : null), [match, team, own]);
+  const full = st ? st.blocks.filter((b) => b.ok).length : 0;
+  const pickStd = () => {
+    if (!own) { setSheet('rooster'); return; }
+    switchPlanMode('app', true);
+    toast('Je wisselt met het standaardplan. Je game plan blijft bewaard.', { label: 'Ongedaan', run: () => switchPlanMode('eigen', true) });
+  };
+  const pickGp = () => { if (!own) switchPlanMode('eigen', true); haptic('select'); go('/plan'); };
+  const stdLine = swaps ? `${swaps} ${perMoment > 1 ? 'momenten' : 'wissels'} · ${M.mins(plan.fair.minPlayed)}–${M.mins(plan.fair.maxPlayed)} min p.p.` : 'Geen wissels nodig';
+  return html`<section class="pchoice">
+    <div class="pc-head"><span class="pc-q">Hoe wissel je deze wedstrijd?</span>
+      <button type="button" class="pc-info" onClick=${() => setSheet('uitleg')}>Uitleg</button></div>
+    <div class="pc-opts">
+      <button type="button" class=${'pc-opt' + (!own ? ' on' : '')} aria-pressed=${!own ? 'true' : 'false'} onClick=${pickStd}>
+        ${!own && html`<span class="pc-badge" aria-label="Actief"><${Icon} name="check" size=${13} /></span>`}
+        <span class="pc-top"><span class="pc-ico"><${Icon} name="swaparrows" size=${16} /></span><b class="pc-t">Standaardplan</b></span>
+        <span class="pc-s">${own ? 'Klaar om te spelen, volgens je teaminstellingen' : html`${stdLine}${!plan.ok && html` <span class="warnicon" title=${(plan.why || []).map((w) => WHY_TEXT[w]).join(', ')}>!</span>`}`}</span>
+        <span class="pc-cta">${own ? 'Gebruik dit' : 'Bekijk als rooster'}<${Icon} name="chev" size=${14} /></span>
+      </button>
+      <button type="button" class=${'pc-opt gp' + (own ? ' on' : '')} aria-pressed=${own ? 'true' : 'false'} onClick=${pickGp}>
+        ${own && html`<span class="pc-badge" aria-label="Actief"><${Icon} name="check" size=${13} /></span>`}
+        <span class="pc-top"><span class="pc-ico"><${Icon} name="edit" size=${16} /></span><b class="pc-t">Game plan</b></span>
+        <span class="pc-s">${own ? (st ? `${full} van ${st.blocks.length} blokken vol · ${M.mins(st.min)}–${M.mins(st.max)} min p.p.` : 'Nog niet gemaakt') : 'Zelf de puzzel leggen, blok voor blok'}</span>
+        <span class="pc-cta">${own ? (st ? (full === st.blocks.length ? 'Bekijk' : 'Verder') : 'Begin') : 'Maak een game plan'}<${Icon} name="chev" size=${14} /></span>
+      </button>
+    </div>
+    ${sheet === 'rooster' && html`<${Sheet} onClose=${() => setSheet(null)} label="Standaardplan">
+      <span class="h2" style="font-size:22px">Standaardplan</span>
+      <span class="sub">Zo wisselt de app, volgens je teaminstellingen. Per kind: wanneer op welke linie, en wanneer aan de kant.</span>
+      <div class="card" style="box-shadow:none;border:1px solid var(--line)"><${Rooster} match=${match} team=${team} /></div>
+      <div class="row">
+        <button type="button" class="btn plain grow" onClick=${() => { setSheet(null); go('/plan'); }}>Open de planner</button>
+        <button type="button" class="btn primary grow" onClick=${() => setSheet(null)}>Klaar</button>
+      </div>
+    </${Sheet}>`}
+    ${sheet === 'uitleg' && html`<${Sheet} onClose=${() => setSheet(null)} label="Twee manieren om te wisselen">
+      <span class="h2" style="font-size:22px">Twee manieren om te wisselen</span>
+      <div class="pc-ex"><span class="pc-ico"><${Icon} name="swaparrows" size=${18} /></span><div><b>Standaardplan</b>
+        <p>De app maakt het plan uit je teaminstellingen: wisselprofiel, eerlijkheid en posities. Klaar om te spelen. Tijdens de wedstrijd rekent de app mee met wat er gebeurt.</p></div></div>
+      <div class="pc-ex gp"><span class="pc-ico"><${Icon} name="edit" size=${18} /></span><div><b>Game plan</b>
+        <p>Jij legt de puzzel op een liniebord: eerst de startopstelling, dan per blok wie waar speelt. De app rekent mee en kan een voorzet doen. Tijdens de wedstrijd volgt <b>Wissel nu</b> precies jouw plan.</p></div></div>
+      <span class="sub">Je kiest per wedstrijd en kunt altijd terug; je game plan blijft bewaard. Bij Team stel je in waarmee een nieuwe wedstrijd begint.</span>
+      <button type="button" class="btn primary block" onClick=${() => setSheet(null)}>Duidelijk</button>
+    </${Sheet}>`}
+  </section>`;
 }
