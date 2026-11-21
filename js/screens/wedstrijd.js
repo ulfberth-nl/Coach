@@ -6,6 +6,7 @@ import { PlanView } from '../planview.js';
 import { keeperCounts, suggestKeeper, WHY_TEXT } from './home.js';
 import { nextScheduled, todayISO } from './seizoen.js';
 import { matchRules } from '../profiles.js';
+import { scheduleRefresh } from '../refresh.js';
 import { mutate, undoAction, SwapSheet, GroupSwapSheet, BenchSheet, GoalSheet, BreakSheet, JoinSheet, KeeperSheet } from './live.js';
 import { Field, Neon, Roll, Sheet, Confirm, Seg, Stepper, Icon, accentFor, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, beep, flash, unlockAudio, toast, go } from '../ui.js';
 
@@ -23,6 +24,7 @@ export function newConcept(d) {
   if (e) { applySchedule(m, e); m.setup.opponent = true; }
   d.matches.push(m);
   d.currentMatchId = m.id;
+  scheduleRefresh();
 }
 
 // afmeldingen en geplande keeper uit het programma
@@ -65,6 +67,8 @@ export function rebuildConcept(d, changes = {}) {
   n.setup = m.setup || { present: false, keeper: false, opponent: false };
   for (const k of ['scheduleId', 'time', 'meet', 'field', 'home', 'season']) if (m[k] !== undefined) n[k] = m[k];
   d.matches[i] = n;
+  // het profiel rekent op de achtergrond na met wie er is; wijkt dat af, dan volgt het plan vanzelf
+  scheduleRefresh();
 }
 
 // programma: nog niet gespeelde wedstrijden vanaf een paar dagen terug, op datum

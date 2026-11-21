@@ -1,40 +1,74 @@
-import { html, useEffect, useMemo, useState } from '../../vendor/preact-htm.js';
+import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { update, activeTeam, currentMatch, newTeam, exportData, importData } from '../store.js';
-import { replan, periodWord, createMatch, matchEnd, mins } from '../match.js';
+import { periodWord } from '../match.js';
 import { suggestKeeper } from './home.js';
-import { rebuildConcept } from './wedstrijd.js';
 import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, Reveal, toast, STANDS } from '../ui.js';
 import { devicePrefs, setDevicePref, onDevicePrefs, osReduced } from '../motion.js';
-import { PROFILES, PROFILE_ORDER, profileOf, tune, tuneAsync, matchRules, consequences } from '../profiles.js';
+import { PROFILES, PROFILE_ORDER, profileOf, cachedTune, rememberTune, consequences } from '../profiles.js';
+import { compute } from '../compute.js';
+import { scheduleRefresh } from '../refresh.js';
 
-export const APP_VERSION = '0.14.0';
+export const APP_VERSION = '0.15.0';
 
 // regels die het wisselprofiel bepaalt; zet je er zelf een, dan wordt het profiel 'Eigen'
 const TUNED = ['marge', 'equalTime', 'evenOften', 'maxBenchOn', 'maxBench', 'minInterval', 'turnsPerPeriod', 'priority', 'strongBias'];
 
-// Profielen doorrekenen voor de selectie (in stapjes, gekozen profiel eerst)
-function useProfiles(team, present, keeper, current) {
-  const sig = JSON.stringify([present, keeper, team.lines, team.periods, team.periodMin, team.keeper, team.type, team.rules.perMoment, team.rules.newLineupAtBreak,
-    team.players.map((p) => [p.id, p.kracht, p.prefs, p.main, p.flex])]);
-  const [res, setRes] = useState({});
+// Voorbeeld bij eigen instellingen, ook in de rekendraad
+function usePreview(team, present, keeper, on) {
+  const sig = on ? JSON.stringify([present, keeper, team.lines, team.periods, team.periodMin, team.keeper, team.rules, team.players.map((p) => [p.id, p.kracht, p.prefs, p.main, p.flex])]) : '';
+  const [pv, setPv] = useState(null);
   useEffect(() => {
+    if (!on) return undefined;
     let alive = true;
-    const out = {};
-    const keys = PROFILE_ORDER.slice().sort((a, b) => (b === current) - (a === current));
-    (async () => {
-      for (const k of keys) {
-        const r = await tuneAsync(team, k, present, keeper, () => alive);
-        if (!alive) return;
-        out[k] = r;
-        setRes({ ...out });
-      }
-    })();
-    return () => { alive = false; };
+    const t = setTimeout(async () => {
+      let s = null;
+      try { s = await compute('preview', { team, present, keeperId: keeper }); } catch (e) { s = null; }
+      if (!alive) return;
+      setPv(s && {
+        n: present.length, swaps: s.moments, ok: s.ok, every: s.every, minP: s.minP, maxP: s.maxP, maxStint: Math.round(s.maxStint),
+        turns: s.minTurns === s.maxTurns ? `Iedereen ${s.minTurns}× naar de bank` : `${s.minTurns}–${s.maxTurns}× naar de bank`
+      });
+    }, 400);
+    return () => { alive = false; clearTimeout(t); };
   }, [sig]);
-  return res;
+  return on ? pv : null;
 }
 
-function ProfileCard({ k, on, r, ref0, n, onPick }) {
+// Profielen doorrekenen voor de selectie, in de rekendraad. Optimistisch: tijdens het rekenen blijven de
+// vorige getallen staan (iets vager); pas als je even niets aanpast begint het rekenen.
+function useProfiles(team, present, keeper, current, onResult) {
+  const sig = JSON.stringify([present, keeper, team.lines, team.periods, team.periodMin, team.keeper, team.type, team.rules.perMoment, team.rules.newLineupAtBreak,
+    team.players.map((p) => [p.id, p.kracht, p.prefs, p.main, p.flex])]);
+  const known = () => { const o = {}; for (const k of PROFILE_ORDER) { const c = cachedTune(team, k, present, keeper); if (c !== undefined) o[k] = c; } return o; };
+  const [res, setRes] = useState(known);
+  const [busy, setBusy] = useState(false);
+  const cb = useRef(onResult);
+  cb.current = onResult;
+  useEffect(() => {
+    let alive = true;
+    const have = known();
+    const todo = PROFILE_ORDER.filter((k) => !(k in have)).sort((a, b) => (b === current) - (a === current));
+    if (!todo.length) { setRes(have); setBusy(false); return undefined; }
+    setBusy(true);
+    const t = setTimeout(async () => {
+      const out = { ...have };
+      for (const k of todo) {
+        let r = null;
+        try { r = await compute('tune', { team, key: k, present, keeperId: keeper }); } catch (e) { r = null; }
+        if (!alive) return;
+        rememberTune(team, k, present, keeper, r);
+        out[k] = r;
+        if (cb.current) cb.current(k, r);
+      }
+      setRes(out);
+      setBusy(false);
+    }, 450);
+    return () => { alive = false; clearTimeout(t); };
+  }, [sig]);
+  return [res, busy];
+}
+
+function ProfileCard({ k, on, r, ref0, n, onPick, stale }) {
   const P = PROFILES[k];
   const s = r && r.stats;
   const pp = s ? (s.minP === s.maxP ? s.minP + ' min' : s.minP + '–' + s.maxP + ' min') : '';
@@ -44,14 +78,14 @@ function ProfileCard({ k, on, r, ref0, n, onPick }) {
       <span class="prof-txt">
         <span class="prof-title">${P.label}<span class="prof-tag">${P.tag}</span></span>
         <span class="prof-sub">${P.sub}</span>
-        <span class=${'prof-mini' + (s ? '' : ' wait')}>${s ? `${s.moments} wissels · ${pp} p.p. · max ${Math.round(s.maxStint)}′ bank` : 'rekent het door…'}</span>
+        <span class=${'prof-mini' + (s ? (stale ? ' stale' : '') : ' wait')}>${s ? `${s.moments} wissels · ${pp} p.p. · max ${Math.round(s.maxStint)}′ bank` : 'rekent het door…'}</span>
       </span>
     </button>
     <${Reveal} open=${on}><div class="prof-more">
       <span class="label">Wat de app doet</span>
       <p class="prof-does">${P.does}</p>
-      ${s && html`<span class="label">Gevolgen voor je ${n} spelers</span>
-        <ul class="prof-cons">${consequences(k, s, ref0).map((c) => html`<li class=${c.warn ? 'warn' : ''}>${c.t}</li>`)}</ul>`}
+      ${s && html`<span class="label">Gevolgen voor je ${n} spelers${stale ? html` <span class="prof-upd">wordt bijgewerkt…</span>` : ''}</span>
+        <ul class=${"prof-cons" + (stale ? " stale" : "")}>${consequences(k, s, ref0).map((c) => html`<li class=${c.warn ? 'warn' : ''}>${c.t}</li>`)}</ul>`}
     </div></${Reveal}>
   </div>`;
 }
@@ -90,41 +124,33 @@ export function Team({ state }) {
   const prof = profileOf(r);
   const squad = team.players.filter((p) => p.active !== false).map((p) => p.id);
   const squadKeeper = team.keeper ? suggestKeeper(team, squad, {}) : null;
-  const profs = useProfiles(team, squad, squadKeeper, prof);
-  const preview = useMemo(() => {
-    if (prof !== 'eigen') return null;
-    const present = squad;
-    const keeper = squadKeeper;
-    const F = team.lines.A + team.lines.M + team.lines.V;
-    if (present.filter((id) => id !== keeper).length < F) return null;
-    const plan = createMatch(team, { present, keeperId: keeper, priority: r.priority }).plan;
-    const swaps = new Set(plan.steps.filter((x) => x.type === 'swap').map((x) => x.t)).size;
-    const f = plan.fair;
-    return {
-      n: present.length, swaps, ok: plan.ok,
-      every: swaps ? Math.round((matchEnd(team) / (swaps + team.periods)) / 30) / 2 : 0,
-      minP: mins(f.minPlayed), maxP: mins(f.maxPlayed), maxStint: mins(f.maxStint || 0),
-      turns: f.minTurns === f.maxTurns ? `Iedereen ${f.minTurns}× naar de bank` : `${f.minTurns}–${f.maxTurns}× naar de bank`
-    };
-  }, [team, prof]);
-
-  const set = (fn, changes) => update((draft) => {
-    const t = activeTeam(draft);
-    fn(t);
-    const m = currentMatch(draft);
-    if (m && !m.finished && m.teamId === t.id) {
-      try {
-        if (m.started) { m.rules = matchRules(t, m.present, m.keeperId); if (changes && changes.priority) m.priority = changes.priority; replan(m, t); }
-        else rebuildConcept(draft, changes);
-      } catch (e) { /* plan volgt bij de volgende actie */ }
-    }
-  });
+  // komt het profiel voor de selectie anders uit dan de teamregels (bijv. na een nieuwe speler), dan volgen die
+  const syncRules = (k, r) => {
+    if (!r || k !== profileOf(activeTeam().rules)) return;
+    const cur = activeTeam().rules;
+    if (Object.keys(r.rules).every((x) => cur[x] === r.rules[x])) return;
+    update((d) => { const t = activeTeam(d); Object.assign(t.rules, r.rules); });
+    scheduleRefresh({ force: true });
+  };
+  const [profs, profBusy] = useProfiles(team, squad, squadKeeper, prof, syncRules);
+  const preview = usePreview(team, squad, squadKeeper, prof === 'eigen');
+  // optimistisch: de instelling staat meteen op het scherm; het plan rekent de app daarna op de achtergrond uit
+  const set = (fn, changes) => {
+    update((draft) => {
+      const t = activeTeam(draft);
+      fn(t);
+      const m = currentMatch(draft);
+      if (m && !m.finished && m.teamId === t.id && changes && changes.priority) m.priority = changes.priority;
+    });
+    scheduleRefresh({ force: true });
+  };
   // zelf een regel zetten die het profiel bepaalt: profiel wordt 'Eigen'
   const setRule = (k, v) => set((t) => { t.rules[k] = v; if (TUNED.indexOf(k) !== -1) t.rules.profile = 'eigen'; });
   const pickProfile = (k) => {
     if (k === prof) return;
-    const tr = profs[k] || tune(team, k, squad, squadKeeper);
-    const rules = tr ? tr.rules : { ...PROFILES[k].variants[0] };
+    // al uitgerekend? dan die regels; anders de standaardvariant (de rekendraad stelt hem zo nodig bij)
+    const tr = profs[k];
+    const rules = tr ? tr.rules : { evenOften: true, equalTime: true, turnsPerPeriod: 0, ...PROFILES[k].variants[1 % PROFILES[k].variants.length] };
     set((t) => { Object.assign(t.rules, rules, { profile: k }); if (!('strongBias' in rules)) delete t.rules.strongBias; }, { priority: rules.priority || 'eerlijk' });
   };
   const setLines = (k, v) => set((t) => {
@@ -213,7 +239,7 @@ export function Team({ state }) {
       <span class="h2">Wisselen</span>
       <span class="sub">Kies hoe je wilt wisselen. De app rekent het door voor je ${squad.length} spelers, en per wedstrijd opnieuw met wie er is.</span>
       <div class="profiles" role="radiogroup" aria-label="Wisselprofiel">
-        ${PROFILE_ORDER.map((k) => html`<${ProfileCard} key=${k} k=${k} on=${prof === k} r=${profs[k]} ref0=${profs.balans && profs.balans.stats} n=${squad.length} onPick=${() => pickProfile(k)} />`)}
+        ${PROFILE_ORDER.map((k) => html`<${ProfileCard} key=${k} k=${k} on=${prof === k} r=${profs[k]} stale=${profBusy} ref0=${profs.balans && profs.balans.stats} n=${squad.length} onPick=${() => pickProfile(k)} />`)}
       </div>
       <${Reveal} open=${prof === 'eigen'}><div class="prof-eigen"><span><b>Eigen instellingen</b> · je hebt zelf regels gezet</span><button type="button" class="link" onClick=${() => pickProfile('balans')}>Terug naar In balans</button></div></${Reveal}>
       <${Setting} title="Nieuwe opstelling na de rust" sub="Gratis moment om meerdere kinderen te wisselen"><${Switch} label="Nieuwe opstelling na de rust" on=${r.newLineupAtBreak} onChange=${(v) => setRule('newLineupAtBreak', v)} /></${Setting}>
@@ -273,6 +299,7 @@ export function Team({ state }) {
     <section class="card">
       <span class="h2">Deze telefoon</span>
       <${Setting} title="Tikje bij tikken" sub="Voel een tikje bij knoppen en keuzes. iPhone vanaf iOS 18 en Android."><${Switch} label="Tikje bij tikken" on=${!!dev.haptics} onChange=${(v) => setDevicePref('haptics', v)} /></${Setting}>
+      <${Setting} title="Klikgeluid bij schuiven" sub="Zacht klikje als je door de wissels scrolt of een schuif versleept. De iPhone geeft daar geen tikje; Android trilt."><${Switch} label="Klikgeluid bij schuiven" on=${dev.clicks !== false} onChange=${(v) => setDevicePref('clicks', v)} /></${Setting}>
       <${Setting} title="Minder beweging" sub=${osReduced() ? 'Staat aan via Beperk beweging op je telefoon.' : 'Rustiger beeld: geen veren, wiebels en zwevers.'}><${Switch} label="Minder beweging" on=${!!dev.calm || osReduced()} disabled=${osReduced()} onChange=${(v) => setDevicePref('calm', v)} /></${Setting}>
     </section>
 

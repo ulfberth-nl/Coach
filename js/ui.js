@@ -1,7 +1,7 @@
 // Gedeelde bouwstenen voor de schermen.
 import { html, useEffect, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { getState, update } from './store.js';
-import { haptic, reduced, cancelPress, T, EASE_OUT, SPRING } from './motion.js';
+import { haptic, reduced, cancelPress, T, EASE_OUT, SPRING, audioCtx, unlockAudio } from './motion.js';
 import { findClub, searchClubs, withClub, clubColors, clubAbbr, colorKey, splitTeam, norm } from './clubs.js';
 
 export const POS_COLORS = { K: 'var(--pos-K)', A: 'var(--pos-A)', M: 'var(--pos-M)', V: 'var(--pos-V)' };
@@ -47,14 +47,9 @@ export function ToastHost() {
 }
 
 // ---------- signaal bij een wisselmoment: piep + flits (+ trillen waar dat kan) ----------
-let audio = null;
-export function unlockAudio() {
-  try {
-    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
-    if (audio.state === 'suspended') audio.resume();
-  } catch (e) { audio = null; }
-}
+export { unlockAudio };
 export function beep(times = 1, freq = 880) {
+  const audio = audioCtx();
   if (!audio) return;
   try {
     const t0 = audio.currentTime + 0.02;
@@ -164,7 +159,9 @@ export function Setting({ title, sub, children }) {
   </div>`;
 }
 
-// Keuzebalk: het blokje vloeit naar de nieuwe keuze (rekt even uit in de looprichting); vegen kan ook
+// Keuzebalk: het blokje vloeit naar de nieuwe keuze (rekt even uit in de looprichting); vegen kan ook.
+// Tijdens vegen tekent de app niets opnieuw: de positie gaat rechtstreeks naar het blokje (elk beeldje),
+// zodat het de vinger soepel volgt, ook als de telefoon druk is.
 export function Seg({ value, options, onChange, label, small }) {
   const i = options.findIndex(([v]) => v === value);
   const n = options.length;
@@ -174,8 +171,10 @@ export function Seg({ value, options, onChange, label, small }) {
   const skip = useRef(false);
   const cb = useRef(onChange);
   cb.current = onChange;
-  const [drag, setDrag] = useState(null);
+  const [dragOn, setDragOn] = useState(false);
   const dragging = useRef(false);
+  const place = (pos) => { if (root.current) root.current.style.setProperty('--i', String(pos)); };
+  const mark = (k) => { if (root.current) root.current.querySelectorAll(':scope > button').forEach((b, j) => b.classList.toggle('on', j === k)); };
   // iPhone: tijdens vegen nooit de pagina laten meeschuiven
   useEffect(() => {
     const el = root.current;
@@ -184,7 +183,9 @@ export function Seg({ value, options, onChange, label, small }) {
     el.addEventListener('touchmove', block, { passive: false });
     return () => el.removeEventListener('touchmove', block);
   }, []);
+  // positie van het blokje volgt de waarde (niet tijdens vegen)
   useLayoutEffect(() => {
+    if (!dragging.current) { place(Math.max(0, i)); mark(i); }
     const p = prev.current;
     prev.current = i;
     const el = ind.current;
@@ -192,14 +193,20 @@ export function Seg({ value, options, onChange, label, small }) {
     const d = Math.abs(i - p);
     el.style.transformOrigin = i > p ? '0 50%' : '100% 50%';
     try { el.animate([{ scale: '1 1' }, { scale: `${(1 + Math.min(0.6, 0.3 * d)).toFixed(2)} .88`, offset: 0.32 }, { scale: '1 1' }], { duration: T.screen + 60, easing: EASE_OUT }); } catch (e) { /* oud toestel */ }
-  }, [i]);
+  });
   const down = (e) => {
     if (e.button > 0 || n < 2 || root.current.querySelector('button:disabled')) return;
-    // maten één keer vastleggen; daarna telt alleen hoe ver de vinger is geschoven (geen gespring)
+    // maten één keer vastleggen; daarna telt alleen hoe ver de vinger is geschoven
     const r = root.current.getBoundingClientRect();
     const step = (r.width - 8 - (n - 1) * 4) / n + 4;
     const startPos = Math.max(0, Math.min(n - 1, (e.clientX - r.left - 4 - (step - 4) / 2) / step));
-    const s = { id: e.pointerId, x: e.clientX, y: e.clientY, on: false, hover: i, raf: 0, pos: startPos };
+    const s = { id: e.pointerId, x: e.clientX, y: e.clientY, on: false, hover: i, shown: i, raf: 0, pos: startPos };
+    const frame = () => {
+      s.raf = 0;
+      if (!dragging.current) return;
+      place(s.pos.toFixed(3));
+      if (s.shown !== s.hover) { s.shown = s.hover; mark(s.hover); }
+    };
     const move = (ev) => {
       if (ev.pointerId !== s.id) return;
       if (!s.on) {
@@ -208,32 +215,39 @@ export function Seg({ value, options, onChange, label, small }) {
         if (dx < 8) return;
         s.on = true;
         dragging.current = true;
+        setDragOn(true);
       }
       s.pos = Math.max(0, Math.min(n - 1, startPos + (ev.clientX - s.x) / step));
       const hover = Math.round(s.pos);
       if (hover !== s.hover) { s.hover = hover; haptic('select'); }
-      if (!s.raf) s.raf = requestAnimationFrame(() => { s.raf = 0; if (dragging.current) setDrag({ pos: s.pos, hover: s.hover }); });
+      if (!s.raf) s.raf = requestAnimationFrame(frame);
     };
     const up = (ev) => {
       if (ev.pointerId !== s.id) return;
-      stop();
-      if (!s.on) return;
+      const was = s.on;
+      stop(was ? s.hover : i);
+      if (!was) return;
       skip.current = true;
       setTimeout(() => { skip.current = false; }, 0);
       prev.current = s.hover;
       if (s.hover !== i) cb.current(options[s.hover][0]);
     };
-    const stop = () => {
-      dragging.current = false;
-      if (s.raf) cancelAnimationFrame(s.raf);
+    const stop = (target = i) => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
-      window.removeEventListener('pointercancel', stop);
-      setDrag(null);
+      window.removeEventListener('pointercancel', cancel);
+      if (s.raf) cancelAnimationFrame(s.raf);
+      if (dragging.current) {
+        dragging.current = false;
+        setDragOn(false);
+        place(Math.max(0, target));
+        mark(target);
+      }
     };
+    const cancel = () => stop(i);
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
-    window.addEventListener('pointercancel', stop);
+    window.addEventListener('pointercancel', cancel);
   };
   const tap = (v, k) => {
     if (skip.current) return;
@@ -243,11 +257,9 @@ export function Seg({ value, options, onChange, label, small }) {
     }
     cb.current(v);
   };
-  const active = drag ? drag.hover : i;
-  const at = drag ? drag.pos : Math.max(0, i);
-  return html`<div ref=${root} class=${'seg' + (small || n > 3 ? ' small' : '') + (drag ? ' dragging' : '')} role="group" aria-label=${label} style=${`--n:${n};--i:${at.toFixed(3)}`} onPointerDown=${down}>
-    ${(i !== -1 || drag) && html`<span class="seg-ind" ref=${ind} aria-hidden="true"></span>`}
-    ${options.map(([v, l], k) => html`<button type="button" class=${k === active ? 'on' : ''} aria-pressed=${value === v ? 'true' : 'false'} onClick=${() => tap(v, k)}>${l}</button>`)}
+  return html`<div ref=${root} class=${'seg' + (small || n > 3 ? ' small' : '') + (dragOn ? ' dragging' : '')} role="group" aria-label=${label} style=${'--n:' + n} onPointerDown=${down}>
+    ${(i !== -1 || dragOn) && html`<span class="seg-ind" ref=${ind} aria-hidden="true"></span>`}
+    ${options.map(([v, l], k) => html`<button type="button" aria-pressed=${value === v ? 'true' : 'false'} onClick=${() => tap(v, k)}>${l}</button>`)}
   </div>`;
 }
 

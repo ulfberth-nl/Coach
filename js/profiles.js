@@ -73,7 +73,7 @@ export function profileOf(rules) {
 }
 
 // Wat een plan betekent, in getallen die een coach herkent
-function statsOf(match, team) {
+export function statsOf(match, team) {
   const plan = match.plan;
   const end = matchEnd(team);
   const lu = match.events[0];
@@ -110,7 +110,7 @@ function statsOf(match, team) {
 }
 
 // Sleutel: alles wat de uitkomst kan veranderen
-function keyOf(key, team, present, keeperId) {
+export function keyOf(key, team, present, keeperId) {
   const r = team.rules;
   const ps = team.players.filter((p) => present.indexOf(p.id) !== -1).map((p) => [p.id, p.kracht, (p.prefs || []).join(''), p.main || '', p.flex === false ? 0 : 1].join(':')).sort().join(',');
   return [key, ps, keeperId || '', team.type, team.keeper, JSON.stringify(team.lines), team.periods, team.periodMin, r.perMoment || 1, r.newLineupAtBreak ? 1 : 0].join('|');
@@ -125,7 +125,7 @@ function evalVariant(team, prof, v, present, keeperId) {
   const hectic = s.moments && s.every < 3 ? (3 - s.every) * 8 : 0;
   return { rules, stats: s, score: prof.score(s) + hectic + (s.ok ? 0 : 1000) };
 }
-function enough(team, present, keeperId) {
+export function enough(team, present, keeperId) {
   const F = team.lines.A + team.lines.M + team.lines.V;
   return present.filter((id) => id !== keeperId).length >= F;
 }
@@ -163,11 +163,21 @@ export async function tuneAsync(team, key, present, keeperId, alive = () => true
   return remember(ck, best);
 }
 
-// Regels voor een wedstrijd met deze spelers (null = gewoon de teamregels)
+// Uitkomst die al bekend is (zonder te rekenen), of undefined
+export function cachedTune(team, key, present, keeperId) {
+  const ck = keyOf(key, team, present, keeperId);
+  return cache.has(ck) ? cache.get(ck) : undefined;
+}
+// Uitkomst uit de rekendraad bewaren, zodat de app hem direct kan gebruiken
+export function rememberTune(team, key, present, keeperId, result) {
+  remember(keyOf(key, team, present, keeperId), result);
+}
+// Regels voor een wedstrijd met deze spelers, als ze al bekend zijn (null = de teamregels).
+// Rekenen gebeurt op de achtergrond (js/refresh.js); de teamregels zijn al afgestemd op de hele selectie.
 export function matchRules(team, present, keeperId) {
   const key = profileOf(team.rules);
   if (!PROFILES[key]) return null;
-  const t = tune(team, key, present, keeperId);
+  const t = cachedTune(team, key, present, keeperId);
   return t ? t.rules : null;
 }
 

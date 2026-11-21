@@ -28,6 +28,8 @@ Tip: zet tijdens de wedstrijd het geluid aan. Bij een wisselmoment piept de app 
 - **− en +:** het getal rolt mee; vasthouden telt steeds sneller door; aan de grens schudt het getal 'nee'.
 - **Keuzebalk:** het blokje vloeit naar je keuze; je kunt er ook overheen vegen.
 - **Open- en dichtklappen:** instellingen die erbij komen (marge, maximaal op de bank, dominante rol, stand-opties) klappen soepel open en sneller weer dicht.
+- **Klikgeluid bij schuiven:** scrol je door de wissels in de tijdlijn, veeg je over een keuzebalk of sleep je de speelkracht-schuif, dan hoor je op de iPhone bij elk punt een zacht klikje (een tikje kan daar niet); Android trilt kort. Uit te zetten bij Team → Deze telefoon. Staat je iPhone op stil, dan hoor je het mogelijk niet.
+- **Altijd soepel:** een instelling verandert meteen op het scherm. Het rekenwerk (wedstrijdplan, wisselprofielen) doet de app in een aparte rekendraad zodra je even niets aanpast; tot die tijd blijven de vorige getallen staan.
 - **Minder beweging:** staat *Beperk beweging* aan op je telefoon, of zet je *Minder beweging* aan bij Team → Deze telefoon, dan is alles rustig: geen veren, wiebels en zwevers.
 
 ## Eén Wedstrijd-scherm
@@ -119,6 +121,9 @@ js/store.js                               opslag op de telefoon
 js/ui.js                                  gedeelde onderdelen (veld, pillen, sheets, schakelaar, +/−, keuzebalk)
 js/motion.js                              bewegingstaal: tempo's, veren, indrukken, tikje, minder beweging
 js/profiles.js                            wisselprofielen: varianten doorrekenen en de beste kiezen
+js/compute.js, js/worker.js               rekendraad (Web Worker) voor plannen en profielen
+js/worker-core.js                         het rekenwerk zelf (ook bruikbaar zonder worker)
+js/refresh.js                             optimistisch bijwerken: plan op de achtergrond opnieuw uitrekenen
 js/screens/*.js                           schermen
 tests/*.test.mjs                          tests: node tests/planner.test.mjs && node tests/match.test.mjs && node tests/profiles.test.mjs
 ```
