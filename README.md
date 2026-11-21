@@ -17,7 +17,18 @@ Dit is **stap 1**: alles werkt op één telefoon en wordt alleen op die telefoon
 2. Tik op het deel-icoon → **Zet op beginscherm**.
 3. Open de app voortaan via het icoon: dan draait hij schermvullend en werkt hij ook zonder bereik.
 
-Tip: zet tijdens de wedstrijd het geluid aan. Bij een wisselmoment piept de app en knippert het scherm oranje (trillen kan niet vanuit een webapp op een iPhone). Het scherm blijft aan zolang de wedstrijd loopt.
+Tip: zet tijdens de wedstrijd het geluid aan. Bij een wisselmoment piept de app en knippert het scherm oranje (een trilsignaal kan niet vanuit een webapp op een iPhone; Android trilt wel). Het scherm blijft aan zolang de wedstrijd loopt.
+
+## Beweging en tikje
+
+- **Eén bewegingstaal:** vaste tempo's (tik 0,1 s, klein 0,25 s, scherm 0,45 s), weggaan gaat sneller dan binnenkomen, twee veren (zacht en speels).
+- **Indrukken:** elke knop en kaart wordt iets kleiner en donkerder als je hem aanraakt en veert terug bij loslaten. Begin je te scrollen, dan licht er niets op.
+- **Tikje bij tikken:** op een iPhone vanaf iOS 18 en op Android voel je een tikje bij knoppen, schakelaars en keuzes. Uit te zetten bij Team → Deze telefoon.
+- **Schakelaar:** het bolletje rekt uit als je drukt en schiet verend naar de andere kant.
+- **− en +:** het getal rolt mee; vasthouden telt steeds sneller door; aan de grens schudt het getal 'nee'.
+- **Keuzebalk:** het blokje vloeit naar je keuze; je kunt er ook overheen vegen.
+- **Open- en dichtklappen:** instellingen die erbij komen (marge, maximaal op de bank, dominante rol, stand-opties) klappen soepel open en sneller weer dicht.
+- **Minder beweging:** staat *Beperk beweging* aan op je telefoon, of zet je *Minder beweging* aan bij Team → Deze telefoon, dan is alles rustig: geen veren, wiebels en zwevers.
 
 ## Eén Wedstrijd-scherm
 
@@ -71,7 +82,7 @@ Alle regels staan onder **Team**: eerlijkheid aan/uit, marge, maximaal op de ban
 
 ## Spelers en beoordeling
 
-Onder **Team → Spelers en beoordeling** (achter een pincode van 4 cijfers): naam, bijnaam (max. 8 tekens, die staat in het veld), speelkracht (schuifbalk zonder cijfers), voorkeursposities en sterke kanten. Buiten dit deel zie je nergens niveaus; de wisselberekening gebruikt ze alleen intern.
+Onder **Team → Spelers en beoordeling** (achter een pincode van 4 cijfers): naam, bijnaam (max. 8 tekens, die staat in het veld), speelkracht (schuif met 9 klikpunten zonder cijfers; een wolkje zegt in woorden waar je zit, vanaf *Dragend* kleurt hij groen), voorkeursposities en sterke kanten. Buiten dit deel zie je nergens niveaus; de wisselberekening gebruikt ze alleen intern.
 
 De pincode houdt meekijkers buiten, maar is geen echte beveiliging: de gegevens staan op de telefoon zelf.
 
@@ -92,7 +103,8 @@ css/app.css                               stijl (clubkleuren, pillen, neon)
 js/planner.js                             wisselberekening (puur, zonder DOM)
 js/match.js                               klok, gebeurtenissen, herplannen
 js/store.js                               opslag op de telefoon
-js/ui.js                                  gedeelde onderdelen (veld, pillen, sheets)
+js/ui.js                                  gedeelde onderdelen (veld, pillen, sheets, schakelaar, +/−, keuzebalk)
+js/motion.js                              bewegingstaal: tempo's, veren, indrukken, tikje, minder beweging
 js/screens/*.js                           schermen
 tests/*.test.mjs                          tests: node tests/planner.test.mjs && node tests/match.test.mjs
 ```

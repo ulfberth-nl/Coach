@@ -1,6 +1,7 @@
 // Gedeelde bouwstenen voor de schermen.
-import { html, useEffect, useRef, useState } from '../vendor/preact-htm.js';
+import { html, useEffect, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { getState, update } from './store.js';
+import { haptic, reduced, cancelPress, T, EASE_OUT } from './motion.js';
 import { findClub, searchClubs, withClub, clubColors, clubAbbr, colorKey, splitTeam, norm } from './clubs.js';
 
 export const POS_COLORS = { K: 'var(--pos-K)', A: 'var(--pos-A)', M: 'var(--pos-M)', V: 'var(--pos-V)' };
@@ -110,21 +111,22 @@ export function Neon({ children, box, cls = '' }) {
   return html`<span class=${'neon ' + (box ? 'box ' : '') + cls}><span class="glow"></span><span class="ring"></span><span class="in">${children}</span></span>`;
 }
 
-// Rollende cijfers: elk teken schuift verend omhoog als het verandert
-function RollSlot({ c }) {
+// Rollende cijfers: elk teken schuift verend omhoog als het verandert (omlaag als het getal kleiner wordt)
+function RollSlot({ c, dir }) {
   const r = useRef(null);
-  if (!r.current) r.current = { cur: c, prev: null, n: 0, at: 0 };
+  if (!r.current) r.current = { cur: c, prev: null, n: 0, at: 0, dir: null };
   const s = r.current;
-  if (c !== s.cur) { s.prev = s.cur; s.cur = c; s.n++; s.at = Date.now(); }
+  if (c !== s.cur) { s.prev = s.cur; s.cur = c; s.n++; s.at = Date.now(); s.dir = dir; }
   const showOut = s.prev != null && Date.now() - s.at < 420;
+  const dn = s.dir === 'down' ? ' dn' : '';
   return html`<span class=${'rslot' + (c === ':' ? ' colon' : '')}>
-    ${showOut ? html`<i key=${'o' + s.n} class="out">${s.prev}</i>` : null}
-    <i key=${'i' + s.n} class=${s.n ? 'in' : ''}>${c}</i>
+    ${showOut ? html`<i key=${'o' + s.n} class=${'out' + dn}>${s.prev}</i>` : null}
+    <i key=${'i' + s.n} class=${s.n ? 'in' + dn : ''}>${c}</i>
   </span>`;
 }
-export function Roll({ text, cls = '' }) {
+export function Roll({ text, cls = '', dir }) {
   const chars = [...String(text)];
-  return html`<span class=${'roll ' + cls} aria-label=${String(text)}>${chars.map((c, k) => html`<${RollSlot} key=${chars.length - k} c=${c} />`)}</span>`;
+  return html`<span class=${'roll ' + cls} aria-label=${String(text)}>${chars.map((c, k) => html`<${RollSlot} key=${chars.length - k} c=${c} dir=${dir} />`)}</span>`;
 }
 
 export function Pill({ name, neon, kind = '', title }) {
@@ -136,8 +138,20 @@ export function KeeperPill({ name }) {
   return html`<span class="pill keeper"><span class="k">K</span>${name}</span>`;
 }
 
-export function Switch({ on, onChange, label }) {
-  return html`<button type="button" class="switch" role="switch" aria-checked=${on ? 'true' : 'false'} aria-label=${label} onClick=${() => onChange(!on)}></button>`;
+// Schakelaar: het bolletje rekt uit als je drukt, schiet verend over en geeft een tikje
+export function Switch({ on, onChange, label, disabled = false }) {
+  const [held, setHeld] = useState(false);
+  const [flip, setFlip] = useState(0);
+  const tm = useRef(0);
+  const press = (e) => {
+    if (e.button > 0 || e.currentTarget.matches(':disabled')) return;
+    clearTimeout(tm.current);
+    tm.current = setTimeout(() => setHeld(true), e.pointerType === 'mouse' ? 0 : 45);
+  };
+  const lift = () => { clearTimeout(tm.current); setHeld(false); };
+  return html`<button type="button" class=${'switch' + (held ? ' held' : '') + (flip ? (flip % 2 ? ' fa' : ' fb') : '')} role="switch" aria-checked=${on ? 'true' : 'false'} aria-label=${label} data-haptic="own" disabled=${disabled}
+    onPointerDown=${press} onPointerUp=${lift} onPointerCancel=${lift} onPointerLeave=${lift}
+    onClick=${() => { lift(); setFlip((f) => f + 1); onChange(!on); haptic('toggle'); }}><i class="sw-knob" aria-hidden="true"></i></button>`;
 }
 
 export function Setting({ title, sub, children }) {
@@ -150,25 +164,148 @@ export function Setting({ title, sub, children }) {
   </div>`;
 }
 
+// Keuzebalk: het blokje vloeit naar de nieuwe keuze (rekt even uit in de looprichting); vegen kan ook
 export function Seg({ value, options, onChange, label, small }) {
   const i = options.findIndex(([v]) => v === value);
-  return html`<div class=${'seg' + (small || options.length > 3 ? ' small' : '')} role="group" aria-label=${label} style=${`--n:${options.length};--i:${Math.max(0, i)}`}>
-    ${i !== -1 && html`<span class="seg-ind" aria-hidden="true"></span>`}
-    ${options.map(([v, l]) => html`<button type="button" aria-pressed=${value === v ? 'true' : 'false'} onClick=${() => onChange(v)}>${l}</button>`)}
+  const n = options.length;
+  const root = useRef(null);
+  const ind = useRef(null);
+  const prev = useRef(i);
+  const skip = useRef(false);
+  const cb = useRef(onChange);
+  cb.current = onChange;
+  const [drag, setDrag] = useState(null);
+  useLayoutEffect(() => {
+    const p = prev.current;
+    prev.current = i;
+    const el = ind.current;
+    if (!el || p === i || p < 0 || i < 0 || reduced() || typeof el.animate !== 'function') return;
+    const d = Math.abs(i - p);
+    el.style.transformOrigin = i > p ? '0 50%' : '100% 50%';
+    try { el.animate([{ scale: '1 1' }, { scale: `${(1 + Math.min(0.6, 0.3 * d)).toFixed(2)} .88`, offset: 0.32 }, { scale: '1 1' }], { duration: T.screen + 60, easing: EASE_OUT }); } catch (e) { /* oud toestel */ }
+  }, [i]);
+  const posAt = (x) => {
+    const r = root.current.getBoundingClientRect();
+    const w = (r.width - 8 - (n - 1) * 4) / n;
+    return Math.max(0, Math.min(n - 1, (x - r.left - 4 - w / 2) / (w + 4)));
+  };
+  const down = (e) => {
+    if (e.button > 0 || n < 2 || root.current.querySelector('button:disabled')) return;
+    const s = { id: e.pointerId, x: e.clientX, y: e.clientY, on: false, hover: i };
+    const move = (ev) => {
+      if (ev.pointerId !== s.id) return;
+      if (!s.on) {
+        const dx = Math.abs(ev.clientX - s.x), dy = Math.abs(ev.clientY - s.y);
+        if (dy > 10 && dy > dx) { stop(); return; }
+        if (dx < 8) return;
+        s.on = true;
+      }
+      const pos = posAt(ev.clientX), hover = Math.round(pos);
+      if (hover !== s.hover) { s.hover = hover; haptic('select'); }
+      setDrag({ pos, hover });
+    };
+    const up = (ev) => {
+      if (ev.pointerId !== s.id) return;
+      stop();
+      if (!s.on) return;
+      skip.current = true;
+      setTimeout(() => { skip.current = false; }, 0);
+      prev.current = s.hover;
+      if (s.hover !== i) cb.current(options[s.hover][0]);
+    };
+    const stop = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', stop);
+      setDrag(null);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', stop);
+  };
+  const tap = (v, k) => {
+    if (skip.current) return;
+    // tik op de al gekozen keuze: het blokje veert even in
+    if (k === i && ind.current && !reduced() && typeof ind.current.animate === 'function') {
+      try { ind.current.animate([{ scale: '1' }, { scale: '.94' }, { scale: '1' }], { duration: T.small + 100, easing: EASE_OUT }); } catch (e) { /* oud toestel */ }
+    }
+    cb.current(v);
+  };
+  const active = drag ? drag.hover : i;
+  const at = drag ? drag.pos : Math.max(0, i);
+  return html`<div ref=${root} class=${'seg' + (small || n > 3 ? ' small' : '') + (drag ? ' dragging' : '')} role="group" aria-label=${label} style=${`--n:${n};--i:${at.toFixed(3)}`} onPointerDown=${down}>
+    ${(i !== -1 || drag) && html`<span class="seg-ind" ref=${ind} aria-hidden="true"></span>`}
+    ${options.map(([v, l], k) => html`<button type="button" class=${k === active ? 'on' : ''} aria-pressed=${value === v ? 'true' : 'false'} onClick=${() => tap(v, k)}>${l}</button>`)}
   </div>`;
 }
 
+// +/−: getal rolt mee, vasthouden herhaalt steeds sneller, aan de grens schudt het getal 'nee'
 export function Stepper({ value, min = 0, max = 99, step = 1, onChange, suffix = '', label }) {
-  return html`<div class="stepper" role="group" aria-label=${label}>
-    <button type="button" aria-label="Minder" disabled=${value <= min} onClick=${() => onChange(Math.max(min, value - step))}>−</button>
-    <span class="num">${value}${suffix}</span>
-    <button type="button" aria-label="Meer" disabled=${value >= max} onClick=${() => onChange(Math.min(max, value + step))}>+</button>
+  const v = useRef(value);
+  v.current = value;
+  const cb = useRef(onChange);
+  cb.current = onChange;
+  const last = useRef(value);
+  const dir = useRef(null);
+  if (value !== last.current) { dir.current = value > last.current ? 'up' : 'down'; last.current = value; }
+  const [shake, setShake] = useState(0);
+  const hold = useRef(null);
+  const bump = (d, repeat) => {
+    const cur = v.current;
+    const nx = Math.max(min, Math.min(max, cur + d * step));
+    if (nx === cur) { setShake((x) => x + 1); haptic('no'); return false; }
+    v.current = nx;
+    cb.current(nx);
+    haptic(repeat ? 'select' : 'tap');
+    return true;
+  };
+  const clear = (forget) => {
+    const h = hold.current;
+    if (!h) return;
+    clearTimeout(h.t);
+    if (forget) hold.current = null;
+    else setTimeout(() => { if (hold.current === h) hold.current = null; }, 400);
+  };
+  const down = (d) => (e) => {
+    if (e.button > 0 || e.currentTarget.matches(':disabled')) return;
+    clear(true);
+    const h = { rep: false, t: 0 };
+    hold.current = h;
+    let delay = 170;
+    const go = () => {
+      if (hold.current !== h) return;
+      h.rep = true;
+      if (!bump(d, true)) return;
+      delay = Math.max(55, delay * 0.86);
+      h.t = setTimeout(go, delay);
+    };
+    h.t = setTimeout(go, 420);
+  };
+  const click = (d) => () => {
+    const h = hold.current;
+    hold.current = null;
+    if (h) clearTimeout(h.t);
+    if (h && h.rep) return;
+    bump(d, false);
+  };
+  const btn = (d, txt, aria, lim) => html`<button type="button" aria-label=${aria} class=${lim ? 'lim' : ''} aria-disabled=${lim ? 'true' : undefined}
+    onPointerDown=${down(d)} onPointerUp=${() => clear(false)} onPointerLeave=${() => clear(false)} onPointerCancel=${() => clear(true)}
+    onContextMenu=${(e) => e.preventDefault()} onClick=${click(d)}>${txt}</button>`;
+  return html`<div class="stepper" role="group" aria-label=${label} data-haptic="own">
+    ${btn(-1, '−', 'Minder', value <= min)}
+    <span class=${'num st-val' + (shake ? (shake % 2 ? ' no-a' : ' no-b') : '')}><${Roll} text=${String(value)} dir=${dir.current} />${suffix ? html`<span class="st-suf">${suffix}</span>` : null}</span>
+    ${btn(1, '+', 'Meer', value >= max)}
   </div>`;
+}
+
+// Soepel open- en dichtklappen; dicht gaat sneller dan open
+export function Reveal({ open, children, cls = '' }) {
+  return html`<div class=${'collapse' + (open ? ' open' : '') + (cls ? ' ' + cls : '')} inert=${!open} aria-hidden=${open ? undefined : 'true'}><div>${children}</div></div>`;
 }
 
 export function Sheet({ onClose, children, label, x = false, footer = null }) {
   const [closing, setClosing] = useState(false);
-  const close = () => { if (closing) return; setClosing(true); setTimeout(onClose, 220); };
+  const close = () => { if (closing) return; setClosing(true); setTimeout(onClose, reduced() ? 0 : T.outScreen - 10); };
   useEffect(() => { dismissToast(); }, []);
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') close(); };
@@ -344,6 +481,7 @@ export function useDragSwap(ref, enabled, onSwap) {
         if (Math.hypot(e.clientX - st.x, e.clientY - st.y) < 8) return;
         const src = st.el.querySelector('.pill') || st.el;
         const g = src.cloneNode(true);
+        cancelPress();
         g.classList.add('drag-ghost');
         document.body.appendChild(g);
         st.ghost = g;

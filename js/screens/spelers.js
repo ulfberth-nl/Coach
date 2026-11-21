@@ -1,6 +1,7 @@
-import { html, useState } from '../../vendor/preact-htm.js';
+import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { update, activeTeam, hashPin, uid } from '../store.js';
-import { Icon, Sheet, Confirm, Switch, Seg, toast, POS_COLORS, POS_NAMES, KRACHT_BG } from '../ui.js';
+import { Icon, Sheet, Confirm, Switch, Seg, Reveal, toast, POS_COLORS, POS_NAMES, KRACHT_BG } from '../ui.js';
+import { haptic } from '../motion.js';
 import { KEY_KRACHT } from '../planner.js';
 
 const STRENGTHS = ['Snel', 'Overzicht', 'Techniek', 'Inzet', 'Verdedigen', 'Passen', 'Scoren', 'Samenspel', 'Leiderschap', 'Vrolijk'];
@@ -126,11 +127,87 @@ export function Spelers({ state }) {
   </main>`;
 }
 
+// ---------- speelkracht-schuif: 9 klikpunten, wolkje met een woord (geen cijfers), golvende streepjes ----------
+// Alleen hier, achter de pincode. Tik = naar het dichtstbijzijnde punt; slepen = elk punt geeft een tikje.
+const KR_WORDS = ['Begint net', 'Groeit nog', 'Groeit', 'Doet goed mee', 'Stevige basis', 'Sterk', 'Dragend', 'Echt dragend', 'Draagt het spel'];
+const KR_KEY = Math.round(KEY_KRACHT / 12.5);
+function KrachtSlider({ value, onChange }) {
+  const idx = Math.max(0, Math.min(8, Math.round(value / 12.5)));
+  const inner = useRef(null);
+  const st = useRef(null);
+  const lastK = useRef(idx);
+  const [pos, setPos] = useState(null);
+  const [tip, setTip] = useState(0);
+  const [showTip, setShowTip] = useState(false);
+  useEffect(() => {
+    if (!tip) return undefined;
+    setShowTip(true);
+    const t = setTimeout(() => setShowTip(false), 1100);
+    return () => clearTimeout(t);
+  }, [tip]);
+  const posAt = (x) => { const r = inner.current.getBoundingClientRect(); return Math.max(0, Math.min(8, ((x - r.left) / Math.max(1, r.width)) * 8)); };
+  const pick = (k) => { if (k !== lastK.current) { lastK.current = k; onChange(k * 12.5); haptic('select'); } };
+  const down = (e) => {
+    if (e.button > 0) return;
+    lastK.current = idx;
+    st.current = { id: e.pointerId, x: e.clientX, y: e.clientY, on: false };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) { /* oud toestel */ }
+  };
+  const move = (e) => {
+    const s = st.current;
+    if (!s || e.pointerId !== s.id) return;
+    if (!s.on) {
+      const dx = Math.abs(e.clientX - s.x), dy = Math.abs(e.clientY - s.y);
+      if (dx < 4 && dy < 4) return;
+      if (dy > dx) { st.current = null; return; }
+      s.on = true;
+    }
+    const p = posAt(e.clientX);
+    setPos(p);
+    pick(Math.round(p));
+  };
+  const up = (e) => {
+    const s = st.current;
+    st.current = null;
+    if (!s) return;
+    if (!s.on) { pick(Math.round(posAt(e.clientX))); setTip((t) => t + 1); }
+    setPos(null);
+  };
+  const cancel = () => { st.current = null; setPos(null); };
+  const key = (e) => {
+    const d = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[e.key];
+    let k = d ? idx + d : e.key === 'Home' ? 0 : e.key === 'End' ? 8 : null;
+    if (k == null) return;
+    e.preventDefault();
+    k = Math.max(0, Math.min(8, k));
+    if (k !== idx) { lastK.current = k; onChange(k * 12.5); setTip((t) => t + 1); }
+  };
+  const p = pos != null ? pos : idx;
+  const shown = pos != null ? Math.round(pos) : idx;
+  return html`<div class=${'kr' + (pos != null ? ' dragging' : '') + (pos != null || showTip ? ' tip' : '') + (shown >= KR_KEY ? ' key' : '')}
+    role="slider" tabindex="0" aria-label="Speelkracht" aria-valuemin="0" aria-valuemax="8" aria-valuenow=${idx} aria-valuetext=${KR_WORDS[idx]}
+    style=${`--p:${(p / 8).toFixed(4)}`} onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${cancel} onKeyDown=${key} onBlur=${() => setShowTip(false)}>
+    <span class="kr-rail" style=${'background:' + KRACHT_BG}><span class="kr-cover"></span></span>
+    <span class="kr-inner" ref=${inner}>
+      ${Array.from({ length: 9 }, (_, i) => {
+        const d = i - p;
+        const lift = pos != null ? Math.exp(-(d * d) / 0.7) : 0;
+        return html`<i class=${'kr-tick' + (i <= shown ? ' on' : '') + (i >= KR_KEY ? ' k' : '')} style=${`left:${(i / 8) * 100}%;--h:${(1 + 1.5 * lift).toFixed(3)}`}></i>`;
+      })}
+      <span class="kr-car"><span class="kr-thumb"></span><span class="kr-tip" aria-hidden="true">${KR_WORDS[shown]}</span></span>
+    </span>
+  </div>`;
+}
+
 function PlayerEditor({ player, onClose, onSave, onDelete }) {
   const [p, setP] = useState(player);
   const set = (k, v) => setP({ ...p, [k]: v });
   const toggle = (k, v) => set(k, (p[k] || []).indexOf(v) !== -1 ? p[k].filter((x) => x !== v) : (p[k] || []).concat([v]));
   const nickDefault = (p.name || '').trim().split(/\s+/)[0].slice(0, 8);
+  // bij dichtklappen blijft de laatste rol zichtbaar tot het blok weg is
+  const lastMain = useRef(p.main || 'A');
+  if (p.main) lastMain.current = p.main;
+  const main = p.main || lastMain.current;
   const save = () => {
     const name = p.name.trim();
     if (!name) { toast('Vul een naam in'); return; }
@@ -149,18 +226,17 @@ function PlayerEditor({ player, onClose, onSave, onDelete }) {
     </div>
     <div class="col">
       <span class="label">Speelkracht</span>
-      <input type="range" class="kracht" min="0" max="8" step="1" value=${Math.round(p.kracht / 12.5)} style=${'background:' + KRACHT_BG} aria-label="Speelkracht" onInput=${(e) => set('kracht', Number(e.target.value) * 12.5)} />
-      <div class="ticks" aria-hidden="true">${Array.from({ length: 9 }, (_, i) => html`<i class=${i * 12.5 <= p.kracht ? 'on' : ''}></i>`)}</div>
+      <${KrachtSlider} value=${p.kracht} onChange=${(v) => setP((q) => ({ ...q, kracht: v }))} />
       <div class="between small"><span>groeit nog</span><span class=${'keylabel' + (p.kracht >= KEY_KRACHT ? ' on' : '')}>${p.kracht >= KEY_KRACHT ? 'dragende speler ✓' : 'draagt het spel'}</span></div>
     </div>
     <div class="col">
       <span class="label">Dominante rol</span>
       <${Seg} label="Dominante rol" value=${p.main || ''} onChange=${(v) => set('main', v || null)} options=${[['', 'Geen'], ['K', 'Keeper'], ['A', 'Achter'], ['M', 'Midden'], ['V', 'Voor']]} />
-      ${p.main && html`<div class="setting">
+      <${Reveal} open=${!!p.main}><div class="setting">
         <div class="col" style="gap:1px"><span class="t">App mag afwijken als het moet</span>
-          <span class="small">${p.flex !== false ? 'Krijgt voorrang op ' + POS_NAMES[p.main].toLowerCase() + ', maar de app mag schuiven voor de balans.' : (p.main === 'K' ? 'Wordt bij het klaarzetten als keeper voorgesteld.' : 'Staat altijd ' + POS_NAMES[p.main].toLowerCase() + '.')}</span></div>
+          <span class="small">${p.flex !== false ? 'Krijgt voorrang op ' + POS_NAMES[main].toLowerCase() + ', maar de app mag schuiven voor de balans.' : (main === 'K' ? 'Wordt bij het klaarzetten als keeper voorgesteld.' : 'Staat altijd ' + POS_NAMES[main].toLowerCase() + '.')}</span></div>
         <${Switch} label="App mag afwijken" on=${p.flex !== false} onChange=${(v) => set('flex', v)} />
-      </div>`}
+      </div></${Reveal}>
     </div>
     <div class="col">
       <span class="label">Voorkeursposities</span>
