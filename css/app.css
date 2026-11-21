@@ -1687,7 +1687,8 @@ html.gp-wide #app { max-width: none; }
 .oz-nb.on { background: #fff; box-shadow: 0 6px 16px -8px rgba(31,60,136,.45), inset 0 0 0 1.5px var(--blue); }
 .oz-nb.on b { color: var(--blue-ink); }
 .oz-nb.rec small { background: var(--ai-lin); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 900; }
-.oz-nb.rec::after { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px; background: var(--ai-conic); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; animation: aiSpin 4s linear infinite; pointer-events: none; }
+/* advies: alleen een gloeiend stipje en het label, geen rand (anders lijkt het gekozen) */
+.oz-nb.rec::after { content: ""; position: absolute; top: 7px; right: 8px; width: 7px; height: 7px; border-radius: 99px; background: var(--ai-lin); box-shadow: 0 0 8px rgba(124,92,255,.7); animation: twinkle 3.2s ease-in-out infinite; pointer-events: none; }
 .oz-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; animation: capIn var(--t-screen) var(--spring-soft) both; }
 .oz-stats span { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 8px 9px; border-radius: 12px; background: var(--line-3); }
 .oz-stats small { font-size: 10.5px; font-weight: 800; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1973,3 +1974,78 @@ html.gp-wide #app { max-width: none; }
 .gb.dense .gc { padding: 0 3px; font-size: 11.5px; }
 .gb.dense .gc-f:not(.buiten) { display: none; }
 .gb.dense .gh-t { font-size: 12px; }
+/* voorbereiden: dock met startknop, Seizoen en Team (in plaats van de menubalk), meer ruimte voor het veld */
+.matchscreen.with-dock { padding-bottom: calc(10px + var(--safe-b)); }
+.prepdock { display: flex; align-items: stretch; gap: 8px; }
+.prepdock .startbtn { flex: 1 1 auto; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 60px; border-radius: 22px; }
+.sb-t { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.05; }
+.sb-t b { font-size: 19px; font-weight: 900; }
+.sb-t small { font-size: 12px; font-weight: 800; opacity: .78; }
+.dockbtn { flex: 0 0 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 60px; border-radius: 20px; background: #fff; box-shadow: var(--shadow); color: var(--ink); text-decoration: none; font-size: 11px; font-weight: 800; }
+.dockbtn svg { color: var(--blue); }
+/* lipje van de uitleg: rimpeling om op te vallen */
+.dr-rip { position: absolute; inset: 0; pointer-events: none; }
+.dr-rip i { position: absolute; inset: 0; border-radius: 99px; box-shadow: 0 0 0 2px rgba(43,87,201,.55); animation: drRip 1.6s var(--ease-out) both; }
+.dr-rip i + i { animation-delay: .35s; }
+.islandwrap.hot .dr-rip i { box-shadow: 0 0 0 2px rgba(255,255,255,.7); }
+.dr-grab:has(.dr-rip) { animation: drNudge 1.6s var(--spring-play) both; }
+@keyframes drRip { 0% { opacity: .9; transform: scale(1); } 100% { opacity: 0; transform: scale(2.1, 2.6); } }
+@keyframes drNudge { 0%, 100% { translate: 0 0; } 18% { translate: 0 4px; } 34% { translate: 0 -1px; } 48% { translate: 0 2px; } }
+.reduce .dr-rip, .reduce .dr-grab { animation: none !important; }
+/* standaardplan-tegel: meer 'AI' beweging (rand loopt sneller rond, gloed ademt, icoon stroomt, glinsteringen) */
+.pc-opt.ai { animation: aiSpin 3.6s linear infinite, pcBreath 3.4s ease-in-out infinite; }
+.pc-opt.ai.on { animation: aiSpin 2.4s linear infinite, pcBreathOn 3s ease-in-out infinite; }
+@keyframes pcBreath { 0%, 100% { box-shadow: 0 6px 18px -14px rgba(124,92,255,.5); } 50% { box-shadow: 0 10px 26px -10px rgba(124,92,255,.55), 0 0 0 3px rgba(20,184,166,.10); } }
+@keyframes pcBreathOn { 0%, 100% { box-shadow: 0 10px 26px -14px rgba(124,92,255,.75), 0 0 0 3px rgba(124,92,255,.1); } 50% { box-shadow: 0 14px 34px -10px rgba(59,130,246,.65), 0 0 0 5px rgba(20,184,166,.14); } }
+.pc-ico.ai { background: linear-gradient(115deg, #7C5CFF, #3B82F6, #14B8A6, #22C55E, #7C5CFF); background-size: 300% 100%; animation: aiFlow 3.2s ease-in-out infinite; }
+.pc-glow .ai-sparks i:nth-child(1) { left: 86%; top: 22%; }
+.pc-glow .ai-sparks i:nth-child(2) { left: 62%; top: 70%; }
+.pc-glow .ai-sparks i:nth-child(3) { left: 30%; top: 82%; }
+.pc-glow .ai-sparks i:nth-child(4) { left: 94%; top: 76%; }
+.pc-glow .ai-sparks i:nth-child(5) { left: 48%; top: 12%; }
+.pc-glow .ai-sparks i:nth-child(6) { left: 12%; top: 40%; }
+.pc-glow::before { animation-duration: 6s; }
+.reduce .pc-opt.ai, .reduce .pc-ico.ai { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .pc-opt.ai, .pc-ico.ai { animation: none !important; } }
+/* selectiebalk: wat je over deze speler wilt weten */
+.gsb-av { box-shadow: 0 0 0 2.5px var(--pc, transparent), 0 0 0 4.5px rgba(255,255,255,.12); }
+.gsb-t { gap: 4px; }
+.gsb-top { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
+.gsb-top b { font-size: 15px; color: #fff; font-weight: 900; }
+.gsb-lvl { font-size: 12px; font-weight: 800; color: rgba(255,255,255,.72); }
+.gsb-lvl.ok { color: #86EFAC; }
+.gsb-lvl.low { color: #FCD34D; }
+.gsb-lvl.high { color: #93C5FD; }
+.gsb-strip { display: flex; gap: 2px; max-width: 100%; }
+.gsb-strip i { flex: 1 1 0; height: 8px; border-radius: 3px; background: rgba(255,255,255,.16); }
+.gsb-strip i.lV { background: #F87171; } .gsb-strip i.lM { background: #FBBF24; } .gsb-strip i.lA { background: #60A5FA; }
+.gsb-strip i.seam { margin-left: 4px; }
+.gsb-fit i.info { background: rgba(255,255,255,.12); color: rgba(255,255,255,.85); }
+.gsb-fit i.warn { background: rgba(251,191,36,.18); color: #FCD34D; }
+/* één te veel in het veld: kies wie eruit gaat */
+.gc.outpick { box-shadow: inset 0 0 0 2px var(--orange), 0 4px 10px -6px rgba(245,165,36,.7); animation: gcOut 1.4s ease-in-out infinite; }
+@keyframes gcOut { 50% { box-shadow: inset 0 0 0 2px var(--orange), 0 0 0 4px rgba(245,165,36,.22); } }
+.gh-over { padding: 1px 6px; border-radius: 99px; background: var(--orange); color: #111; font-size: 10.5px; font-weight: 900; }
+.reduce .gc.outpick { animation: none !important; }
+/* controle: per punt hooguit drie oplossingen met de gevolgen */
+.gd-issue { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 16px; background: linear-gradient(90deg, rgba(124,92,255,.06), rgba(20,184,166,.04)); animation: rtInF .45s var(--spring-soft) both; animation-delay: calc(var(--i, 0) * 60ms); }
+.gd-issue + .gd-issue { margin-top: 2px; }
+.gd-it { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; line-height: 1.35; color: var(--ink); }
+.gd-fixes { display: flex; flex-direction: column; gap: 6px; }
+.gd-fix { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: none; border-radius: 14px; background: #fff; box-shadow: 0 1px 2px rgba(17,24,39,.06), 0 0 0 1px rgba(124,92,255,.18); text-align: left; color: var(--ink); }
+.gd-fix:active { scale: .98; }
+.gf-n { flex: 0 0 auto; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 99px; background: var(--ai-lin); color: #fff; font-size: 12px; font-weight: 900; }
+.gf-b { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.gf-b b { font-size: 13.5px; font-weight: 900; line-height: 1.3; }
+.gf-i { display: flex; flex-wrap: wrap; gap: 4px; font-size: 12.5px; font-weight: 700; color: var(--muted); line-height: 1.35; }
+.gf-i i { font-style: normal; padding: 1px 7px; border-radius: 99px; background: var(--line-3); color: var(--muted); font-size: 11.5px; font-weight: 800; }
+.gf-i i.up { background: #E8F7EE; color: #0E6B31; }
+.gf-i i.down { background: #FEF0E6; color: #B45309; }
+.gf-go { flex: 0 0 auto; padding: 7px 12px; border-radius: 99px; background: var(--blue); color: #fff; font-size: 12.5px; font-weight: 900; }
+.gd-nofix { margin: 0; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.gd-totable { align-self: flex-start; display: inline-flex; align-items: center; gap: 2px; min-height: 36px; padding: 0 4px; border: none; background: none; font-size: 13px; font-weight: 900; color: var(--blue); }
+/* ＋ subtieler, en de melding boven de selectiebalk */
+.gl-add { width: 22px; height: 22px; right: -5px; bottom: -6px; border: 1.5px solid #fff; box-shadow: 0 3px 8px -3px rgba(76,47,214,.7); }
+html:has(.gp-selbar:not(.wide)) .toast { bottom: calc(132px + var(--safe-b)) !important; }
+/* liggend: ruimte onder het bord zodat de spelerbalk niets blijvend afdekt */
+html:has(.gp-selbar.wide) .gplan.wide:not(.is-live) { padding-bottom: calc(112px + var(--safe-b)); }

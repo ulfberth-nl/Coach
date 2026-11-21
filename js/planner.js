@@ -573,7 +573,7 @@ export function planOwn(start, ctx, T, pins, lineups) {
       if (mv.to) {
         const from = state.pos[mv.a];
         const left = Object.values(state.pos).filter((x) => x === from).length;
-        if (!from || from === mv.to || left < 2) { broken.push({ t: pin.t, move: true, out: mv.a, in: mv.a }); continue; }
+        if (!from || from === mv.to || left < 1) { broken.push({ t: pin.t, move: true, out: mv.a, in: mv.a }); continue; }
         const pos = { ...state.pos, [mv.a]: mv.to };
         state.pos = pos;
         steps.push({ type: 'move', t: pin.t, a: mv.a, from, to: mv.to, pos: { ...pos }, own: true });

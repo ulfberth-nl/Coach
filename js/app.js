@@ -74,7 +74,8 @@ function App() {
     case 'seizoen': screen = html`<${Seizoen} state=${state} />`; tab = 'seizoen'; break;
     case 'team': screen = html`<${Team} state=${state} />`; tab = 'team'; break;
     case 'spelers': screen = html`<${Spelers} state=${state} />`; break;
-    default: screen = html`<${Wedstrijd} state=${state} />`; tab = liveNow ? null : 'wedstrijd';
+    // voorbereiden: geen menubalk maar een dock naast de startknop, zodat het veld groter kan
+    default: screen = html`<${Wedstrijd} state=${state} />`; tab = liveNow || (cur && !cur.started && !cur.finished) ? null : 'wedstrijd';
   }
   // na een schermovergang geen extra binnenkom-animatie per blok (die zat al in de overgang)
   return html`

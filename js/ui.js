@@ -872,19 +872,28 @@ export function BenchScroll({ focus = null, children }) {
     el.classList.toggle('at-end', !ovf || el.scrollLeft + el.clientWidth > el.scrollWidth - 4);
   };
   useLayoutEffect(upd);
-  // spelers die op de bank van plek veranderen glijden naar hun nieuwe plek (FLIP)
-  const at = useRef({});
+  // spelers die op de bank van plek veranderen glijden naar hun nieuwe plek (FLIP). Gemeten binnen de bank zelf,
+  // zodat een veeg over het veld (dat even meeschuift) geen grote sprong geeft; nieuwe spelers komen zacht in beeld.
+  const at = useRef(null);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const now = {};
+    const base = el.getBoundingClientRect().left;
+    const first = at.current === null;
     for (const n of el.querySelectorAll('[data-pid]')) {
-      const x = n.getBoundingClientRect().left + el.scrollLeft;
+      const x = n.getBoundingClientRect().left - base + el.scrollLeft;
       now[n.dataset.pid] = x;
+      if (first || reduced() || typeof n.animate !== 'function') continue;
       const was = at.current[n.dataset.pid];
-      if (was != null && Math.abs(was - x) > 1 && !reduced() && typeof n.animate === 'function') {
-        try { n.animate([{ translate: `${was - x}px 0` }, { translate: '0 0' }], { duration: T.screen, easing: SPRING.soft }); } catch (e) { /* oud toestel */ }
-      }
+      try {
+        if (was != null && Math.abs(was - x) > 1) {
+          const d = Math.max(-64, Math.min(64, was - x));
+          n.animate([{ translate: `${d}px 0` }, { translate: '0 0' }], { duration: T.small + 80, easing: SPRING.soft });
+        } else if (was == null) {
+          n.animate([{ opacity: 0, scale: '.9' }, { opacity: 1, scale: '1' }], { duration: T.small + 60, easing: 'ease-out' });
+        }
+      } catch (e) { /* oud toestel */ }
     }
     at.current = now;
   });

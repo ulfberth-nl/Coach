@@ -202,3 +202,24 @@ console.log('gameplan ok');
   assert.ok(M.gpStats(ms, team).blocks.every((b) => b.ok), 'alle blokken vol');
 }
 console.log('gameplan formatie ok');
+
+// ---------- oplossingen per punt in de controle ----------
+{
+  const mf = M.createMatch(team, { opponent: 'Fix', present: ids, keeperId, planMode: 'eigen' });
+  M.gpEnsure(mf, team, 4);
+  const fi = M.gpFieldIds(mf); const ln = M.linesOf(mf, team);
+  const st0 = {}; let q = 0; for (const l of ['V', 'M', 'A']) for (let i = 0; i < (ln[l] || 0); i++) st0[fi[q++]] = l;
+  // dezelfde vijf in alle blokken: de rest zit de hele wedstrijd
+  for (let b = 0; b < 4; b++) M.gpSetBlock(mf, team, b, st0);
+  const rep = M.ownReport(mf, team);
+  const ins = rep.insights.find((x) => x.kind === 'bench' || x.kind === 'time');
+  assert.ok(ins && ins.id, 'er is een punt over de bank of speeltijd');
+  const fx = M.gpFixes(mf, team, ins);
+  assert.ok(fx.length >= 1 && fx.length <= 3, 'hooguit drie oplossingen');
+  assert.ok(fx.every((f) => f.gain > 0 && f.what.in === ins.id), 'elke oplossing helpt en zet de speler erin');
+  const before = M.gpStats(mf, team).kids[ins.id].sec;
+  M.gpApplyFix(mf, team, fx[0]);
+  assert.ok(M.gpStats(mf, team).kids[ins.id].sec > before, 'na de oplossing speelt hij meer');
+  assert.equal(mf.gameplan.src[fx[0].b], 'coach');
+}
+console.log('gameplan oplossingen ok');

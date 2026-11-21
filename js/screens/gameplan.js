@@ -294,6 +294,7 @@ function Board({ match, team, mode, wide, readOnly, focus, toStart }) {
   const [menu, setMenu] = useState(null);
   const [busy, setBusy] = useState(false);
   const [hist, setHist] = useState([]);
+  const [need, setNeed] = useState(null);
   const [pulse, setPulse] = useState(focus ? { b: focus.b, k: 1 } : null);
   useEffect(() => { if (!pulse) return undefined; const t = setTimeout(() => setPulse(null), 1400); return () => clearTimeout(t); }, [pulse && pulse.k]);
   const shown = start ? [blocks[0]] : wide ? blocks : blocks.filter((b) => b.p === p);
@@ -319,9 +320,9 @@ function Board({ match, team, mode, wide, readOnly, focus, toStart }) {
     if (lane === 'B') { if (lw === 'B') return null; const np = { ...pos }; delete np[who]; return { pos: np, kind: 'bench' }; }
     if (lane === lw) return null;
     if (key.slice(0, 2) === 'e:') return { pos: { ...pos, [who]: lane }, kind: 'place' };
-    // andere opstelling: een veldspeler naar een andere linie; de linie die hij verlaat houdt iemand
-    if (lw === 'B' || M.gpCount(pos)[lw] < 2) return null;
-    return { pos: { ...pos, [who]: lane }, kind: 'form' };
+    // ＋ een extra plek: de coach mag iedereen overal zetten (de teaminstellingen zijn regels voor de app zelf).
+    // Vanaf de bank staat er dan één te veel in het veld: daarna tik je wie eruit gaat.
+    return { pos: { ...pos, [who]: lane }, kind: lw === 'B' ? 'extra' : 'form' };
   };
   const apply = (b, res) => {
     const before = snap(gp);
@@ -337,6 +338,7 @@ function Board({ match, team, mode, wide, readOnly, focus, toStart }) {
     haptic(res.kind === 'move' || res.kind === 'form' ? 'select' : 'success');
     if (based) toast('Startopstelling staat. Die geldt nu voor de hele wedstrijd; wissel verder per blok.');
     else if (res.kind === 'form') toast(`Opstelling ${M.formationText(M.gpCount(res.pos))} in dit blok`);
+    setNeed(res.kind === 'extra' ? { b } : null);
   };
   const undo = () => {
     if (!hist.length) return;
@@ -347,6 +349,13 @@ function Board({ match, team, mode, wide, readOnly, focus, toStart }) {
   const choose = (id) => { haptic('select'); setSlot(null); setSel(sel === id ? null : id); };
   const tapChip = (b, id) => {
     if (readOnly) { choose(id); return; }
+    // één te veel in het veld: wie je nu tikt in dat blok, gaat naar de bank
+    if (need && need.b === b && posOf(b)[id] && id !== sel) {
+      const np = { ...posOf(b) }; delete np[id];
+      apply(b, { pos: np, kind: 'bench' });
+      return;
+    }
+    if (need) setNeed(null);
     if (slot) {
       const sb = slot.b, sl = slot.lane;
       setSlot(null);
@@ -389,7 +398,7 @@ function Board({ match, team, mode, wide, readOnly, focus, toStart }) {
     const f = lane !== 'B' ? fitOf(players[id], lane) : null;
     const was = prev ? prev[id] || 'B' : null;
     const chg = prev && gp.grid[bl.b] ? (was === 'B' && lane !== 'B' ? 'in' : was !== 'B' && lane === 'B' ? 'out' : was !== lane ? 'mv' : '') : '';
-    const lk = look(bl.b, id);
+    const lk = need && need.b === bl.b && lane !== 'B' && id !== sel ? 'outpick' : look(bl.b, id);
     const main = players[id] && players[id].main && players[id].main !== 'K' ? players[id].main : null;
     return html`<button type="button" key=${id} class=${'gc ' + lk + (chg ? ' c-' + chg : '') + (f === 'buiten' ? ' x-' + style : '') + (lk === 'sel' && f ? ' f-' + f : '')}
       data-key=${'p:' + id} data-b=${bl.b} onClick=${() => fresh() && tapChip(bl.b, id)}
@@ -409,7 +418,7 @@ function Board({ match, team, mode, wide, readOnly, focus, toStart }) {
     // lege plekken: tot de basisverdeling, zolang het blok nog niet vol is
     const free = lane === 'B' ? 0 : Math.max(0, Math.min((base[lane] || 0) - inLane.length, F - placed));
     const sw = sel ? pos[sel] || 'B' : null;
-    const canAdd = !readOnly && !start && sel && lane !== 'B' && sw !== 'B' && sw !== lane && cnt[sw] > 1;
+    const canAdd = !readOnly && sel && lane !== 'B' && sw !== lane && !(need && need.b === bl.b);
     const benchDrop = !readOnly && lane === 'B' && sel && sw && sw !== 'B';
     const slotHere = slot && slot.b === bl.b;
     return html`<div class=${'gl gl-' + lane + (pulse && pulse.b === bl.b ? ' pulse' : '') + (bl.i === 0 && bl.p > 0 && !start ? ' seam' : '')} key=${lane + bl.b}
@@ -436,7 +445,7 @@ function Board({ match, team, mode, wide, readOnly, focus, toStart }) {
       <span class="gh-t num">${start ? 'Aftrap' : wide && bl.i === 0 ? M.periodLabel(team, bl.p) : M.fmt(rel)}</span>
       <span class="gh-s">
         ${s.src === 'ai' && html`<span class="gh-ai" title="Ingevuld door de app"><${Icon} name="spark" size=${11} /></span>`}
-        ${!s.ok ? html`<span class="gh-open num">${placed}/${F}</span>`
+        ${!s.ok ? (placed > F ? html`<span class="gh-over num">+${placed - F}</span>` : html`<span class="gh-open num">${placed}/${F}</span>`)
           : form ? html`<span class="gh-form num">${form}</span>`
           : bl.i === 0 && bl.p > 0 ? html`<span class="gh-rust">${breakWord(team)}</span>`
           : bl.b === 0 ? html`<${Icon} name="check" size=${12} />`
@@ -472,10 +481,16 @@ function Board({ match, team, mode, wide, readOnly, focus, toStart }) {
   </div>`;
 
   const sk = sel ? stats.kids[sel] : null;
-  const fits = sel ? LN.map((l) => [l, fitOf(players[sel], l)]).filter((x) => x[1] === 'dominant' || x[1] === 'voorkeur') : [];
-  const hint = start
+  const rules = M.effRules(match, team);
+  const benchRule = rules.maxBenchOn ? (rules.maxBench || 10) * 60 : null;
+  const mainOf = (id) => (players[id] && players[id].main && players[id].main !== 'K' ? players[id].main : null);
+  const kidLvl = (id) => { const k = stats.kids[id]; return !gp.base || tb <= 0 ? '' : k.blocks < Math.floor(tb + 1e-9) ? 'low' : k.blocks > Math.ceil(tb - 1e-9) ? 'high' : 'ok'; };
+  const needBl = need ? blocks[need.b] : null;
+  const hint = needBl ? `Eén te veel in het veld (${M.periodLabel(team, needBl.p)} ${M.fmt(needBl.t - needBl.p * L)}): tik wie eruit gaat.`
+    : start
     ? (gp.base ? 'Pas de startopstelling aan; de wissels per blok blijven zoals ze zijn.' : 'Tik een speler op de bank en dan een plek (of sleep hem). Is de opstelling vol, dan loopt die door tot het eind.')
-    : readOnly || sel ? null
+    : readOnly ? null
+    : sel ? `Tik in een blok waar ${nick(sel)} speelt: op wie eruit gaat, iemand om mee te ruilen, een lege plek, de bank, of ＋ voor een extra plek.`
     : slot ? 'Kies wie hier past: groen omrand speelt hier in zijn kracht.'
     : gp.base && !stats.blocks.some((x) => x.swaps || x.moves) ? 'Tik een speler: je ziet hem over de hele wedstrijd. Tik dan in elk blok waar hij moet spelen.' : null;
 
@@ -504,7 +519,7 @@ function Board({ match, team, mode, wide, readOnly, focus, toStart }) {
     ${(start || gp.base) && html`<div class=${'gp-work' + (wide ? ' wide' : '')}>
       ${!start && html`<div class="gp-filters" role="toolbar" aria-label="Filter">
         ${FILTERS.map(([k, label]) => html`<button type="button" key=${k} class=${'gf' + (filter === k && !sel ? ' on' : '')} aria-pressed=${filter === k ? 'true' : 'false'}
-          onClick=${() => { haptic('select'); setFilter(k); setSel(null); setSlot(null); }}>${k !== 'alle' && k !== 'nog' && html`<i style=${'background:var(--pos-' + k + ')'}></i>`}${label}</button>`)}
+          onClick=${() => { haptic('select'); setFilter(k); setSel(null); setSlot(null); setNeed(null); }}>${k !== 'alle' && k !== 'nog' && html`<i style=${'background:var(--pos-' + k + ')'}></i>`}${label}</button>`)}
       </div>`}
       <div class="gp-gridwrap">${grid}</div>
     </div>`}
@@ -512,18 +527,24 @@ function Board({ match, team, mode, wide, readOnly, focus, toStart }) {
     ${(start || gp.base) && html`<div class="gp-strip" aria-label="Speeltijd per kind">
       ${ids.map((id) => {
         const k = stats.kids[id];
-        const lvl = !gp.base || tb <= 0 ? '' : k.blocks < Math.floor(tb + 1e-9) ? 'low' : k.blocks > Math.ceil(tb - 1e-9) ? 'high' : 'ok';
+        const lvl = kidLvl(id);
         return html`<button type="button" key=${id} class=${'gk ' + lvl + (sel === id ? ' on' : '')} onClick=${() => choose(id)} aria-pressed=${sel === id ? 'true' : 'false'}>
           <span class="gk-n">${nick(id)}</span><span class="gk-v num"><b>${k.blocks}</b>/${blocks.length}</span><span class="gk-m num">${mins(k.sec)}′</span>
         </button>`;
       })}
     </div>`}
     ${sel && html`<${Portal}><div class=${'gp-selbar' + (wide ? ' wide' : '') + (match.started && !match.finished ? ' live' : '')} role="status" key=${'sb' + sel}>
-      <span class="gsb-av">${nick(sel).slice(0, 1)}</span>
-      <span class="gsb-t"><b>${nick(sel)} <small class="num">${sk.blocks}/${blocks.length} · ${mins(sk.sec)}′</small></b><span>${readOnly ? 'Licht op in alle blokken.'
-        : start ? 'Tik een plek, of iemand om mee te ruilen.' : 'Tik in een blok wie eruit gaat, een lege plek, of ＋ voor een andere opstelling.'}</span>
-        ${fits.length > 0 && html`<span class="gsb-fit">${fits.map(([l, f]) => html`<i key=${l} class=${f}>${fitGlyph(f)} ${LNAME[l]}</i>`)}</span>`}</span>
-      <button type="button" class="gsb-x" onClick=${() => { setSel(null); haptic('select'); }} aria-label="Klaar met deze speler"><${Icon} name="x" size=${18} /></button>
+      <span class="gsb-av" style=${mainOf(sel) ? '--pc:var(--pos-' + mainOf(sel) + ')' : ''}>${nick(sel).slice(0, 1)}</span>
+      <span class="gsb-t">
+        <span class="gsb-top"><b>${nick(sel)}</b><span class=${'gsb-lvl ' + kidLvl(sel)}>${sk.blocks}/${blocks.length} blokken · ${mins(sk.sec)}′${tb > 0 ? ` (doel ${mins(stats.target)}′)` : ''}</span></span>
+        <span class="gsb-strip" aria-label="Waar hij per blok speelt">${blocks.map((bl) => { const l = gp.grid[bl.b] && gp.grid[bl.b][sel]; return html`<i key=${bl.b} class=${(l ? 'l' + l : 'off') + (bl.i === 0 && bl.p > 0 ? ' seam' : '')}></i>`; })}</span>
+        <span class="gsb-fit">
+          ${LN.map((l) => [l, fitOf(players[sel], l)]).filter((x) => x[1] === 'dominant' || x[1] === 'voorkeur').map(([l, f]) => html`<i key=${l} class=${f}>${fitGlyph(f)} ${LNAME[l]}</i>`)}
+          ${sk.maxRun > 0 && html`<i class=${benchRule && sk.maxRun > benchRule + 1 ? 'warn' : 'info'}>langst kant ${mins(sk.maxRun)}′</i>`}
+          ${sk.out >= 60 && html`<i class="warn">${mins(sk.out)}′ buiten kracht</i>`}
+        </span>
+      </span>
+      <button type="button" class="gsb-x" onClick=${() => { setSel(null); setNeed(null); haptic('select'); }} aria-label="Klaar met deze speler"><${Icon} name="x" size=${18} /></button>
     </div></${Portal}>`}
     ${!start && allOk && gp.base && !readOnly && !sel && stats.blocks.some((x) => x.swaps || x.moves) && html`<p class="gp-ok"><${Icon} name="check" size=${15} />Alle blokken zijn vol. Kijk bij Controle hoe het plan uitpakt.</p>`}
     ${menu != null && html`<${BlockSheet} match=${match} team=${team} b=${menu} readOnly=${readOnly} onClose=${() => setMenu(null)}
@@ -794,6 +815,41 @@ function Controle({ match, team, goTo }) {
     : html`<b>${LNAME[x.line][0].toUpperCase() + LNAME[x.line].slice(1)}</b> is lichter bezet vanaf ${when(x.t)}.`;
   const icon = { bench: 'clock', time: 'team', kracht: 'shield', lines: 'swaparrows' };
   const toggle = (k2) => { haptic('toggle'); setOpen(open === k2 ? null : k2); };
+  // oplossingen per punt: hooguit drie, elk met wat het doet met de cijfers
+  // (speelt iemand het minst en zit hij ook het langst aan de kant, dan staan de oplossingen bij dat laatste)
+  const fixes = useMemo(() => rep.insights.map((x) => (gp && gp.base && x.id && !(x.kind === 'time' && rep.insights.some((y) => y.kind === 'bench' && y.id === x.id)) ? M.gpFixes(match, team, x) : [])), [match, team]);
+  const sameAbove = (x) => x.kind === 'time' && rep.insights.some((y) => y.kind === 'bench' && y.id === x.id);
+  const fixLabel = (f) => {
+    const bl = f.block; const at = `${M.periodLabel(team, bl.p)} ${M.fmt(bl.t - bl.p * L)}`;
+    return f.what.kind === 'swap' ? `${at}: ${nick(f.what.in)} erin voor ${nick(f.what.out)}` : `${at}: ${nick(f.what.a)} ruilt met ${nick(f.what.b)} (naar ${LNAME[f.what.to]})`;
+  };
+  const fixImpact = (f, x) => {
+    const a = f.before, z = f.after, out = [];
+    const cls = (better) => (better ? 'up' : 'down');
+    // eerst wat het voor dit punt doet
+    const ka = x && a.kids[x.id], kz = x && z.kids[x.id];
+    if (ka && kz && x.kind === 'bench') out.push({ t: `${nick(x.id)} langst kant ${halfMin(ka.maxRun)}′ → ${halfMin(kz.maxRun)}′`, cls: cls(kz.maxRun < ka.maxRun) });
+    if (ka && kz && x.kind === 'time') out.push({ t: `${nick(x.id)} ${mins(ka.sec)}′ → ${mins(kz.sec)}′`, cls: cls(kz.sec > ka.sec) });
+    if (ka && kz && x.kind === 'kracht') out.push({ t: `${nick(x.id)} buiten kracht ${mins(ka.out)}′ → ${mins(kz.out)}′`, cls: cls(kz.out < ka.out) });
+    if (mins(z.maxBench) !== mins(a.maxBench)) out.push({ t: `langst kant ${mins(a.maxBench)}′ → ${mins(z.maxBench)}′`, cls: cls(z.maxBench < a.maxBench) });
+    if (mins(z.min) !== mins(a.min) || mins(z.max) !== mins(a.max)) out.push({ t: `speeltijd ${mins(a.min)}–${mins(a.max)}′ → ${mins(z.min)}–${mins(z.max)}′`, cls: cls(z.max - z.min < a.max - a.min) });
+    const k0 = Math.round(f.beforeKracht * 100), k1 = Math.round(f.kracht * 100);
+    if (k0 !== k1) out.push({ t: `in hun kracht ${k0}% → ${k1}%`, cls: cls(k1 > k0) });
+    if (f.what.kind === 'swap') out.push({ t: `${nick(f.what.in)} +${halfMin(f.block.len)}′ · ${nick(f.what.out)} −${halfMin(f.block.len)}′`, cls: '' });
+    return out;
+  };
+  const applyFix = (f) => {
+    const prev = snap(gp);
+    mutate((m, t) => M.gpApplyFix(m, t, f));
+    haptic('success');
+    toast('Aangepast: ' + fixLabel(f), restore(prev));
+  };
+  const fillOpen = () => {
+    const prev = snap(gp);
+    const n = mutate((m, t) => M.gpFill(m, t));
+    haptic('success');
+    toast(`✦ ${n} ${plural(n, 'blok', 'blokken')} ingevuld`, restore(prev));
+  };
   // grafiek: speeltijd per kind, per linie gekleurd, met de doelband (gemiddeld ± halve marge)
   const avg = ids.reduce((a, id) => a + played[id], 0) / Math.max(1, ids.length);
   const band = [Math.max(0, avg - k.time.marge / 2), avg + k.time.marge / 2];
@@ -831,13 +887,27 @@ function Controle({ match, team, goTo }) {
   </section>
 
   ${(open0.length > 0 || rep.insights.length > 0) && html`<section class="gd-card gd-ins">
-    <header class="gd-h"><${AiMark} size=${16} /><b class="ai-grad">Om naar te kijken</b></header>
-    ${open0.length > 0 && html`<button type="button" class="gd-insrow" onClick=${() => goTo(open0[0].b, null)}>
-      <span class="ri-ico"><${Icon} name="edit" size=${18} /></span><span class="ri-txt"><b>${M.periodLabel(team, open0[0].p)}, blok ${open0[0].i + 1}</b> is nog niet vol.</span><span class="rt-go">Bekijk<${Icon} name="chev" size=${14} /></span>
-    </button>`}
-    ${rep.insights.map((x, i) => html`<button type="button" key=${i} class="gd-insrow" style=${'--i:' + (i + 1)} onClick=${() => goTo(blockAt(x.kind === 'bench' ? x.from + 1 : x.t), x.id || null)}>
-      <span class=${'ri-ico ' + x.kind}><${Icon} name=${icon[x.kind] || 'eye'} size=${18} /></span><span class="ri-txt">${insightText(x)}</span><span class="rt-go">Bekijk<${Icon} name="chev" size=${14} /></span>
-    </button>`)}
+    <header class="gd-h"><${AiMark} size=${16} /><b class="ai-grad">Om naar te kijken</b><span class="gd-hs">met oplossingen</span></header>
+    ${open0.length > 0 && html`<div class="gd-issue">
+      <div class="gd-it"><span class="ri-ico"><${Icon} name="edit" size=${18} /></span><span class="ri-txt"><b>${open0.length} ${plural(open0.length, 'blok is', 'blokken zijn')} nog niet vol</b>, bijvoorbeeld ${M.periodLabel(team, open0[0].p)} blok ${open0[0].i + 1}. Daar wordt niet gewisseld.</span></div>
+      <div class="gd-fixes">
+        <button type="button" class="gd-fix" onClick=${fillOpen}><span class="gf-n">1</span><span class="gf-b"><b>✦ Laat de app ze invullen</b><span class="gf-i">Jouw blokken blijven staan; de app vult de rest eerlijk aan.</span></span><span class="gf-go">Doe</span></button>
+      </div>
+      <button type="button" class="gd-totable" onClick=${() => goTo(open0[0].b, null)}>Zelf invullen in de tabel<${Icon} name="chev" size=${14} /></button>
+    </div>`}
+    ${rep.insights.map((x, i) => {
+      const fx = fixes[i] || [];
+      return html`<div class="gd-issue" key=${'is' + i} style=${'--i:' + (i + 1)}>
+        <div class="gd-it"><span class=${'ri-ico ' + x.kind}><${Icon} name=${icon[x.kind] || 'eye'} size=${18} /></span><span class="ri-txt">${insightText(x)}</span></div>
+        ${fx.length > 0 && html`<div class="gd-fixes">${fx.map((f, j) => html`<button type="button" class="gd-fix" key=${j} onClick=${() => applyFix(f)}>
+          <span class="gf-n">${j + 1}</span>
+          <span class="gf-b"><b>${fixLabel(f)}</b><span class="gf-i">${fixImpact(f, x).map((c, k) => html`<i key=${k} class=${c.cls}>${c.t}</i>`)}</span></span>
+          <span class="gf-go">Doe</span>
+        </button>`)}</div>`}
+        ${!fx.length && html`<p class="gd-nofix">${sameAbove(x) ? 'De oplossingen hierboven helpen hier ook.' : 'Hier kan de app niet met één aanpassing iets beters vinden.'}</p>`}
+        <button type="button" class="gd-totable" onClick=${() => goTo(blockAt(x.kind === 'bench' ? x.from + 1 : x.t), x.id || null)}>${x.id ? 'Bekijk ' + nick(x.id) + ' in de tabel' : 'Bekijk in de tabel'}<${Icon} name="chev" size=${14} /></button>
+      </div>`;
+    })}
   </section>`}
 
   <section class="gd-card">

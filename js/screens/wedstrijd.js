@@ -162,7 +162,7 @@ function PrepView({ state, match, team }) {
     unlockAudio();
     viewTransition('start', () => mutateConcept((m) => M.startClock(m)));
   };
-  return html`<main class="matchscreen with-tabs">
+  return html`<main class="matchscreen with-dock">
     <${Affiche} match=${match} team=${team} onClick=${() => setSheet('opp')}>
       <button type="button" class="iconbtn" aria-label="Menu" onClick=${() => setSheet('menu')}><${Icon} name="more" size=${22} /></button>
     </${Affiche}>
@@ -177,9 +177,13 @@ function PrepView({ state, match, team }) {
         <${PlanChoice} match=${match} team=${team} swaps=${swaps} perMoment=${perMoment} />
         <div class="grow-field"><${PlanView} match=${match} team=${team} compact editable=${!M.isOwn(match, team)}
           onSwap=${(a, b) => conceptDrop(mutateConcept, team, a, b)} /></div>`}
-    <button type="button" class="btn primary block startbtn" disabled=${tooFew} onClick=${() => (emptyGp ? setSheet('gpleeg') : todo.length ? setSheet('confirm') : start())}>
-      <${Icon} name="play" size=${18} /> Start · tik bij de aftrap
-    </button>
+    <div class="prepdock">
+      <button type="button" class="btn primary startbtn" disabled=${tooFew} onClick=${() => (emptyGp ? setSheet('gpleeg') : todo.length ? setSheet('confirm') : start())}>
+        <${Icon} name="play" size=${20} /><span class="sb-t"><b>Start</b><small>tik bij de aftrap</small></span>
+      </button>
+      <a class="dockbtn" href="#/seizoen"><${Icon} name="chart" size=${20} /><span>Seizoen</span></a>
+      <a class="dockbtn" href="#/team"><${Icon} name="team" size=${20} /><span>Team</span></a>
+    </div>
 
     ${sheet === 'players' && html`<${PlayersSheet} match=${match} team=${team} onClose=${() => setSheet(null)} />`}
     ${sheet === 'keeper' && html`<${KeeperPickSheet} match=${match} team=${team} counts=${counts} onClose=${() => setSheet(null)} />`}
@@ -678,6 +682,17 @@ function LiveView({ match, team }) {
     else { setPeek(!p.was); haptic('select'); }
   };
   const canPeek = !!next && !moNow && !pending && !goal && !timeUp && !calmNext;
+  // na de aftrap (en na de rust) eerst rust op het veld: de wissel zweeft pas na anderhalve minuut mee
+  const early = !pending && el < 90 && countdown != null && countdown > 60;
+  const floating = !!next && !moNow && !pending && !goal && !timeUp && !calmNext && !early;
+  // het lipje van de uitleg valt af en toe op met een rimpeling: zodra de nieuwe zwevers er zijn, en daarna zo nu en dan
+  const [rip, setRip] = useState(0);
+  useEffect(() => { if (floating) setRip((k) => k + 1); }, [floating, next && next.t]);
+  useEffect(() => {
+    if (!floating || peek) return undefined;
+    const id = setInterval(() => setRip((k) => k + 1), 30000);
+    return () => clearInterval(id);
+  }, [floating, peek]);
   useEffect(() => {
     if (!peek) return undefined;
     const away = (e) => { if (!e.target.closest('.islandwrap')) setPeek(false); };
@@ -723,7 +738,7 @@ function LiveView({ match, team }) {
     <button type="button" class="dr-grab" data-press="none" aria-expanded=${peek}
       aria-label=${peek ? 'Uitleg van de wissel sluiten' : 'Uitleg van de wissel tonen'}
       onPointerDown=${peekDown} onPointerMove=${peekMove} onPointerUp=${peekUp} onPointerCancel=${peekUp} onContextMenu=${(e) => e.preventDefault()}
-      onClick=${(e) => { if (e.detail === 0) setPeek(!peek); }}><${Icon} name="chev" size=${16} /></button>
+      onClick=${(e) => { if (e.detail === 0) setPeek(!peek); }}>${rip > 0 && !peek && !reduced() && html`<span class="dr-rip" key=${'rip' + rip} aria-hidden="true"><i></i><i></i></span>`}<${Icon} name="chev" size=${16} /></button>
   </div>`;
 
   // ---------- wissel-eiland ----------
@@ -838,7 +853,7 @@ function LiveView({ match, team }) {
 
   // zwevende wisselspelers achter de plekken die gaan veranderen
   const ghosts = {};
-  if (next && !moNow && !pending && !goal && !timeUp && !calmNext) {
+  if (floating) {
     const hot = countdown <= 60;
     for (const s of group) {
       if (s.shift && s.shift.id in d.state.pos) {
@@ -897,7 +912,7 @@ function LiveView({ match, team }) {
         <${Field} slots=${restLu ? restLu.slots : d.state.slots} lines=${restLu ? restLu.lines : M.linesOf(match, team)} keeperId=${d.state.keeper} nick=${nick} height="auto" formable=${!goal}
           onTap=${tapField} onKeeper=${goal === 'scorer' ? (id) => scoreFor(id) : () => setSheet({ type: 'keeper' })}
           picking=${goal === 'scorer'} hot=${cele && cele.us ? cele.id : null} hotKey=${cele ? cele.key : 0}
-          neon=${next && !pending && !goal && !timeUp && !calmNext ? group.map((s) => s.out) : []} sub=${(id) => M.fmt(d.state.played[id])}
+          neon=${floating ? group.map((s) => s.out) : []} sub=${(id) => M.fmt(d.state.played[id])}
           ghosts=${ghosts} animate accent=${accent} badges=${d.goals} cheer=${cheer} />
         ${!goal && !pending && html`<${FocusRail} stand=${shownStand} auto=${team.rules.autoStand && match.standMode !== 'manual'} canAuto=${!!team.rules.autoStand}
           onSet=${(v) => mutate((m, t) => M.setStand(m, t, 'manual', v))} onAuto=${(on) => mutate((m, t) => M.setStand(m, t, on ? 'auto' : 'manual', stand))} />`}
@@ -913,7 +928,7 @@ function LiveView({ match, team }) {
         <${BenchScroll} key=${restLu ? 'rest' : 'live'} focus=${next && !pending ? (group.find((s) => d.state.bench.indexOf(s.in) !== -1) || {}).in : null}>
           ${(restLu ? restLu.bench : d.state.bench).map((id) => {
             const dis = d.state.disabled[id];
-            const isNext = next && !pending && !calmNext && group.some((s) => s.in === id);
+            const isNext = floating && group.some((s) => s.in === id);
             const ac = accent(id);
             const pill = html`<button type="button" key=${id} data-pid=${id} class=${'benchpill' + (dis ? ' off' : '') + (everDropped(id) ? ' dropped' : '') + (dropped(id) ? ' drop' : '') + (ac ? ' acc' : '')} style=${ac ? '--acc:' + ac : ''} onClick=${() => tapBench(id)}>
               ${nick(id)}${d.goals[id] ? html`<span class="bgoal">${d.goals[id]}</span>` : ''}<span class="t">${dis && !restLu ? (dis === 'wedstrijd' ? 'klaar' : 'rust') : isNext ? 'klaarmaken' : M.mins(d.state.played[id]) + ' min'}</span>
@@ -1030,7 +1045,7 @@ function PlanChoice({ match, team, swaps, perMoment }) {
       <button type="button" class="pc-info" onClick=${() => setSheet('uitleg')}>Uitleg</button></div>
     <div class="pc-opts">
       <button type="button" class=${'pc-opt ai' + (!own ? ' on' : '')} aria-pressed=${!own ? 'true' : 'false'} onClick=${pickStd}>
-        <span class="pc-glow" aria-hidden="true"></span>
+        <span class="pc-glow" aria-hidden="true"><span class="ai-sparks"><i></i><i></i><i></i><i></i><i></i><i></i></span></span>
         ${!own && html`<span class="pc-badge" aria-label="Actief"><${Icon} name="check" size=${13} /></span>`}
         <span class="pc-top"><span class="pc-ico ai"><${Icon} name="spark" size=${16} /></span><b class="pc-t">Standaardplan</b></span>
         <span class="pc-s">${own ? html`<span class="pc-cta">Gebruik dit<${Icon} name="chev" size=${13} /></span>` : html`${stdLine}${!plan.ok && html` <span class="warnicon" title=${(plan.why || []).map((w) => WHY_TEXT[w]).join(', ')}>!</span>`}`}</span>
