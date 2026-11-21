@@ -1,4 +1,5 @@
 // Wedstrijdlogica: klok, gebeurtenissen, afgeleide stand en (her)planning.
+import { naturalMoments, project, candidates as ownCands, decideLineup, fitOf, inKracht, FIT } from './ownplanner.js';
 import { planRest, planPinned, planOwn, stateAt, advise, breakLineup, initialState, LINES, lineStatus, isDisabled, placeIn } from './planner.js';
 import { uid } from './store.js';
 
@@ -566,6 +567,9 @@ export function createMatch(team, opts) {
     planMode: opts.planMode || null,
     periodLineups: opts.periodLineups ? JSON.parse(JSON.stringify(opts.periodLineups)) : null,
     ownStash: opts.ownStash ? JSON.parse(JSON.stringify(opts.ownStash)) : null,
+    planStyle: opts.planStyle || null,
+    planRhythm: opts.planRhythm || null,
+    ownSteps: opts.ownSteps ? JSON.parse(JSON.stringify(opts.ownSteps)) : null,
     standMode: opts.standMode || 'auto',
     manualStand: opts.manualStand || 'balans',
     clock: { period: 0, running: false, startedAt: 0, accum: 0 },
@@ -1033,7 +1037,7 @@ export function breakOptions(match, team) {
     start: fix(prevStart),
     eind,
     // eigen plan: advies alleen op verzoek; 'planned' = de coach had deze opstelling zelf gepland
-    advies: own ? fix(adviseLineup(match, team, p)) : null,
+    advies: own ? fix(ownAdviseLineup(match, team, p)) : null,
     planned: own && !!prop,
     own,
     played: st.played,
@@ -1120,4 +1124,229 @@ export function timeline(match, team) {
     }
   }
   return { cards, nowIndex };
+}
+
+
+// ---------- Jouw plan als route: speelstijl, ritme, vooruitkijkend advies, rapport ----------
+
+export { naturalMoments, fitOf, inKracht, FIT };
+
+// Balans per linie van een opstelling (zonder namen of cijfers).
+export function lineStatusOf(match, team, pos) {
+  return lineStatus(pos, playersMap(team), match.plan ? match.plan.stand : 'balans');
+}
+
+// Speelstijl van het eigen plan: 'sterk' (sterkste opstelling, in hun kracht) of 'balans' (gebalanceerd, eerlijk).
+export function planStyle(match, team) {
+  if (match.planStyle) return match.planStyle;
+  return (team.rules && team.rules.profile === 'sterk') ? 'sterk' : 'balans';
+}
+// Veldspelers (zonder keeper) en hoeveel er op de bank zitten.
+export function squadInfo(match, team) {
+  const st = match.events[0] || { pos: {}, bench: [] };
+  const n = Object.keys(st.pos).length + st.bench.length;
+  const F = Object.values(linesOf(match, team)).reduce((a, b) => a + b, 0);
+  return { n, F, bench: Math.max(0, n - F) };
+}
+
+// De stappen van de route: aanpak, per periode opstelling en wissels, rapport.
+export function ownSteps(team) {
+  const list = ['aanpak'];
+  for (let p = 0; p < team.periods; p++) list.push('op:' + p, 'ws:' + p);
+  list.push('rapport');
+  return list;
+}
+export function markStep(match, key, at) {
+  const cur = match.ownSteps || { done: {}, at: 'aanpak' };
+  match.ownSteps = { done: { ...cur.done, ...(key ? { [key]: true } : {}) }, at: at || cur.at };
+}
+
+// Vrije momenten en vaste stukken van het plan vanaf nu, voor het vooruitkijken.
+function ownItems(match, team, T0, scope) {
+  const L = periodLen(team);
+  const P = team.periods;
+  const pins = (match.pins || []).filter((x) => x.t >= T0);
+  const items = pins.map((x) => ({ t: x.t, type: 'pin', pairs: x.pairs }));
+  const p0 = Math.min(P - 1, Math.floor(T0 / L));
+  const pending = match.started && lineupPending(match, team);
+  for (let q = p0; q < P; q++) {
+    if (q > 0 && (q > p0 || pending)) {
+      const lu = match.periodLineups && match.periodLineups[q];
+      // nog niet gekozen: vooruitkijken gaat uit van advies in de rust, maar alleen voor periodes ná de periode
+      // die je nu vult en zolang je die opstelling nog niet bekeek (anders geldt 'zoals eind': geen wijziging)
+      const seen = match.ownSteps && match.ownSteps.done && match.ownSteps.done['op:' + q];
+      if (lu) items.push({ t: q * L, type: 'lineup', pos: lu.pos });
+      else if (!seen && (!scope || q > scope.p)) items.push({ t: q * L, type: 'freeLineup', emit: false });
+    }
+    const inQ = pins.filter((x) => x.t > q * L && x.t < (q + 1) * L);
+    const inScope = scope && scope.p === q;
+    // buiten de te vullen periode: heeft de coach daar zelf gepland, dan geldt alleen zijn plan
+    if (inQ.length && !inScope) continue;
+    for (const t of naturalMoments(L, q)) {
+      if (t <= T0 + 20) continue;
+      if (inQ.some((x) => Math.abs(x.t - t) < 60)) continue;
+      if (scope && scope.t != null && Math.abs(scope.t - t) < 60) continue;
+      items.push({ t, type: 'free', emit: !!inScope && scope.t == null });
+    }
+    if (inScope && scope.t != null) items.push({ t: scope.t, type: 'free', emit: true });
+  }
+  return items;
+}
+function ownStartState(match, team) {
+  const T0 = match.started && !match.finished ? Math.floor(gameTime(match, team)) : 0;
+  return { T0, start: planStateAt(match, team, T0, false) };
+}
+function ownCtx(match, team) {
+  return makeCtx(match, team, match.plan ? match.plan.stand : 'balans');
+}
+
+// Wat gebeurt er als je met k wissels per logisch moment speelt (en de adviezen volgt)? Voor de keuze 'ritme'.
+export function rhythmOptions(match, team, style = planStyle(match, team)) {
+  const { T0, start } = ownStartState(match, team);
+  const ctx = ownCtx(match, team);
+  const { bench } = squadInfo(match, team);
+  const r = effRules(match, team);
+  const maxB = r.maxBenchOn ? (r.maxBench || 10) * 60 : Infinity;
+  const marge = (r.marge || 5) * 60;
+  const opts = [];
+  for (let k = 1; k <= Math.max(1, bench); k++) {
+    const res = project({ start, T0, ctx, items: ownItems(match, team, T0, null), k, style });
+    const f = res.final;
+    opts.push({ k, minPlayed: f.minPlayed, maxPlayed: f.maxPlayed, maxStretch: f.maxStretch, swaps: f.swaps, kracht: f.kracht,
+      ok: f.maxStretch <= maxB + 1 && f.maxPlayed - f.minPlayed <= marge });
+  }
+  const okOnes = opts.filter((o) => o.ok);
+  const rec = okOnes.length ? okOnes[0]
+    : opts.slice().sort((a, b) => (Math.max(0, a.maxStretch - maxB) * 3 + (a.maxPlayed - a.minPlayed)) - (Math.max(0, b.maxStretch - maxB) * 3 + (b.maxPlayed - b.minPlayed)))[0];
+  return { opts, recommended: rec ? rec.k : 1 };
+}
+export function planRhythm(match, team) {
+  const { bench } = squadInfo(match, team);
+  if (match.planRhythm) return Math.min(Math.max(1, bench), match.planRhythm);
+  return rhythmOptions(match, team).recommended;
+}
+
+// Vul de vrije logische momenten van periode p met vooruitkijkend advies. Geeft het aantal wissels terug.
+export function ownAutoFill(match, team, p) {
+  const { T0, start } = ownStartState(match, team);
+  const res = project({ start, T0, ctx: ownCtx(match, team), items: ownItems(match, team, T0, { p }), k: planRhythm(match, team), style: planStyle(match, team) });
+  let n = 0;
+  for (const e of res.emitted) if (e.pairs.length) { pinMoment(match, team, e.t, e.pairs, 'terug'); n += e.pairs.length; }
+  return n;
+}
+// Voorstel voor één moment (vooruitkijkend), zonder het al te plannen.
+export function ownSuggestAt(match, team, t, k = null) {
+  const { T0, start } = ownStartState(match, team);
+  const L = periodLen(team);
+  const p = Math.min(team.periods - 1, Math.floor(t / L));
+  const res = project({ start, T0, ctx: ownCtx(match, team), items: ownItems(match, team, T0, { p, t }), k: k || planRhythm(match, team), style: planStyle(match, team) });
+  const e = res.emitted.find((x) => x.t === t);
+  return { pairs: e ? e.pairs : [], final: res.final };
+}
+// Hoe komt het plan uit als je vanaf nu de adviezen volgt (en wat je al plande blijft staan)?
+export function ownProjection(match, team) {
+  const { T0, start } = ownStartState(match, team);
+  return project({ start, T0, ctx: ownCtx(match, team), items: ownItems(match, team, T0, null), k: planRhythm(match, team), style: planStyle(match, team) }).final;
+}
+// Opstelling van periode p: hoe pakt de hele wedstrijd uit met deze opstelling, en hoe met advies?
+export function ownCompareLineup(match, team, p, pos) {
+  const L = periodLen(team);
+  const t = p * L;
+  const { T0, start } = ownStartState(match, team);
+  if (t < T0 || p === 0) return null;
+  const ctx = ownCtx(match, team);
+  const base = ownItems(match, team, T0, null).filter((x) => !(x.t === t && (x.type === 'lineup' || x.type === 'freeLineup')));
+  const k = planRhythm(match, team), style = planStyle(match, team);
+  const cur = project({ start, T0, ctx, items: base.concat([{ t, type: 'lineup', pos }]), k, style }).final;
+  const adv = project({ start, T0, ctx, items: base.concat([{ t, type: 'freeLineup' }]), k, style }).final;
+  return { cur, adv };
+}
+
+// Kandidaten na een tik: wie erin voor 'out' of wie eruit voor 'inn' op tijd t (na wat daar al gepland staat).
+export function ownCandidates(match, team, t, { out = null, inn = null, exclude = [] } = {}) {
+  const state = planStateAt(match, team, t, exclude.length > 0);
+  return ownCands(state, ownCtx(match, team), t, team.periods * periodLen(team), { out, inn, exclude, style: planStyle(match, team) });
+}
+// Advies voor de opstelling aan het begin van periode p, volgens de speelstijl (of een gekozen stijl). Kijkt
+// vooruit: de opstelling die met de rest van het plan (en het ritme) het eerlijkst uitkomt.
+export function ownAdviseLineup(match, team, p, style = planStyle(match, team)) {
+  const L = periodLen(team);
+  const t = p * L;
+  const { T0, start } = ownStartState(match, team);
+  const ctx = ownCtx(match, team);
+  let items = ownItems(match, team, T0, null).filter((x) => !(x.t === t && (x.type === 'lineup' || x.type === 'freeLineup')));
+  items.push({ t, type: 'freeLineup', emit: true });
+  let res;
+  if (t >= T0) res = project({ start, T0, ctx, items, k: planRhythm(match, team), style });
+  const got = res && res.lineups.find((x) => x.t === t);
+  const pos = got ? got.pos : decideLineup(planStateAt(match, team, t, false), ctx, t, team.periods * L, style).pos;
+  const st = planStateAt(match, team, t, false);
+  const everyone = Object.keys(st.pos).concat(st.bench);
+  return { pos, bench: everyone.filter((id) => !(id in pos)), slots: makeSlots(pos, linesOf(match, team), playersMap(team)) };
+}
+
+// Rapport: kerncijfers en inzichten over het hele plan (uit de tijdlijn), met verwijzing naar de stap.
+export function ownReport(match, team) {
+  const { cards } = timeline(match, team);
+  const players = playersMap(team);
+  const L = periodLen(team);
+  const END = team.periods * L;
+  const r = effRules(match, team);
+  const stand = match.plan ? match.plan.stand : 'balans';
+  const ids = Object.keys(cards[0].pos).concat(cards[0].bench);
+  const played = {}, fit = {}, out = {}, outWhere = {}, since = {}, stretch = {}, turns = {};
+  for (const id of ids) { played[id] = 0; fit[id] = 0; out[id] = 0; outWhere[id] = null; since[id] = 0; stretch[id] = { len: 0 }; turns[id] = 0; }
+  let lightSec = 0, lightFrom = null, lightWorst = { len: 0 };
+  let prevPos = null;
+  for (let i = 0; i < cards.length; i++) {
+    const c = cards[i];
+    const t0 = c.t, t1 = i + 1 < cards.length ? cards[i + 1].t : END;
+    const dt = Math.max(0, t1 - t0);
+    if (prevPos) {
+      for (const id of ids) {
+        const was = id in prevPos, is = id in c.pos;
+        if (was && !is) { since[id] = t0; turns[id]++; }
+        if (!was && is) { const len = t0 - since[id]; if (len > stretch[id].len) stretch[id] = { len, from: since[id], to: t0 }; since[id] = t0; }
+      }
+    }
+    for (const id of Object.keys(c.pos)) {
+      if (!(id in played)) continue;
+      played[id] += dt;
+      if (inKracht(players[id], c.pos[id])) fit[id] += dt;
+      else { out[id] += dt; if (!outWhere[id]) outWhere[id] = { line: c.pos[id], t: t0 }; }
+    }
+    const light = lineStatus(c.pos, players, stand).find((x) => x.light);
+    if (light && dt > 0) { lightSec += dt; if (dt > lightWorst.len) lightWorst = { len: dt, t: t0, line: light.line }; }
+    prevPos = c.pos;
+  }
+  for (const id of ids) if (!(id in cards[cards.length - 1].pos)) { const len = END - since[id]; if (len > stretch[id].len) stretch[id] = { len, from: since[id], to: END }; }
+  const vals = ids.map((id) => played[id]);
+  const minP = Math.min(...vals), maxP = Math.max(...vals);
+  const fieldTot = vals.reduce((a, b) => a + b, 0);
+  const fitTot = ids.reduce((a, id) => a + fit[id], 0);
+  const longest = ids.slice().sort((a, b) => stretch[b].len - stretch[a].len)[0];
+  const swaps = cards.filter((c) => c.kind === 'swap').reduce((a, c) => a + (c.pairs ? c.pairs.length : 1), 0);
+  const moments = cards.filter((c) => c.kind === 'swap').length;
+  const maxB = r.maxBenchOn ? (r.maxBench || 10) * 60 : null;
+  const marge = (r.marge || 5) * 60;
+  const kpi = {
+    time: { min: minP, max: maxP, spread: maxP - minP, marge, ok: maxP - minP <= marge + 30 },
+    bench: { max: stretch[longest].len, rule: maxB, ok: !maxB || stretch[longest].len <= maxB + 1, who: longest, from: stretch[longest].from, to: stretch[longest].to },
+    swaps: { n: swaps, moments, every: moments ? END / (moments + 1) : null },
+    kracht: { pct: fieldTot ? fitTot / fieldTot : 1, out: ids.filter((id) => out[id] >= 60).sort((a, b) => out[b] - out[a]).map((id) => ({ id, sec: out[id], line: outWhere[id].line, t: outWhere[id].t })) },
+    lines: { pct: fieldTot ? 1 - lightSec / END : 1, worst: lightWorst.len ? lightWorst : null }
+  };
+  // inzichten, op impact: wat valt buiten de regels of de kracht, met de plek om het aan te passen
+  const step = (t) => 'ws:' + Math.min(team.periods - 1, Math.floor(t / L));
+  const insights = [];
+  if (!kpi.bench.ok) insights.push({ kind: 'bench', sev: 3, id: longest, sec: kpi.bench.max, from: kpi.bench.from, to: kpi.bench.to, step: step(kpi.bench.from + 1), t: null });
+  if (!kpi.time.ok) {
+    const least = ids.slice().sort((a, b) => played[a] - played[b])[0];
+    insights.push({ kind: 'time', sev: 3, id: least, sec: played[least], step: 'ws:0' });
+  }
+  for (const o of kpi.kracht.out.slice(0, 2)) insights.push({ kind: 'kracht', sev: 2, id: o.id, sec: o.sec, line: o.line, step: step(o.t + 1), t: o.t });
+  if (kpi.lines.worst && kpi.lines.worst.len >= L / 3) insights.push({ kind: 'lines', sev: 1, line: kpi.lines.worst.line, t: kpi.lines.worst.t, sec: kpi.lines.worst.len, step: step(kpi.lines.worst.t + 1) });
+  insights.sort((a, b) => b.sev - a.sev);
+  const verdict = kpi.time.ok && kpi.bench.ok ? (kpi.kracht.pct >= 0.9 ? 'goed' : 'kracht') : 'let';
+  return { kpi, insights: insights.slice(0, 3), verdict, played, turns, ids, fitSec: fit, outSec: out, swaps, moments };
 }

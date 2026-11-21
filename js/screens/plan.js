@@ -17,11 +17,12 @@ import { haptic } from '../motion.js';
 export function switchPlanMode(mode) {
   const back = mutate((m, t) => {
     const stash = !!(m.ownStash && (m.ownStash.pins.length || m.ownStash.periodLineups));
-    M.setPlanMode(m, t, mode, mode === 'eigen' && !stash);
+    if (mode === 'eigen' && !stash && !m.started) { m.pins = []; m.periodLineups = null; m.ownSteps = null; }
+    M.setPlanMode(m, t, mode, false);
     return stash;
   });
   haptic('success');
-  toast(mode === 'eigen' ? (back ? 'Je eigen plan is terug' : 'Je plant nu zelf. Het plan van de app staat klaar om aan te passen.') : 'De app maakt het plan weer. Jouw plan blijft bewaard.');
+  toast(mode === 'eigen' ? (back ? 'Je eigen plan is terug' : 'Je maakt nu zelf het plan, in een paar stappen.') : 'De app maakt het plan weer. Jouw plan blijft bewaard.');
 }
 
 export function Plan({ state }) {

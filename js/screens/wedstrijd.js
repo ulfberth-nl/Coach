@@ -79,7 +79,7 @@ export function rebuildConcept(d, changes = {}) {
   else if (present.indexOf(keeperId) === -1) keeperId = suggestKeeper(t, present, keeperCounts(d, t));
   // eigen opstelling (gesleept) blijft staan, behalve als de coach om een nieuw voorstel vraagt
   const lines = changes.resetLines ? null : m.lines || null;
-  const keep = changes.resetLines ? { planMode: m.planMode } : { pins: m.pins, fairness: m.fairness, standMode: m.standMode, manualStand: m.manualStand, planMode: m.planMode, periodLineups: m.periodLineups, ownStash: m.ownStash };
+  const keep = changes.resetLines ? { planMode: m.planMode } : { pins: m.pins, fairness: m.fairness, standMode: m.standMode, manualStand: m.manualStand, planMode: m.planMode, periodLineups: m.periodLineups, ownStash: m.ownStash, planStyle: m.planStyle, planRhythm: m.planRhythm, ownSteps: m.ownSteps };
   const n = M.createMatch(t, { present, keeperId, priority: changes.priority || m.priority, opponent: m.opponent, date: m.date, lines, rules: matchRules(t, present, keeperId), ...keep });
   n.id = m.id;
   n.setup = m.setup || { present: false, keeper: false, opponent: false };
@@ -171,13 +171,11 @@ function PrepView({ state, match, team }) {
     ${tooFew
       ? html`<div class="card" style="flex:1 1 auto;justify-content:center;text-align:center"><span class="h2">Te weinig spelers</span><span class="sub">Je hebt ${F} veldspelers nodig${team.keeper ? ' plus een keeper' : ''}. Tik op "spelers".</span></div>`
       : html`
-        <button type="button" class="planline" onClick=${() => go('/plan')}>
-          ${M.isOwn(match, team)
-            ? html`<span><b class="pl-own">Jouw plan</b> · ${swaps ? `${swaps} ${swaps === 1 ? 'wissel' : 'wissels'} · ${M.mins(plan.fair.minPlayed)}–${M.mins(plan.fair.maxPlayed)} min p.p.` : 'nog geen wissels gepland'}</span>`
-            : html`<span>${swaps ? `${swaps} ${perMoment > 1 ? 'momenten (tot ' + perMoment + ' tegelijk)' : 'wissels'} · ~${String(every).replace('.', ',')} min · ${M.mins(plan.fair.minPlayed)}–${M.mins(plan.fair.maxPlayed)} min p.p. · ${plan.fair.minTurns === plan.fair.maxTurns ? plan.fair.minTurns + '×' : plan.fair.minTurns + '–' + plan.fair.maxTurns + '×'}` : 'Geen wissels nodig'}</span>`}
+        ${M.isOwn(match, team) ? html`<${OwnLine} match=${match} team=${team} />` : html`<button type="button" class="planline" onClick=${() => go('/plan')}>
+          ${html`<span>${swaps ? `${swaps} ${perMoment > 1 ? 'momenten (tot ' + perMoment + ' tegelijk)' : 'wissels'} · ~${String(every).replace('.', ',')} min · ${M.mins(plan.fair.minPlayed)}–${M.mins(plan.fair.maxPlayed)} min p.p. · ${plan.fair.minTurns === plan.fair.maxTurns ? plan.fair.minTurns + '×' : plan.fair.minTurns + '–' + plan.fair.maxTurns + '×'}` : 'Geen wissels nodig'}</span>`}
           ${!plan.ok && html`<span class="warnicon" title=${(plan.why || []).map((w) => WHY_TEXT[w]).join(', ')}>!</span>`}
           <${Icon} name="chev" size=${16} />
-        </button>
+        </button>`}
         <div class="grow-field"><${PlanView} match=${match} team=${team} compact editable
           onSwap=${(a, b) => conceptDrop(mutateConcept, team, a, b)} /></div>`}
     <button type="button" class="btn primary block startbtn" disabled=${tooFew} onClick=${() => (todo.length ? setSheet('confirm') : start())}>
@@ -956,4 +954,20 @@ function DoneView({ match, team }) {
     </div>
     <button type="button" class="btn primary block startbtn" onClick=${() => update((d) => { d.currentMatchId = null; })}>Nieuwe wedstrijd klaarzetten</button>
   </main>`;
+}
+
+// Planregel bij een eigen plan: waar je bent in de stappen, en één knop om verder te gaan.
+function OwnLine({ match, team }) {
+  const steps = M.ownSteps(team);
+  const done = (match.ownSteps && match.ownSteps.done) || {};
+  const n = steps.filter((k) => done[k]).length;
+  const fresh = !match.ownSteps || !n;
+  const finished = done.rapport;
+  const at = match.ownSteps && match.ownSteps.at;
+  const label = at === 'aanpak' ? 'aanpak' : at === 'rapport' ? 'rapport' : at ? (at[0] === 'o' ? 'opstelling ' : 'wissels ') + M.periodLabel(team, +at.split(':')[1]) : '';
+  return html`<button type="button" class=${'planline own' + (fresh ? ' fresh' : '') + (finished ? ' done' : '')} onClick=${() => go('/plan')}>
+    <span class="pl-ring" style=${'--p:' + (n / steps.length)} aria-hidden="true"><i></i></span>
+    <span class="pl-txt"><b class="pl-own">Jouw plan</b><span>${finished ? 'klaar · bekijk het rapport' : fresh ? `maak je plan in ${steps.length} stappen` : `stap ${Math.min(steps.length, n + 1)} van ${steps.length} · ${label}`}</span></span>
+    <span class="pl-cta">${finished ? 'Bekijk' : fresh ? 'Begin' : 'Verder'}<${Icon} name="chev" size=${15} /></span>
+  </button>`;
 }
