@@ -7,35 +7,91 @@ import { KEY_KRACHT } from '../planner.js';
 const STRENGTHS = ['Snel', 'Overzicht', 'Techniek', 'Inzet', 'Verdedigen', 'Passen', 'Scoren', 'Samenspel', 'Leiderschap', 'Vrolijk'];
 let unlockedUntil = 0;
 
-function PinPad({ title, sub, onDone, error }) {
+// ---------- pincode: donker glas, ronde toetsen, slot dat opengaat ----------
+function LockIcon() {
+  return html`<svg width="34" height="34" viewBox="0 0 48 48" aria-hidden="true">
+    <path class="lk-sh" d="M15 22v-6.5a9 9 0 0 1 18 0V22" fill="none" stroke="currentColor" stroke-width="4.2" stroke-linecap="round" />
+    <rect x="9.5" y="21" width="29" height="21.5" rx="7" fill="currentColor" />
+    <circle class="lk-hole" cx="24" cy="31.8" r="3.2" />
+  </svg>`;
+}
+
+// onComplete(pin) → 'ok' | 'next' | { error: 'tekst' }; bij 'ok' gaat het slot open en volgt onDone
+function PinPad({ title, sub, onComplete, onDone, footer }) {
   const [pin, setPin] = useState('');
-  const press = (k) => {
-    if (k === 'del') { setPin(pin.slice(0, -1)); return; }
-    const next = (pin + k).slice(0, 4);
-    setPin(next);
-    if (next.length === 4) setTimeout(() => { onDone(next); setPin(''); }, 120);
+  const [st, setSt] = useState('idle');
+  const [msg, setMsg] = useState('');
+  const busy = st !== 'idle';
+  const pinRef = useRef('');
+  pinRef.current = pin;
+  const finish = async (p) => {
+    setSt('busy');
+    await new Promise((r) => setTimeout(r, 160));
+    const r = await onComplete(p);
+    if (r === 'ok') {
+      setSt('ok');
+      haptic('success');
+      setTimeout(() => onDone && onDone(), 720);
+    } else if (r === 'next') {
+      setSt('idle');
+      setPin('');
+    } else {
+      setMsg((r && r.error) || 'Onjuiste pincode');
+      setSt('error');
+      haptic('no');
+      setTimeout(() => { setPin(''); setSt('idle'); }, 560);
+    }
   };
-  return html`<div class="col" style="gap:18px;align-items:stretch;padding-top:12px">
-    <div class="col" style="align-items:center;gap:4px;text-align:center">
-      <${Icon} name="lock" size=${30} />
-      <span class="h2" style="font-size:20px">${title}</span>
-      ${sub && html`<span class="sub">${sub}</span>`}
+  const press = (k) => {
+    if (busy) return;
+    if (k === 'del') { setPin((x) => x.slice(0, -1)); return; }
+    const next = (pinRef.current + k).slice(0, 4);
+    pinRef.current = next;
+    setPin(next);
+    if (msg && next.length === 1) setMsg('');
+    if (next.length === 4) finish(next);
+  };
+  // ook met een toetsenbord
+  useEffect(() => {
+    const onKey = (e) => {
+      if (/^[0-9]$/.test(e.key)) press(e.key);
+      else if (e.key === 'Backspace') press('del');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+  const key = (k) => html`<button type="button" class="pin-key" data-press="none" aria-label=${k} onClick=${() => press(k)}>${k}</button>`;
+  return html`<div class="pin-step">
+    <div class="pin-head">
+      <span class=${'pin-lock ' + st}><${LockIcon} /></span>
+      <h1 class="pin-title">${title}</h1>
+      <p class=${'pin-sub' + (msg ? ' err' : '')} role=${msg ? 'alert' : undefined}>${msg || sub}</p>
+      <div class=${'pin-dots ' + st} aria-label=${pin.length + ' van 4 cijfers'}>
+        ${[0, 1, 2, 3].map((i) => html`<i class=${i < pin.length || st === 'ok' ? 'on' : ''} style=${'--k:' + i}></i>`)}
+      </div>
     </div>
-    <div class="pindots" aria-label=${pin.length + ' van 4 cijfers'}>${[0, 1, 2, 3].map((i) => html`<span class=${i < pin.length ? 'on' : ''}></span>`)}</div>
-    ${error && html`<span class="sub" style="text-align:center;color:var(--danger);font-weight:700">${error}</span>`}
-    <div class="pinpad">
-      ${['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'].map((k) => k === ''
-        ? html`<span></span>`
-        : html`<button type="button" aria-label=${k === 'del' ? 'Wissen' : k} onClick=${() => press(k)}>${k === 'del' ? '⌫' : k}</button>`)}
+    <div class="pin-pad">
+      ${['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(key)}
+      ${footer || html`<span></span>`}
+      ${key('0')}
+      <button type="button" class=${'pin-key text' + (pin.length ? '' : ' hide')} data-press="none" aria-label="Wissen" onClick=${() => press('del')}><${Icon} name="back" size=${26} /></button>
     </div>
   </div>`;
+}
+
+function PinScreen({ children }) {
+  return html`<main class="pinscreen">
+    <div class="pin-bg" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i></div>
+    <div class="pin-top"><a class="pin-back" href="#/team" aria-label="Terug"><${Icon} name="back" /></a></div>
+    ${children}
+  </main>`;
 }
 
 export function Spelers({ state }) {
   const team = activeTeam(state);
   const [, force] = useState(0);
   const [stage, setStage] = useState(null); // instellen: { first }
-  const [error, setError] = useState('');
+  const newHash = useRef(null);
   const [edit, setEdit] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const unlocked = state.pinHash && Date.now() < unlockedUntil;
@@ -43,38 +99,33 @@ export function Spelers({ state }) {
   const back = html`<a class="iconbtn" href="#/team" aria-label="Terug"><${Icon} name="back" /></a>`;
 
   if (!state.pinHash || stage && stage.change) {
-    return html`<main class="screen">
-      <div class="topbar">${back}<span></span></div>
-      <${PinPad} key=${stage && stage.first ? 'b' : 'a'} error=${error}
-        title=${stage && stage.first ? 'Herhaal de pincode' : 'Kies een pincode'}
-        sub="4 cijfers. Zo zien de kinderen (en anderen) de beoordelingen niet."
-        onDone=${async (pin) => {
-          if (!stage || !stage.first) { setStage({ ...(stage || {}), first: pin }); setError(''); return; }
-          if (pin !== stage.first) { setStage(stage.change ? { change: true } : null); setError('Niet hetzelfde, probeer opnieuw.'); return; }
-          const h = await hashPin(pin);
-          update((d) => { d.pinHash = h; });
-          unlockedUntil = Date.now() + 15 * 60 * 1000;
-          setStage(null); setError('');
-          toast('Pincode ingesteld');
-        }} />
-    </main>`;
+    const second = !!(stage && stage.first);
+    return html`<${PinScreen}>
+      <${PinPad} key=${second ? 'b' : 'a'}
+        title=${second ? 'Herhaal de pincode' : (stage && stage.change ? 'Nieuwe pincode' : 'Kies een pincode')}
+        sub=${second ? 'Nog een keer, ter controle.' : '4 cijfers. Zo zien de kinderen (en anderen) de beoordelingen niet.'}
+        onComplete=${async (pin) => {
+          if (!second) { setStage({ ...(stage || {}), first: pin }); return 'next'; }
+          if (pin !== stage.first) { setTimeout(() => setStage(stage.change ? { change: true } : null), 650); return { error: 'Niet hetzelfde, probeer opnieuw.' }; }
+          // pas na het openen van het slot opslaan, anders verspringt het scherm halverwege
+          newHash.current = await hashPin(pin);
+          return 'ok';
+        }}
+        onDone=${() => { const h = newHash.current; unlockedUntil = Date.now() + 15 * 60 * 1000; update((d) => { d.pinHash = h; }); setStage(null); toast('Pincode ingesteld'); }} />
+    </${PinScreen}>`;
   }
 
   if (!unlocked) {
-    return html`<main class="screen">
-      <div class="topbar">${back}<span></span></div>
-      <${PinPad} title="Spelers en beoordeling" sub="Voer de pincode in" error=${error}
-        onDone=${async (pin) => {
-          const h = await hashPin(pin);
-          if (h === state.pinHash) { unlockedUntil = Date.now() + 15 * 60 * 1000; setError(''); force((x) => x + 1); }
-          else setError('Onjuiste pincode');
-        }} />
-      <button type="button" class="link" style="align-self:center" onClick=${() => setConfirm({
-        title: 'Pincode vergeten?', text: 'Je kunt een nieuwe pincode kiezen. Dan worden alle beoordelingen en voorkeursposities gewist; namen en wedstrijden blijven.', yes: 'Wissen en nieuwe pincode', danger: true,
-        run: () => update((d) => { d.pinHash = null; for (const t of d.teams) for (const p of t.players) { p.kracht = 50; p.prefs = []; p.strengths = []; } })
-      })}>Pincode vergeten?</button>
+    return html`<${PinScreen}>
+      <${PinPad} title="Spelers en beoordeling" sub="Voer je pincode in"
+        onComplete=${async (pin) => ((await hashPin(pin)) === state.pinHash ? 'ok' : { error: 'Onjuiste pincode' })}
+        onDone=${() => { unlockedUntil = Date.now() + 15 * 60 * 1000; force((x) => x + 1); }}
+        footer=${html`<button type="button" class="pin-key text small" data-press="none" onClick=${() => setConfirm({
+          title: 'Pincode vergeten?', text: 'Je kunt een nieuwe pincode kiezen. Dan worden alle beoordelingen en voorkeursposities gewist; namen en wedstrijden blijven.', yes: 'Wissen en nieuwe pincode', danger: true,
+          run: () => update((d) => { d.pinHash = null; for (const t of d.teams) for (const p of t.players) { p.kracht = 50; p.prefs = []; p.strengths = []; } })
+        })}>Vergeten?</button>`} />
       ${confirm && html`<${Confirm} ...${confirm} onYes=${confirm.run} onClose=${() => setConfirm(null)} />`}
-    </main>`;
+    </${PinScreen}>`;
   }
 
   const active = team.players.filter((p) => p.active !== false);
@@ -107,7 +158,7 @@ export function Spelers({ state }) {
       <button type="button" class="btn soft block" onClick=${() => setEdit({ id: null, name: '', nick: '', kracht: 50, main: null, flex: true, prefs: [], strengths: [], active: true })}><${Icon} name="plus" size=${18} /> Speler toevoegen</button>
     </section>
     ${archived.length > 0 && html`<section class="card" style="gap:8px"><span class="label">Niet meer in de selectie</span>${archived.map(row)}</section>`}
-    <button type="button" class="link" style="align-self:center" onClick=${() => { setStage({ change: true }); setError(''); }}>Pincode wijzigen</button>
+    <button type="button" class="link" style="align-self:center" onClick=${() => setStage({ change: true })}>Pincode wijzigen</button>
 
     ${edit && html`<${PlayerEditor} player=${edit} onClose=${() => setEdit(null)}
       onSave=${(p) => {
@@ -145,12 +196,22 @@ function KrachtSlider({ value, onChange }) {
     const t = setTimeout(() => setShowTip(false), 1100);
     return () => clearTimeout(t);
   }, [tip]);
-  const posAt = (x) => { const r = inner.current.getBoundingClientRect(); return Math.max(0, Math.min(8, ((x - r.left) / Math.max(1, r.width)) * 8)); };
+  const root = useRef(null);
+  // iPhone: tijdens slepen nooit de pagina laten meeschuiven
+  useEffect(() => {
+    const el = root.current;
+    const block = (e) => { if (st.current && st.current.on) e.preventDefault(); };
+    el.addEventListener('touchmove', block, { passive: false });
+    return () => el.removeEventListener('touchmove', block);
+  }, []);
   const pick = (k) => { if (k !== lastK.current) { lastK.current = k; onChange(k * 12.5); haptic('select'); } };
   const down = (e) => {
     if (e.button > 0) return;
     lastK.current = idx;
-    st.current = { id: e.pointerId, x: e.clientX, y: e.clientY, on: false };
+    // maten één keer vastleggen; daarna telt alleen hoe ver de vinger schuift (geen gespring)
+    const r = inner.current.getBoundingClientRect();
+    const w = Math.max(1, r.width);
+    st.current = { id: e.pointerId, x: e.clientX, y: e.clientY, on: false, w, start: Math.max(0, Math.min(8, ((e.clientX - r.left) / w) * 8)), raf: 0, p: 0 };
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) { /* oud toestel */ }
   };
   const move = (e) => {
@@ -162,18 +223,19 @@ function KrachtSlider({ value, onChange }) {
       if (dy > dx) { st.current = null; return; }
       s.on = true;
     }
-    const p = posAt(e.clientX);
-    setPos(p);
-    pick(Math.round(p));
+    s.p = Math.max(0, Math.min(8, s.start + ((e.clientX - s.x) / s.w) * 8));
+    pick(Math.round(s.p));
+    if (!s.raf) s.raf = requestAnimationFrame(() => { s.raf = 0; if (st.current === s) setPos(s.p); });
   };
   const up = (e) => {
     const s = st.current;
     st.current = null;
     if (!s) return;
-    if (!s.on) { pick(Math.round(posAt(e.clientX))); setTip((t) => t + 1); }
+    if (s.raf) cancelAnimationFrame(s.raf);
+    if (!s.on) { pick(Math.round(s.start)); setTip((t) => t + 1); }
     setPos(null);
   };
-  const cancel = () => { st.current = null; setPos(null); };
+  const cancel = () => { const s = st.current; if (s && s.raf) cancelAnimationFrame(s.raf); st.current = null; setPos(null); };
   const key = (e) => {
     const d = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[e.key];
     let k = d ? idx + d : e.key === 'Home' ? 0 : e.key === 'End' ? 8 : null;
@@ -184,7 +246,7 @@ function KrachtSlider({ value, onChange }) {
   };
   const p = pos != null ? pos : idx;
   const shown = pos != null ? Math.round(pos) : idx;
-  return html`<div class=${'kr' + (pos != null ? ' dragging' : '') + (pos != null || showTip ? ' tip' : '') + (shown >= KR_KEY ? ' key' : '')}
+  return html`<div ref=${root} class=${'kr' + (pos != null ? ' dragging' : '') + (pos != null || showTip ? ' tip' : '') + (shown >= KR_KEY ? ' key' : '')}
     role="slider" tabindex="0" aria-label="Speelkracht" aria-valuemin="0" aria-valuemax="8" aria-valuenow=${idx} aria-valuetext=${KR_WORDS[idx]}
     style=${`--p:${(p / 8).toFixed(4)}`} onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${cancel} onKeyDown=${key} onBlur=${() => setShowTip(false)}>
     <span class="kr-rail" style=${'background:' + KRACHT_BG}><span class="kr-cover"></span></span>

@@ -23,7 +23,7 @@ Tip: zet tijdens de wedstrijd het geluid aan. Bij een wisselmoment piept de app 
 
 - **Eén bewegingstaal:** vaste tempo's (tik 0,1 s, klein 0,25 s, scherm 0,45 s), weggaan gaat sneller dan binnenkomen, twee veren (zacht en speels).
 - **Indrukken:** elke knop en kaart wordt iets kleiner en donkerder als je hem aanraakt en veert terug bij loslaten. Begin je te scrollen, dan licht er niets op.
-- **Tikje bij tikken:** op een iPhone vanaf iOS 18 en op Android voel je een tikje bij knoppen, schakelaars en keuzes. Uit te zetten bij Team → Deze telefoon.
+- **Tikje bij tikken:** op een iPhone en op Android voel je een tikje bij knoppen, schakelaars en keuzes. Uit te zetten bij Team → Deze telefoon. Op de iPhone werkt dat zo: over elke knop ligt een onzichtbare iOS-schakelaar; jouw vinger zet hem om en iOS geeft het tikje (sinds iOS 26.5 mag een webpagina dat niet meer zelf doen). Daardoor voel je het bij tikken, niet bij vasthouden of slepen. Zet *Systeemhaptiek* aan bij Instellingen → Geluiden en voelbare feedback.
 - **Schakelaar:** het bolletje rekt uit als je drukt en schiet verend naar de andere kant.
 - **− en +:** het getal rolt mee; vasthouden telt steeds sneller door; aan de grens schudt het getal 'nee'.
 - **Keuzebalk:** het blokje vloeit naar je keuze; je kunt er ook overheen vegen.
@@ -55,7 +55,7 @@ Klaarzetten en spelen gebeuren op hetzelfde scherm, dat altijd in één beeld pa
 - **Doelpunt:** tik op de stand. Het scorebord klapt om naar twee knoppen (*+1* voor ons of voor de tegenstander). Bij een goal van ons wordt het eiland oranje met *Wie scoorde?* en wordt het veld iets donkerder; en tik je de speler in het veld aan (of *Weet ik niet*); het veld blijft vrij. De stand kleurt groen als we voorstaan en amber bij een achterstand; de scorer krijgt een oranje pil met rimpels en een klein *+1*. Onderin staat een paar seconden *Goal Naam · Ongedaan* (scoorde de keeper zelf, dan bovenin).
 - **Wissel-eiland:** onder het scorebord staat in tekst wat er komt (wie erin, wie eruit, wie doorschuift) en rechts een grote aftelring. Vanaf 1 minuut wordt het eiland donkerblauw en ademt de ring steeds sneller; ben je te laat, dan wordt de ring rood, wiebelt het eiland en staat er een witte pil met hoeveel (bijv. −0:44). Tik op het eiland om te wisselen.
 - **Zwevers in het veld:** wie eruit gaat heeft een oranje draaiende ring; schuin erachter zweeft rustig wie erin komt, in groen (in de laatste minuut duidelijker, sneller en met een groene draaiende ring; op de bank heeft hij ook een groene ring). Een blauwe zwever met ↑/↓ laat zien wie doorschuift. Bij de wissel zakt wie eruit gaat weg richting de bank, glijdt een doorschuiver naar zijn nieuwe plek en stapt wie erin komt vanaf zijn zweefplek naar binnen (eerst groen, dan wit); daarna valt de speler die eruit ging op de bank.
-- **Slepen = nu wisselen:** veld ↔ bank wisselt direct, veld ↔ veld ruilt plekken. Over de keeper verschijnt dan een pil met *Kan terug / Rust / Klaar* (standaard *Kan terug*) en *Ongedaan maken*. Wie je terugsleept uit rust of klaar, is weer inzetbaar.
+- **Slepen = nu wisselen:** veld ↔ bank wisselt direct, veld ↔ veld ruilt plekken. De speler die je sleept zweeft boven je vinger, de dichtstbijzijnde speler wordt vanzelf het doel (je hoeft niet precies te mikken) en erboven staat wat er gebeurt, bijvoorbeeld *Speler 7 erin*. Laat je los zonder doel, dan vliegt hij terug. Over de keeper verschijnt dan een pil met *Kan terug / Rust / Klaar* (standaard *Kan terug*) en *Ongedaan maken*. Wie je terugsleept uit rust of klaar, is weer inzetbaar.
 - **Meerdere spelers tegelijk:** stel bij Team → Wisselen in hoeveel kinderen per wisselmoment wisselen (1–5; in de zaal standaard de hele veldploeg). Het wisselvenster toont dan alle paren; per paar kun je spelers kiezen, een paar weghalen of er een toevoegen.
 - **Wisselen:** tik het eiland of een speler. Bovenin staat wie eruit en wie erin gaat; Tik op de tegel *Eruit* of *Erin* voor een lijst van het veld of de bank, met minuten en hoe vaak iemand al gewisseld is. Label *plan* = volgende wissel uit het actuele plan; *advies* = beste partner als je zelf iemand anders kiest. In de blauwe balk: *1 min later*, *Bewaren* (je aangepaste wissel gebeurt op het geplande moment, daarna rekent de app verder) en *Wissel nu*. Na *Wissel nu* verschijnt dezelfde pil over de keeper.
 - **Wedstrijdplan tijdens de wedstrijd:** de tijdlijn toont waar je nu bent, oude momenten worden grijs, de zwarte pil zegt hoe lang het nog duurt en bij de eerstvolgende wissel staat *Nu wisselen*.
@@ -78,11 +78,24 @@ Klaarzetten en spelen gebeuren op hetzelfde scherm, dat altijd in één beeld pa
 - **Rust:** de volgende helft begint met een nieuwe opstelling (gratis moment om meerdere kinderen te wisselen).
 - **Live bijsturen:** een andere wissel, "1 min later", een snelle wissel bij een blessure, een speler laten rusten of later laten aansluiten. Het plan rekent de rest van de wedstrijd opnieuw uit; een goal verschuift het volgende moment niet.
 
-Alle regels staan onder **Team**: eerlijkheid aan/uit, marge, maximaal op de bank, minimale tijd tussen wissels, voorrang (eerlijkheid of beste bezetting) en het gedrag bij achterstand, gelijke stand en voorsprong.
+### Wisselprofielen
+
+Bij **Team → Wisselen** kies je één profiel in plaats van losse regels:
+
+- **Iedereen even lang** (eerlijkst): gelijke speeltijd en korte bankbeurten gaan boven alles.
+- **In balans** (aanbevolen): iedereen ongeveer even lang en even vaak naar de bank, met zo min mogelijk wissels.
+- **Rustig wisselen** (minste wissels): meer ritme, maar langer achter elkaar op de bank.
+- **Sterkste ploeg** (beste bezetting): iedereen gaat even vaak naar de bank, dragende spelers staan een paar minuten langer.
+
+Per profiel rekent de app een paar varianten door met echte wedstrijdplannen voor jouw selectie en kiest de variant die het best past (bijvoorbeeld nooit elke paar minuten een wissel). Bij het gekozen profiel staat wat de app doet en wat de gevolgen zijn, met de getallen van jouw team: aantal wissels, speeltijd per kind, hoe vaak en hoe lang op de bank. Bij elke wedstrijd rekent de app het opnieuw uit met wie er is.
+
+Wie zelf wil sleutelen, opent **Eigen instellingen**: spelers tegelijk, hoe vaak naar de bank, voorrang, marge, maximaal op de bank, minimale tijd tussen wissels. Pas je daar iets aan, dan heet je keuze *Eigen*. Daarnaast staan onder **Team** het gedrag bij achterstand, gelijke stand en voorsprong.
 
 ## Spelers en beoordeling
 
 Onder **Team → Spelers en beoordeling** (achter een pincode van 4 cijfers): naam, bijnaam (max. 8 tekens, die staat in het veld), speelkracht (schuif met 9 klikpunten zonder cijfers; een wolkje zegt in woorden waar je zit, vanaf *Dragend* kleurt hij groen), voorkeursposities en sterke kanten. Buiten dit deel zie je nergens niveaus; de wisselberekening gebruikt ze alleen intern.
+
+Het pincodescherm is donker met ronde glazen toetsen; bij een fout schudden de bolletjes rood, bij de goede code gaat het slot open. Je kunt ook een toetsenbord gebruiken.
 
 De pincode houdt meekijkers buiten, maar is geen echte beveiliging: de gegevens staan op de telefoon zelf.
 
@@ -105,8 +118,9 @@ js/match.js                               klok, gebeurtenissen, herplannen
 js/store.js                               opslag op de telefoon
 js/ui.js                                  gedeelde onderdelen (veld, pillen, sheets, schakelaar, +/−, keuzebalk)
 js/motion.js                              bewegingstaal: tempo's, veren, indrukken, tikje, minder beweging
+js/profiles.js                            wisselprofielen: varianten doorrekenen en de beste kiezen
 js/screens/*.js                           schermen
-tests/*.test.mjs                          tests: node tests/planner.test.mjs && node tests/match.test.mjs
+tests/*.test.mjs                          tests: node tests/planner.test.mjs && node tests/match.test.mjs && node tests/profiles.test.mjs
 ```
 
 Lokaal proberen: `python3 -m http.server` in deze map en open `http://localhost:8000`.

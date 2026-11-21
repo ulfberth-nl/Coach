@@ -45,8 +45,8 @@ export function SwapSheet({ match, team, d, init, counts, onClose, onDone }) {
   const pw = M.periodWord(team);
   const isPlanned = !!next && out === planOut && inn === planIn;
   const pf = preview && preview.plan.fair;
-  const marge = team.rules.marge;
-  const target = M.turnsTarget(team);
+  const marge = M.effRules(match, team).marge;
+  const target = M.turnsTarget(team, match);
   const kracht = (id) => { const p = team.players.find((x) => x.id === id); return p ? p.kracht : 50; };
 
   // vaste volgorde zodra het venster opent: plan vooraan, dan wie het minst speelde (bank) of het meest/vaakst (veld)
@@ -138,7 +138,7 @@ export function SwapSheet({ match, team, d, init, counts, onClose, onDone }) {
 
     ${preview && html`<div class="effects">
       <div class="fxrow">${ok(!preview.lines.some((l) => l.light))}<span>${preview.lines.some((l) => l.light) ? 'Lichter: ' + preview.lines.filter((l) => l.light).map((l) => l.name).join(', ') : 'Linies blijven in balans'}</span></div>
-      <div class="fxrow">${ok(!team.rules.equalTime || pf.spread <= marge * 60 + 1)}<span>Speeltijd straks ${M.mins(pf.minPlayed)}–${M.mins(pf.maxPlayed)} min per kind</span></div>
+      <div class="fxrow">${ok(!M.effRules(match, team).equalTime || pf.spread <= marge * 60 + 1)}<span>Speeltijd straks ${M.mins(pf.minPlayed)}–${M.mins(pf.maxPlayed)} min per kind</span></div>
       <div class="fxrow">${ok(target != null ? preview.minTurns === target && preview.maxTurns === target : preview.minTurns === preview.maxTurns)}<span>${preview.minTurns === preview.maxTurns ? `Iedereen ${preview.minTurns}× gewisseld` : `${preview.minTurns}–${preview.maxTurns}× gewisseld`}</span></div>
       ${!isPlanned && next && html`<span class="small">Wissel nu: de app rekent direct een nieuw plan. Bewaren: deze wissel gebeurt op het geplande moment, daarna rekent de app verder.</span>`}
     </div>`}
@@ -166,8 +166,8 @@ export function GroupSwapSheet({ match, team, d, counts, onClose, onDone }) {
   const benchAll = useMemo(() => st.bench.filter((id) => !st.disabled[id]).sort((a, b) => ((planIns.indexOf(b) !== -1) - (planIns.indexOf(a) !== -1)) || (st.played[a] - st.played[b])), []);
   const fieldAll = useMemo(() => Object.keys(st.pos).sort((a, b) => ((planOuts.indexOf(b) !== -1) - (planOuts.indexOf(a) !== -1)) || (st.turns[a] - st.turns[b]) || (st.played[b] - st.played[a])), []);
   const pf = preview && preview.plan.fair;
-  const marge = team.rules.marge;
-  const target = M.turnsTarget(team);
+  const marge = M.effRules(match, team).marge;
+  const target = M.turnsTarget(team, match);
 
   const setPair = (i, side, id) => { setPairs(pairs.map((p, k) => (k === i ? { ...p, [side]: id } : p))); setOpen(null); };
   const toggle = (i, side) => { if (open && open.i === i && open.side === side) setOpen(null); else { setOpen({ i, side }); setLast({ i, side }); } };
@@ -264,7 +264,7 @@ export function GroupSwapSheet({ match, team, d, counts, onClose, onDone }) {
 
     ${preview && html`<div class="effects">
       <div class="fxrow">${ok(!preview.lines.some((l) => l.light))}<span>${preview.lines.some((l) => l.light) ? 'Lichter: ' + preview.lines.filter((l) => l.light).map((l) => l.name).join(', ') : 'Linies blijven in balans'}</span></div>
-      <div class="fxrow">${ok(!team.rules.equalTime || pf.spread <= marge * 60 + 1)}<span>Speeltijd straks ${M.mins(pf.minPlayed)}–${M.mins(pf.maxPlayed)} min per kind</span></div>
+      <div class="fxrow">${ok(!M.effRules(match, team).equalTime || pf.spread <= marge * 60 + 1)}<span>Speeltijd straks ${M.mins(pf.minPlayed)}–${M.mins(pf.maxPlayed)} min per kind</span></div>
       <div class="fxrow">${ok(target != null ? preview.minTurns === target && preview.maxTurns === target : preview.minTurns === preview.maxTurns)}<span>${preview.minTurns === preview.maxTurns ? `Iedereen ${preview.minTurns}× gewisseld` : `${preview.minTurns}–${preview.maxTurns}× gewisseld`}</span></div>
       ${!isPlanned && first && html`<span class="small">Wissel nu: de app rekent direct een nieuw plan. Bewaren: deze wissels gebeuren op het geplande moment, daarna rekent de app verder.</span>`}
     </div>`}

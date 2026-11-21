@@ -2,7 +2,7 @@
 // - Vaste tempo's: tik 0,1 s, klein 0,25 s, scherm 0,45 s; weggaan gaat sneller dan binnenkomen.
 // - Twee veren: zacht (rustig, ±4% doorschieten) en speels (de 'jelly' van het scorebord).
 // - 'Beperk beweging' van de telefoon (of 'Minder beweging' in de app) maakt alles rustig.
-// - Een tikje bij tikken: iPhone (iOS 18+) via de schakelaar-truc, Android via vibrate. Uit te zetten.
+// - Een tikje bij tikken: iPhone via een onzichtbare iOS-schakelaar onder elke knop, Android via vibrate. Uit te zetten.
 // - Eén indruk-gedrag voor alle knoppen: iets kleiner en donkerder, en veert terug bij loslaten.
 // Alles draait op de telefoon zelf; er gaat niets naar buiten.
 
@@ -28,6 +28,7 @@ export function setDevicePref(key, value) {
   prefs = { ...prefs, [key]: value };
   try { localStorage.setItem(PKEY, JSON.stringify(prefs)); } catch (e) { /* opslag geblokkeerd */ }
   applyCalm();
+  applyHx();
   prefSubs.forEach((f) => f(prefs));
 }
 export function onDevicePrefs(fn) { prefSubs.add(fn); return () => prefSubs.delete(fn); }
@@ -49,11 +50,14 @@ applyCalm();
 // ---------- tikje (haptiek) ----------
 const canVibrate = typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
 const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+const isIOS = typeof navigator !== 'undefined' && (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+let lastHx = -1e9;
 // patronen voor Android (ms); de iPhone kent één soort tikje
 const PATTERN = { tap: 8, select: 5, toggle: 10, no: [8, 45, 8], success: [10, 60, 14] };
 let lastTick = 0;
 let ticking = false;
-// iOS 18: een schakelaar (<input switch>) geeft een tikje als hij omklapt, ook als je hem via een label aantikt.
+// iOS 18 t/m 26.4: een schakelaar (<input switch>) geeft een tikje als hij via een label omklapt, ook vanuit code.
+// Sinds iOS 26.5 alleen nog bij een echte vingertik: daarvoor dient de onzichtbare schakelaar onder elke knop (zie hieronder).
 function iosTick() {
   const label = document.createElement('label');
   label.setAttribute('aria-hidden', 'true');
@@ -71,11 +75,65 @@ export function haptic(kind = 'tap') {
   if (!prefs.haptics) return;
   const now = performance.now();
   if (now - lastTick < 35) return; // nooit twee tikjes over elkaar heen
+  if (isIOS && now - lastHx < 120) return; // de vinger tikte net op de onzichtbare schakelaar: die gaf al een tikje
   lastTick = now;
   try {
     if (canVibrate) navigator.vibrate(PATTERN[kind] || PATTERN.tap);
     else if (coarse) iosTick();
   } catch (e) { /* dit toestel kan het niet */ }
+}
+
+// ---------- iPhone: onzichtbare schakelaar onder elke knop ----------
+// iOS laat een webpagina alleen een tikje geven als de vinger zelf een <input switch> omzet (sinds iOS 26.5).
+// Daarom ligt over elke knop een onzichtbaar label met zo'n schakelaar erin. De vinger landt op het label,
+// iOS zet de schakelaar om en geeft het tikje; de klik gaat gewoon door naar de knop eronder.
+const HX_HOST = 'button, a[href]';
+const HX_SKIP = 'label, .no-hx';
+const useHx = () => isIOS || (typeof window !== 'undefined' && window.__HX === true);
+function addHx(el) {
+  if (!el.matches(HX_HOST) || el.closest(HX_SKIP)) return;
+  for (const c of el.children) if (c.classList.contains('hx')) return;
+  const label = document.createElement('label');
+  label.className = 'hx';
+  label.setAttribute('aria-hidden', 'true');
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.setAttribute('switch', '');
+  input.tabIndex = -1;
+  label.appendChild(input);
+  el.appendChild(label);
+}
+function scanHx(node) {
+  if (!node || node.nodeType !== 1) return;
+  if (node.matches(HX_HOST)) addHx(node);
+  node.querySelectorAll(HX_HOST).forEach(addHx);
+}
+function applyHx() {
+  if (typeof document === 'undefined') return;
+  document.documentElement.classList.toggle('no-hx', !prefs.haptics);
+}
+function installHx() {
+  if (!useHx()) return;
+  applyHx();
+  scanHx(document.body);
+  new MutationObserver((list) => {
+    for (const m of list) for (const n of m.addedNodes) scanHx(n);
+  }).observe(document.body, { childList: true, subtree: true });
+  document.addEventListener('click', (e) => {
+    const t = e.target;
+    if (!t || !t.parentElement) return;
+    if (t.classList && t.classList.contains('hx')) { lastHx = performance.now(); return; }
+    if (t.tagName === 'INPUT' && t.parentElement.classList.contains('hx')) {
+      // tweede klik die het label doorgeeft aan de schakelaar: niet nog eens naar de knop
+      e.stopPropagation();
+      // een link navigeert niet meer zelf (het label neemt de klik over), dus hier
+      const host = t.parentElement.parentElement;
+      if (host && host.matches('a[href]')) {
+        const href = host.getAttribute('href');
+        if (href.charAt(0) === '#') location.hash = href; else location.href = host.href;
+      }
+    }
+  }, true);
 }
 
 // ---------- één indruk-gedrag voor alle knoppen ----------
@@ -149,9 +207,11 @@ export function installPress() {
   document.addEventListener('pointercancel', () => release(true), true);
   // iPhone: zonder touch-luisteraar komen sommige drukacties te laat binnen
   document.addEventListener('touchstart', () => {}, { passive: true });
+  installHx();
   // tikje bij elke tik op een knop; onderdelen met een eigen tikje hebben data-haptic="own"
   document.addEventListener('click', (e) => {
     if (ticking) return;
+    if (useHx()) return; // iPhone: het tikje komt van de onzichtbare schakelaar
     const el = e.target && e.target.closest ? e.target.closest(PRESSABLE) : null;
     if (!el || el.closest('[data-haptic]')) return;
     if (el.matches(':disabled') || el.getAttribute('aria-disabled') === 'true') return;

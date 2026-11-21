@@ -173,8 +173,14 @@ export function chooseSwap(state, ctx, t, interval, inMode = 'played', outMode =
   const fieldIds = Object.keys(state.pos).filter((id) => !(used && used.has(id)));
   if (!fieldIds.length) return null;
 
-  const byPlayed = (a, b) => (state.played[a] - state.played[b]) || (state.since[a] - state.since[b]);
-  const bySince = (a, b) => (state.since[a] - state.since[b]) || (state.played[a] - state.played[b]);
+  const fair = rules.priority !== 'bezetting';
+  // Beste bezetting: iedereen gaat nog even vaak naar de bank, maar sterkere spelers tellen alsof ze wat minder
+  // gespeeld hebben (strongBias seconden per punt speelkracht boven/onder 50). Zo staan ze iets langer,
+  // binnen de marge die de planner daarna controleert.
+  const bias = fair ? 0 : (rules.strongBias != null ? rules.strongBias : 4);
+  const adj = (id) => state.played[id] - bias * ((players[id].kracht == null ? 50 : players[id].kracht) - 50);
+  const byPlayed = (a, b) => (adj(a) - adj(b)) || (state.since[a] - state.since[b]);
+  const bySince = (a, b) => (state.since[a] - state.since[b]) || (adj(a) - adj(b));
   const kin = eligible.slice().sort((a, b) =>
     (inMode === 'since' ? bySince(a, b) : byPlayed(a, b)) || (players[b].kracht - players[a].kracht))[0];
 
@@ -184,18 +190,11 @@ export function chooseSwap(state, ctx, t, interval, inMode = 'played', outMode =
   const kDiff = (id) => Math.abs(players[id].kracht - players[kin].kracht);
   const main = players[kin].main && players[kin].main !== 'K' ? players[kin].main : null;
   const lineOk = (id) => (main && state.pos[id] !== main ? 1 : 0);
-  const fair = rules.priority !== 'bezetting';
   cands.sort((a, b) => {
-    if (fair) {
-      if (rules.evenOften && state.turns[a] !== state.turns[b]) return state.turns[a] - state.turns[b];
-      const pd = outMode === 'since' ? state.since[a] - state.since[b] : state.played[b] - state.played[a];
-      if (Math.abs(pd) > 30) return pd;
-      return (lineOk(a) - lineOk(b)) || (kDiff(a) - kDiff(b));
-    }
-    if (lineOk(a) !== lineOk(b)) return lineOk(a) - lineOk(b);
-    const kd = kDiff(a) - kDiff(b);
-    if (Math.abs(kd) > 5) return kd;
-    return state.played[b] - state.played[a];
+    if (rules.evenOften && state.turns[a] !== state.turns[b]) return state.turns[a] - state.turns[b];
+    const pd = outMode === 'since' ? state.since[a] - state.since[b] : adj(b) - adj(a);
+    if (Math.abs(pd) > 30) return pd;
+    return (lineOk(a) - lineOk(b)) || (kDiff(a) - kDiff(b));
   });
   const kout = cands[0];
   const placed = placeIn(state.pos, kout, kin, players, stand);
@@ -241,18 +240,19 @@ export function breakLineup(state, ctx, t, changes = null) {
   const all = Object.keys(state.pos).concat(state.bench);
   const avail = all.filter((id) => !isDisabled(state, id, t, ctx));
   const fair = rules.priority !== 'bezetting';
+  const bias = fair ? 0 : (rules.strongBias != null ? rules.strongBias : 4);
+  const adj = (id) => state.played[id] - bias * ((players[id].kracht == null ? 50 : players[id].kracht) - 50);
   const onField = avail.filter((id) => id in state.pos);
   const freeSeats = Math.max(0, F - onField.length);
   const maxBench = Math.max(0, avail.length - F);
   // changes = hoeveel kinderen in de rust naar de bank gaan (null = zoveel als er bankplekken zijn)
   const nBench = changes === null ? maxBench : Math.min(maxBench, Math.max(0, changes - 0));
   void freeSeats;
-  const order = onField.slice().sort((a, b) => fair
-    ? ((rules.evenOften ? state.turns[a] - state.turns[b] : 0) || (state.played[b] - state.played[a]))
-    : ((players[a].kracht - players[b].kracht) || (state.played[b] - state.played[a])));
+  // naar de bank in de rust: wie het minst vaak gewisseld is en het meest speelde (bij beste bezetting: aangepaste speeltijd)
+  const order = onField.slice().sort((a, b) => (rules.evenOften ? state.turns[a] - state.turns[b] : 0) || (adj(b) - adj(a)));
   const toBench = order.slice(0, nBench);
   // wie erin komt: wie het minst gespeeld heeft
-  const comeIn = avail.filter((id) => !(id in state.pos)).sort((a, b) => state.played[a] - state.played[b]);
+  const comeIn = avail.filter((id) => !(id in state.pos)).sort((a, b) => adj(a) - adj(b));
   const stay = onField.filter((id) => toBench.indexOf(id) === -1);
   const starters = stay.concat(comeIn).slice(0, F);
   const pos = assignLines(starters, lines, players, ctx.stand);

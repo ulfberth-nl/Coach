@@ -22,7 +22,8 @@ export function defaultRules() {
     maxBench: 10,
     turnsPerPeriod: 0,
     perMoment: 1,
-    minInterval: 2
+    minInterval: 2,
+    profile: 'balans'
   };
 }
 

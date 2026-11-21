@@ -5,6 +5,7 @@ import * as M from '../match.js';
 import { PlanView } from '../planview.js';
 import { keeperCounts, suggestKeeper, WHY_TEXT } from './home.js';
 import { nextScheduled, todayISO } from './seizoen.js';
+import { matchRules } from '../profiles.js';
 import { mutate, undoAction, SwapSheet, GroupSwapSheet, BenchSheet, GoalSheet, BreakSheet, JoinSheet, KeeperSheet } from './live.js';
 import { Field, Neon, Roll, Sheet, Confirm, Seg, Stepper, Icon, accentFor, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, beep, flash, unlockAudio, toast, go } from '../ui.js';
 
@@ -16,7 +17,8 @@ export function newConcept(d) {
   d.matches = d.matches.filter((x) => x.started || x.id !== d.currentMatchId);
   const e = nextScheduled(t, d.matches);
   const plan = scheduleSelection(t, e, present, keeperId);
-  const m = M.createMatch(t, { present: plan.present, keeperId: plan.keeperId, priority: t.rules.priority });
+  // het wisselprofiel rekent opnieuw uit met wie er deze wedstrijd is
+  const m = M.createMatch(t, { present: plan.present, keeperId: plan.keeperId, priority: t.rules.priority, rules: matchRules(t, plan.present, plan.keeperId) });
   m.setup = { present: false, keeper: !t.keeper || !!(e && e.keeperId), opponent: false };
   if (e) { applySchedule(m, e); m.setup.opponent = true; }
   d.matches.push(m);
@@ -58,7 +60,7 @@ export function rebuildConcept(d, changes = {}) {
   let keeperId = 'keeperId' in changes ? changes.keeperId : m.keeperId;
   if (!t.keeper) keeperId = null;
   else if (present.indexOf(keeperId) === -1) keeperId = suggestKeeper(t, present, keeperCounts(d, t));
-  const n = M.createMatch(t, { present, keeperId, priority: changes.priority || m.priority, opponent: m.opponent, date: m.date });
+  const n = M.createMatch(t, { present, keeperId, priority: changes.priority || m.priority, opponent: m.opponent, date: m.date, rules: matchRules(t, present, keeperId) });
   n.id = m.id;
   n.setup = m.setup || { present: false, keeper: false, opponent: false };
   for (const k of ['scheduleId', 'time', 'meet', 'field', 'home', 'season']) if (m[k] !== undefined) n[k] = m[k];
@@ -433,7 +435,14 @@ function LiveView({ match, team }) {
     mutate((m, t) => { if (d.state.disabled[inn]) { M.enablePlayer(m, t, inn); undos = 2; } M.doSwap(m, t, out, inn, null); });
     showAct({ out, undos });
   };
-  useDragSwap(zone, !pending && !goal, onDrag);
+  // wat er gebeurt als je hier loslaat (boven de zwevende speler)
+  const dragHint = (a, b) => {
+    const aF = a in d.state.pos, bF = b in d.state.pos;
+    if (aF && bF) return 'Ruil met ' + nick(b);
+    if (aF === bF) return null;
+    return aF ? nick(b) + ' erin' : 'Erin voor ' + nick(b);
+  };
+  useDragSwap(zone, !pending && !goal, onDrag, dragHint);
 
   const tapField = (id) => {
     if (goal === 'scorer') { scoreFor(id); return; }

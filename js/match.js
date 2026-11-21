@@ -199,19 +199,26 @@ export function currentStand(match, team, score) {
   return d < 0 ? r.standAchter : d > 0 ? r.standVoor : r.standGelijk;
 }
 
+// Regels die voor deze wedstrijd gelden: de teamregels, aangevuld met wat het wisselprofiel
+// voor de spelers van deze wedstrijd heeft uitgerekend (match.rules).
+export function effRules(match, team) {
+  return match && match.rules ? { ...team.rules, ...match.rules } : team.rules;
+}
+
 // Aantal keer gewisseld per kind voor de hele wedstrijd (null = de app kiest zelf).
-export function turnsTarget(team) {
-  const k = team.rules.turnsPerPeriod;
+export function turnsTarget(team, match = null) {
+  const k = effRules(match, team).turnsPerPeriod;
   return k ? k * team.periods : null;
 }
 
 export function makeCtx(match, team, stand) {
+  const r = effRules(match, team);
   return {
     players: playersMap(team),
     lines: team.lines,
     periodLen: periodLen(team),
     periods: team.periods,
-    rules: { ...team.rules, priority: match.priority || team.rules.priority, turnsTarget: turnsTarget(team) },
+    rules: { ...r, priority: match.priority || r.priority, turnsTarget: turnsTarget(team, match) },
     stand
   };
 }
@@ -310,7 +317,8 @@ export function createMatch(team, opts) {
     date: opts.date || new Date().toISOString().slice(0, 10),
     present,
     keeperId,
-    priority: opts.priority || team.rules.priority,
+    priority: opts.priority || (opts.rules && opts.rules.priority) || team.rules.priority,
+    rules: opts.rules || null,
     standMode: 'auto',
     manualStand: 'balans',
     clock: { period: 0, running: false, startedAt: 0, accum: 0 },
