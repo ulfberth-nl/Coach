@@ -520,6 +520,7 @@ export function Icon({ name, size = 22 }) {
     down2: 'M7 6l5 5 5-5M7 12l5 5 5-5',
     even: 'M6 9.5h12M6 14.5h12',
     pin: 'M9 3.5h6l-1 5.5 3.5 3.5h-11L10 9zM12 12.5V21',
+    swaparrows: 'M19.5 11A7.5 7.5 0 0 0 6.2 6.6L4.5 8.3M4.5 3.8v4.5H9M4.5 13a7.5 7.5 0 0 0 13.3 4.4l1.7-1.7M19.5 20.2v-4.5H15',
     eye: 'M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12zM12 9.3a2.7 2.7 0 100 5.4 2.7 2.7 0 000-5.4z'
   };
   const filled = name === 'play' || name === 'pause';
@@ -730,10 +731,29 @@ export function useDragSwap(ref, enabled, onSwap, hint) {
         st.over = best;
       }
     };
+    // het scherm zelf: bij de boven- of onderrand vanzelf meescrollen (groot veld in de planner)
+    const pageScroller = () => {
+      for (let n = root.parentElement; n && n !== document.body; n = n.parentElement) {
+        const oy = getComputedStyle(n).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && n.scrollHeight > n.clientHeight + 2) return n;
+      }
+      const se = document.scrollingElement;
+      return se && se.scrollHeight > se.clientHeight + 2 ? se : null;
+    };
     // bij de rand van een lange bank: vanzelf doorscrollen zodat je iedereen bereikt
     const edgeScroll = () => {
       raf = 0;
       if (!st || !st.ghost) return;
+      const ps = st.ps === undefined ? (st.ps = pageScroller()) : st.ps;
+      if (ps) {
+        const top = ps === document.scrollingElement ? 0 : ps.getBoundingClientRect().top;
+        const bottom = ps === document.scrollingElement ? window.innerHeight : ps.getBoundingClientRect().bottom;
+        const EDGE = 70;
+        let vy = 0;
+        if (st.py < top + EDGE && ps.scrollTop > 0) vy = -Math.ceil(((top + EDGE - st.py) / EDGE) * 12);
+        else if (st.py > bottom - EDGE && ps.scrollTop + ps.clientHeight < ps.scrollHeight - 1) vy = Math.ceil(((st.py - (bottom - EDGE)) / EDGE) * 12);
+        if (vy) { ps.scrollTop += vy; st.dirty = true; aim(); raf = requestAnimationFrame(edgeScroll); return; }
+      }
       let v = 0;
       for (const sc of root.querySelectorAll('.benchrow .scroll.ovf')) {
         const r = sc.getBoundingClientRect();

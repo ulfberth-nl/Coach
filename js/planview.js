@@ -3,7 +3,7 @@
 import { html, useState, useMemo, useRef, useEffect } from '../vendor/preact-htm.js';
 import * as M from './match.js';
 import { LINE_NAMES } from './planner.js';
-import { Field, Icon, POS_COLORS, useDragSwap, BenchScroll, accentFor } from './ui.js';
+import { Field, Icon, Neon, POS_COLORS, useDragSwap, BenchScroll, accentFor } from './ui.js';
 import { haptic } from './motion.js';
 
 const BENCH = '#DCE2EE';
@@ -133,6 +133,10 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   const nx = i + 1 < cards.length ? cards[i + 1] : null;
   const canPlan = planner && !!onPin && !match.finished && nx && nx.kind === 'swap' && !nx.past && i >= Math.max(0, nowIndex);
   const [peek, setPeek] = useState(false);
+  // kleurranden van het volgende moment: oranje = eruit (veld), groen = erin (bank)
+  const nxPairs = nx && nx.kind === 'swap' ? nx.pairs || [{ out: nx.out, in: nx.in }] : [];
+  const nxOuts = nxPairs.map((p) => p.out);
+  const nxIns = nxPairs.map((p) => p.in);
   // klikje bij elk wisselmoment dat je passeert (trillen op Android, klikgeluid op de iPhone)
   const lastI = useRef(i);
   useEffect(() => { if (lastI.current !== i) { lastI.current = i; haptic('select'); setPeek(false); } if (onIndex) onIndex(i); }, [i]);
@@ -262,13 +266,18 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
           ? html`<${Field} slots=${nx.slots} lines=${nx.lines || lines} keeperId=${nx.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
               onTap=${() => {}} neon=${changes(cards, i + 1).in} accent=${accentFor(team)} />`
           : html`<${Field} slots=${c.slots} lines=${lines} formable=${canEdit} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
-              onTap=${() => {}} neon=${planner ? [] : ch.in} dashed=${!planner && ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} ghosts=${planner && !peek ? ghostsFor(nx, c.pos, nick) : null} />`}
+              onTap=${() => {}} neon=${planner ? nxOuts : ch.in} dashed=${!planner && ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} ghosts=${planner && !peek ? ghostsFor(nx, c.pos, nick) : null} />`}
         ${planner && peek && nx && html`<span class="peeklabel" role="status"><${Icon} name="eye" size=${15} />${nx.kind === 'lineup' ? 'Opstelling ' + M.periodLabel(team, nx.period) : 'Na wissel ' + swapNoOf(nx)}</span>`}
       </div>
       <div class="benchrow">
         <span class="label">Bank</span>
         <${BenchScroll}>
-          ${(peek && nx ? nx.bench : c.bench).map((id) => { const ac = accentFor(team)(id); const wo = !planner && ch.out.indexOf(id) !== -1; return html`<button type="button" class=${'benchpill' + (wo ? ' wasout' : '') + (ac ? ' acc' : '')} style=${ac ? '--acc:' + ac : ''} key=${id} data-pid=${id}>${nick(id)}${wo ? html`<span class="t">eruit</span>` : ''}</button>`; })}
+          ${(peek && nx ? nx.bench : c.bench).map((id) => {
+            const ac = accentFor(team)(id); const wo = !planner && ch.out.indexOf(id) !== -1;
+            const goesIn = planner && !peek && nxIns.indexOf(id) !== -1;
+            const pill = html`<button type="button" class=${'benchpill' + (wo ? ' wasout' : '') + (ac ? ' acc' : '')} style=${ac ? '--acc:' + ac : ''} key=${id} data-pid=${id}>${nick(id)}${wo ? html`<span class="t">eruit</span>` : goesIn ? html`<span class="t">erin</span>` : ''}</button>`;
+            return goesIn ? html`<${Neon} key=${'n' + id}>${pill}</${Neon}>` : pill;
+          })}
           ${!c.bench.length && html`<span class="small">niemand</span>`}
         </${BenchScroll}>
       </div>
