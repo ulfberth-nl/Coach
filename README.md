@@ -30,6 +30,8 @@ Tip: zet tijdens de wedstrijd het geluid aan. Bij een wisselmoment piept de app 
 - **Open- en dichtklappen:** instellingen die erbij komen (marge, maximaal op de bank, dominante rol, stand-opties) klappen soepel open en sneller weer dicht.
 - **Klikgeluid bij schuiven:** scrol je door de wissels in de tijdlijn, veeg je over een keuzebalk of sleep je de speelkracht-schuif, dan hoor je op de iPhone bij elk punt een zacht klikje (een tikje kan daar niet); Android trilt kort. Uit te zetten bij Team → Deze telefoon. Staat je iPhone op stil, dan hoor je het mogelijk niet.
 - **Altijd soepel:** een instelling verandert meteen op het scherm. Het rekenwerk (wedstrijdplan, wisselprofielen) doet de app in een aparte rekendraad zodra je even niets aanpast; tot die tijd blijven de vorige getallen staan.
+- **Schermovergangen** (iPhone met iOS 18 of nieuwer): tussen de tabbladen schuift het scherm in de richting van het tabblad; dieper gaan (Plan, Overzicht, Spelers) schuift erin zoals op een iPhone, terug schuift het weer weg. Bij de aftrap gaat het veld vloeiend over in het live-scherm en valt het scorebord erin; een uitslag groeit uit tot het overzicht van de wedstrijd. Oudere iPhones tonen het nieuwe scherm direct.
+- **Vensters:** het scherm erachter wijkt een stukje naar achteren, de inhoud komt rij voor rij binnen, en je sluit een venster door het omlaag te trekken (bovenaan of aan het handvat); trek je niet ver genoeg, dan veert het terug. Meldingen veeg je opzij of omlaag weg (niet tijdens de wedstrijd: daar tik je erdoorheen).
 - **Minder beweging:** staat *Beperk beweging* aan op je telefoon, of zet je *Minder beweging* aan bij Team → Deze telefoon, dan is alles rustig: geen veren, wiebels en zwevers.
 
 ## Eén Wedstrijd-scherm
@@ -95,7 +97,7 @@ Wie zelf wil sleutelen, opent **Eigen instellingen**: spelers tegelijk, hoe vaak
 
 ## Spelers en beoordeling
 
-Onder **Team → Spelers en beoordeling** (achter een pincode van 4 cijfers): naam, bijnaam (max. 8 tekens, die staat in het veld), speelkracht (schuif met 9 klikpunten zonder cijfers; een wolkje zegt in woorden waar je zit, vanaf *Dragend* kleurt hij groen), voorkeursposities en sterke kanten. Buiten dit deel zie je nergens niveaus; de wisselberekening gebruikt ze alleen intern.
+Onder **Team → Spelers en beoordeling** (achter een pincode van 4 cijfers): naam, bijnaam (max. 8 tekens, die staat in het veld), speelkracht (schuif met 9 niveaus zonder cijfers: van *Beginner* tot *Draagt Het Hele Team*; het label staat boven de balk en eronder de omschrijving, die tijdens het schuiven meebeweegt; vanaf *Bepalende Speler* kleurt hij groen), voorkeursposities en sterke kanten. Buiten dit deel zie je nergens niveaus; de wisselberekening gebruikt ze alleen intern.
 
 Het pincodescherm is donker met ronde glazen toetsen; bij een fout schudden de bolletjes rood, bij de goede code gaat het slot open. Je kunt ook een toetsenbord gebruiken.
 

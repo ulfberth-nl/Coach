@@ -262,8 +262,7 @@ select.input { appearance: none; -webkit-appearance: none; }
 
 .sheet-backdrop { animation: fadeIn var(--t-small) ease both; }
 .sheet { animation: sheetUp var(--t-screen) var(--spring-soft) both; }
-.sheet-backdrop.closing { animation: fadeOut var(--t-out-screen) ease forwards; }
-.sheet-backdrop.closing .sheet { animation: sheetDown var(--t-out-screen) var(--ease-in) forwards; }
+.sheet-backdrop.closing { pointer-events: none; }
 
 .field .spot { transition: left .55s var(--spring), top .55s var(--spring); animation: pop .45s var(--spring) both; }
 .benchrow .benchpill, .benchrow .neon { animation: pop .4s var(--spring) both; }
@@ -916,13 +915,30 @@ button.duo-side[aria-expanded="true"] .duo-chev { transform: rotate(-90deg); opa
 .kr.dragging .kr-tick { transition: scale 90ms linear, background-color var(--t-small) ease; }
 .kr-tick.on { background: var(--blue-2); }
 .kr-tick.k.on { background: #1f8a3a; }
-/* wolkje boven de duim; schuift bij de randen mee zodat het in beeld blijft */
-.kr-tip { position: absolute; left: 0; bottom: calc(100% + 2px); padding: 6px 12px; border-radius: 12px; background: var(--navy, #0D1B45); color: #fff; font-size: 13px; font-weight: 900; white-space: nowrap; pointer-events: none;
-  --tx: calc(50% - (.5 - var(--p, 0)) * 56%); translate: calc(-1 * var(--tx)) 0; transform-origin: var(--tx) 100%;
-  opacity: 0; scale: .7; transition: opacity var(--t-out-small) ease, scale var(--t-out-small) var(--ease-in); }
+/* label boven de duim (altijd zichtbaar); schuift bij de randen mee zodat het in beeld blijft.
+   Het label rolt mee met het niveau (omhoog bij hoger, omlaag bij lager) en de breedte veert mee. */
+.kr { margin-top: 38px; }
+.kr-tip { position: absolute; left: 0; bottom: calc(100% + 2px); height: 30px; border-radius: 12px; background: var(--navy, #0D1B45); color: #fff; pointer-events: none; box-shadow: 0 8px 18px -6px rgba(13,27,69,.5);
+  --tx: calc(50% - (.5 - var(--p, 0)) * 84%); translate: calc(-1 * var(--tx)) 0; transform-origin: var(--tx) 100%;
+  transition: width var(--t-screen) var(--spring-soft), background-color var(--t-small) ease, scale var(--t-small) var(--spring-play); }
 .kr-tip::after { content: ''; position: absolute; left: var(--tx); bottom: -4px; width: 10px; height: 10px; margin-left: -5px; border-radius: 2px; background: inherit; rotate: 45deg; }
-.kr.tip .kr-tip { opacity: 1; scale: 1; transition: opacity var(--t-small) ease, scale var(--t-screen) var(--spring-play); }
-.kr.key .kr-tip { background: #14652A; }
+.kr-tip b { position: absolute; left: 13px; top: 0; line-height: 30px; font-size: 13px; font-weight: 900; white-space: nowrap; opacity: 0; translate: 0 70%; transition: opacity var(--t-out-small) ease, translate var(--t-out-small) var(--ease-in); }
+.kr-tip b.b { translate: 0 -70%; }
+.kr-tip b.on { opacity: 1; translate: 0 0; transition: opacity var(--t-small) ease .04s, translate var(--t-screen) var(--spring-play) .02s; }
+.kr.dragging .kr-tip { scale: 1.06; }
+.kr.t0 .kr-tip, .kr.t1 .kr-tip { animation: tipPop var(--t-screen) var(--spring-play); }
+@keyframes tipPop { 40% { scale: 1.12; } }
+.kr.key .kr-tip { background: #14652A; box-shadow: 0 8px 18px -6px rgba(20,101,42,.55); }
+/* omschrijving onder de balk: alle niveaus op één plek gestapeld (geen verspringende hoogte);
+   de nieuwe schuift binnen vanuit de richting waarin je schuift, de oude glijdt de andere kant op */
+.kr-desc { display: grid; margin-top: 6px; padding: 12px 14px 12px 16px; border-radius: 16px; background: var(--bg); overflow: hidden; box-shadow: inset 4px 0 0 var(--blue-2); transition: box-shadow var(--t-small) ease, background-color var(--t-small) ease; }
+.krw.key .kr-desc { background: #EEF8F0; box-shadow: inset 4px 0 0 #1f8a3a; }
+.kr-desc p { grid-area: 1 / 1; margin: 0; font-size: 14px; font-weight: 600; line-height: 1.45; color: var(--ink); opacity: 0; translate: 28px 0; transition: opacity var(--t-out-small) ease, translate var(--t-out-small) var(--ease-in); }
+.kr-desc p.b { translate: -28px 0; }
+.kr-desc p.on { opacity: 1; translate: 0 0; transition: opacity var(--t-small) ease .06s, translate var(--t-screen) var(--spring-soft) .04s; }
+.krw.dragging .kr-desc { background: #fff; box-shadow: inset 4px 0 0 var(--blue-2), 0 0 0 1.5px var(--line); }
+.krw.key.dragging .kr-desc { box-shadow: inset 4px 0 0 #1f8a3a, 0 0 0 1.5px #CFE9D6; }
+.badge.lvbadge { font-size: 11px; padding: 2px 8px; }
 
 /* ================= v0.14 · tikje op de iPhone: onzichtbaar label met schakelaar over elke knop (js/motion.js) ================= */
 :where(button, a[href]):has(> .hx) { position: relative; isolation: isolate; }
@@ -1001,3 +1017,69 @@ button:disabled > .hx, .no-hx .hx { display: none; }
 /* optimistisch: oude getallen blijven staan terwijl de rekendraad bijwerkt */
 .prof-mini.stale, .prof-cons.stale { opacity: .55; transition: opacity var(--t-small) ease; }
 .prof-upd { font-weight: 700; color: var(--muted); text-transform: none; letter-spacing: 0; animation: waitPulse 1.2s ease-in-out infinite; }
+
+/* ================= v0.16 · vensters: scherm wijkt, vinger-volgend sluiten, rij voor rij ================= */
+.portal { display: contents; }
+#app > .route > main { transform-origin: 50% calc(var(--sy, 0px) + 50vh); transition: scale var(--t-out-screen) var(--ease-out), translate var(--t-out-screen) var(--ease-out), filter var(--t-out-screen) ease; }
+html.sheet-open #app > .route > main { scale: .94; translate: 0 8px; filter: brightness(.96); transition: scale var(--t-screen) var(--spring-soft), translate var(--t-screen) var(--spring-soft), filter var(--t-screen) ease; }
+html.sheet-open .tabbar { scale: .94; transition: scale var(--t-screen) var(--spring-soft); }
+.tabbar { transition: scale var(--t-out-screen) var(--ease-out); }
+.reduce #app > .route > main, .reduce .tabbar { scale: 1 !important; translate: none !important; filter: none !important; }
+.sheet { translate: 0 0; transition: translate var(--t-screen) var(--spring-play); touch-action: pan-y; }
+.sheet.dragging { transition: none; }
+.sheet-backdrop { transition: opacity var(--t-small) ease; }
+.sheet-backdrop:has(.sheet.dragging) { transition: none; }
+.sheet .handle { width: 44px; height: 5px; margin: -2px 0 2px; }
+/* inhoud komt rij voor rij binnen */
+.sheet > * { animation: sheetRow var(--t-screen) var(--spring-soft) both; }
+.sheet > .handle, .sheet > .sheet-x { animation: none; }
+.sheet > :nth-child(3) { animation-delay: .03s; } .sheet > :nth-child(4) { animation-delay: .06s; } .sheet > :nth-child(5) { animation-delay: .09s; }
+.sheet > :nth-child(6) { animation-delay: .12s; } .sheet > :nth-child(7) { animation-delay: .15s; } .sheet > :nth-child(8) { animation-delay: .18s; }
+.sheet > :nth-child(n+9) { animation-delay: .21s; }
+@keyframes sheetRow { from { opacity: 0; translate: 0 16px; } }
+/* melding: verend binnen, zacht weg, weg te vegen (behalve tijdens de wedstrijd: daar tik je erdoorheen) */
+.toast { pointer-events: auto; touch-action: none; cursor: grab; }
+body:has(.matchscreen.live) .toast { pointer-events: none; }
+.toast.leaving { animation: toastOut var(--t-out-small) var(--ease-in) forwards; }
+@keyframes toastOut { to { opacity: 0; transform: translate(-50%, 18px) scale(.96); } }
+
+/* ================= v0.16 · schermovergangen (View Transitions) ================= */
+.route { display: contents; }
+.route.novt .screen > * { animation: none; }
+.tabbar { view-transition-name: tabbar; }
+::view-transition-old(root), ::view-transition-new(root) { mix-blend-mode: normal; }
+/* tabbladen: schuiven in de richting van het tabblad */
+html[data-vt="tab-r"]::view-transition-old(root) { animation: vtOutL var(--t-out-screen) var(--ease-in) both; }
+html[data-vt="tab-r"]::view-transition-new(root) { animation: vtInR var(--t-screen) var(--spring-soft) both; }
+html[data-vt="tab-l"]::view-transition-old(root) { animation: vtOutR var(--t-out-screen) var(--ease-in) both; }
+html[data-vt="tab-l"]::view-transition-new(root) { animation: vtInL var(--t-screen) var(--spring-soft) both; }
+@keyframes vtOutL { to { opacity: 0; translate: -56px 0; } }
+@keyframes vtOutR { to { opacity: 0; translate: 56px 0; } }
+@keyframes vtInR { from { opacity: 0; translate: 72px 0; } }
+@keyframes vtInL { from { opacity: 0; translate: -72px 0; } }
+/* dieper: iOS-push (nieuw scherm schuift erover, oude wijkt en verdonkert); terug: andersom */
+html[data-vt="push"]::view-transition-old(root) { animation: vtBack var(--t-screen) var(--ease-out) both; }
+html[data-vt="push"]::view-transition-new(root) { animation: vtPushIn var(--t-screen) var(--spring-soft) both; box-shadow: -12px 0 34px rgba(17,24,39,.18); }
+html[data-vt="pop"]::view-transition-old(root) { z-index: 2; animation: vtPopOut var(--t-out-screen) var(--ease-in) both; box-shadow: -12px 0 34px rgba(17,24,39,.18); }
+html[data-vt="pop"]::view-transition-new(root) { animation: vtFront var(--t-out-screen) var(--ease-out) both; }
+@keyframes vtBack { to { translate: -28% 0; filter: brightness(.82); } }
+@keyframes vtFront { from { translate: -28% 0; filter: brightness(.82); } }
+@keyframes vtPushIn { from { translate: 100% 0; } }
+@keyframes vtPopOut { to { translate: 100% 0; } }
+html[data-vt="push"]::view-transition-old(tabbar) { animation: vtSink var(--t-out-screen) var(--ease-in) both; }
+html[data-vt="pop"]::view-transition-new(tabbar) { animation: vtRise var(--t-screen) var(--spring-soft) both; }
+@keyframes vtSink { to { translate: 0 140%; } }
+@keyframes vtRise { from { translate: 0 140%; } }
+/* uitslag groeit uit tot het overzicht */
+::view-transition-group(hero) { animation-duration: var(--t-screen); animation-timing-function: var(--spring-soft); }
+html[data-vt="push"] ::view-transition-group(hero), html[data-vt="pop"] ::view-transition-group(hero) { z-index: 3; }
+/* aftrap: veld en affiche gaan vloeiend over in live, het scorebord en het eiland vallen erin, de menubalk zakt weg */
+html[data-vt="start"] .mhead { view-transition-name: affiche; }
+html[data-vt="start"] .fieldbox { view-transition-name: field; }
+html[data-vt="start"] .board { view-transition-name: board; }
+html[data-vt="start"] .island { view-transition-name: island; }
+html[data-vt="start"]::view-transition-group(field), html[data-vt="start"]::view-transition-group(affiche) { animation-duration: .55s; animation-timing-function: var(--spring-soft); }
+html[data-vt="start"]::view-transition-new(board) { animation: vtDrop .55s var(--spring-play) both; }
+html[data-vt="start"]::view-transition-new(island) { animation: vtDrop .55s var(--spring-play) .07s both; }
+html[data-vt="start"]::view-transition-old(tabbar) { animation: vtSink var(--t-out-screen) var(--ease-in) both; }
+@keyframes vtDrop { from { opacity: 0; translate: 0 -28px; scale: .94; } }

@@ -136,7 +136,7 @@ export function Spelers({ state }) {
       <span class="row" style="gap:8px">
         <span class="minibar" style=${`background:linear-gradient(90deg, transparent ${p.kracht}%, var(--line) ${p.kracht}%), ${KRACHT_BG}`}></span>
         <span class="row" style="gap:4px;flex-wrap:wrap">
-          ${p.kracht >= KEY_KRACHT && html`<span class="badge keybadge">dragend</span>`}
+          <span class=${'badge lvbadge' + (p.kracht >= KEY_KRACHT ? ' keybadge' : '')}>${KR_LEVELS[levelOf(p.kracht)][0]}</span>
           ${p.main && html`<span class="badge" style=${`background:${POS_COLORS[p.main]};color:#fff;padding:2px 8px;box-shadow:0 0 0 2px #fff,0 0 0 3px ${POS_COLORS[p.main]}`}>${POS_NAMES[p.main]}${p.flex === false ? ' · vast' : ''}</span>`}
           ${(p.prefs || []).filter((k) => k !== p.main).map((k) => html`<span class="badge" style=${`background:${POS_COLORS[k]};color:#fff;padding:2px 8px;opacity:.75`}>${POS_NAMES[k]}</span>`)}
         </span>
@@ -180,7 +180,19 @@ export function Spelers({ state }) {
 
 // ---------- speelkracht-schuif: 9 klikpunten, wolkje met een woord (geen cijfers), golvende streepjes ----------
 // Alleen hier, achter de pincode. Tik = naar het dichtstbijzijnde punt; slepen = elk punt geeft een tikje.
-const KR_WORDS = ['Begint net', 'Groeit nog', 'Groeit', 'Doet goed mee', 'Stevige basis', 'Sterk', 'Dragend', 'Echt dragend', 'Draagt het spel'];
+// De 9 niveaus van Raymond: label boven de balk, omschrijving eronder. Alleen hier, achter de pincode.
+export const KR_LEVELS = [
+  ['Beginner', 'Je bent nog veel aan het leren en ontdekt hoe leuk het spel is. De basis (stick vasthouden, lopen met de bal) is nog zoekende, maar elke fout is nu pure winst.'],
+  ['Startende Speler', 'Je begint gevoel te krijgen voor de bal en de lijnen van het veld. Je kijkt soms nog naar je stick in plaats van om je heen, maar je inzet en leergierigheid maken veel goed.'],
+  ['Zoekende Basisspeler', 'Je kunt een bal redelijk aannemen en inspelen onder lichte druk. Positie kiezen blijft soms lastig en de timing mag scherper, maar je durft steeds vaker mee te doen.'],
+  ['Betrouwbare Schakel', 'Je voert je taak uit en valt niet uit de toon in het team. Je mag nog wat vaker de oplossing vooruit zoeken in plaats van op safe te spelen, maar je bent een fijne kracht om op te bouwen.'],
+  ['Stevige Middenmotor', 'Je hebt een prima basisniveau en houdt het goed vol. Om de volgende stap te zetten moet je handelingssnelheid omhoog en je coaching naar medespelers wat duidelijker zijn.'],
+  ['Waardevolle Teamspeler', 'Je brengt energie, overzicht en kwaliteit in het spel en helpt anderen beter te worden. Soms laat je nog een kans liggen om zelf het initiatief te nemen op beslissende momenten.'],
+  ['Bepalende Speler', 'Je maakt het verschil in acties, keuzes of afronding en kantelt regelmatig fases. De kritische noot zit in de regelmaat: op mindere dagen mag je nog iets minder snel wegzakken.'],
+  ['Motor van het Team', 'Je houdt het tempo en de energie hoog en trekt de groep mee vooruit als het stroef loopt. Het kost veel energie om dat te blijven leveren, en soms wil je té veel zelf oplossen.'],
+  ['Draagt Het Hele Team', 'Je bent onmisbaar op het veld: je stuurt, verdedigt, valt aan en houdt iedereen scherp. De enige valkuil is dat het team soms te veel op jou leunt en zelf minder initiatief toont.']
+];
+const levelOf = (kracht) => Math.max(0, Math.min(8, Math.round(kracht / 12.5)));
 const KR_KEY = Math.round(KEY_KRACHT / 12.5);
 function KrachtSlider({ value, onChange }) {
   const idx = Math.max(0, Math.min(8, Math.round(value / 12.5)));
@@ -193,13 +205,7 @@ function KrachtSlider({ value, onChange }) {
   const [drag, setDrag] = useState(false);
   const [shownK, setShownK] = useState(null);
   const [tip, setTip] = useState(0);
-  const [showTip, setShowTip] = useState(false);
-  useEffect(() => {
-    if (!tip) return undefined;
-    setShowTip(true);
-    const t = setTimeout(() => setShowTip(false), 1100);
-    return () => clearTimeout(t);
-  }, [tip]);
+  const tipRef = useRef(null);
   // positie en golf rechtstreeks op de schuif (elk beeldje, zonder opnieuw te tekenen)
   const paint = (p, wave) => {
     const el = root.current;
@@ -212,6 +218,17 @@ function KrachtSlider({ value, onChange }) {
   };
   // buiten het slepen volgt de schuif de waarde
   useLayoutEffect(() => { if (!st.current || !st.current.on) paint(idx, false); });
+  // het wolkje krijgt de breedte van het label dat er nu staat (veert mee bij een ander niveau)
+  const shownNow = drag && shownK != null ? shownK : idx;
+  useLayoutEffect(() => {
+    const el = tipRef.current;
+    const b = el && el.querySelector('b.on');
+    if (b) el.style.width = Math.ceil(b.offsetWidth + 26) + 'px';
+  }, [shownNow]);
+  useEffect(() => {
+    // lettertype later geladen: breedte opnieuw meten
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { const el = tipRef.current; const b = el && el.querySelector('b.on'); if (b) el.style.width = Math.ceil(b.offsetWidth + 26) + 'px'; });
+  }, []);
   // iPhone: tijdens slepen nooit de pagina laten meeschuiven
   useEffect(() => {
     const el = root.current;
@@ -262,15 +279,23 @@ function KrachtSlider({ value, onChange }) {
     k = Math.max(0, Math.min(8, k));
     if (k !== idx) { lastK.current = k; cb.current(k * 12.5); setTip((t) => t + 1); }
   };
-  const shown = drag && shownK != null ? shownK : idx;
-  return html`<div ref=${root} class=${'kr' + (drag ? ' dragging' : '') + (drag || showTip ? ' tip' : '') + (shown >= KR_KEY ? ' key' : '')}
-    role="slider" tabindex="0" aria-label="Speelkracht" aria-valuemin="0" aria-valuemax="8" aria-valuenow=${idx} aria-valuetext=${KR_WORDS[idx]}
-    onPointerDown=${down} onPointerMove=${move} onPointerUp=${() => end(true)} onPointerCancel=${() => end(false)} onKeyDown=${key} onBlur=${() => setShowTip(false)}>
-    <span class="kr-rail" style=${'background:' + KRACHT_BG}><span class="kr-cover"></span></span>
-    <span class="kr-inner" ref=${inner}>
-      ${Array.from({ length: 9 }, (_, i) => html`<i class=${'kr-tick' + (i <= shown ? ' on' : '') + (i >= KR_KEY ? ' k' : '')} style=${`left:${(i / 8) * 100}%`}></i>`)}
-      <span class="kr-car"><span class="kr-thumb"></span><span class="kr-tip" aria-hidden="true">${KR_WORDS[shown]}</span></span>
-    </span>
+  const shown = shownNow;
+  const where = (i) => (i < shown ? 'b' : i > shown ? 'a' : 'on');
+  return html`<div class=${'krw' + (shown >= KR_KEY ? ' key' : '') + (drag ? ' dragging' : '')}>
+    <div ref=${root} class=${'kr' + (drag ? ' dragging' : '') + (shown >= KR_KEY ? ' key' : '') + (tip ? ' t' + (tip % 2) : '')}
+      role="slider" tabindex="0" aria-label="Speelkracht" aria-valuemin="1" aria-valuemax="9" aria-valuenow=${idx + 1} aria-valuetext=${KR_LEVELS[idx][0]}
+      onPointerDown=${down} onPointerMove=${move} onPointerUp=${() => end(true)} onPointerCancel=${() => end(false)} onKeyDown=${key}>
+      <span class="kr-rail" style=${'background:' + KRACHT_BG}><span class="kr-cover"></span></span>
+      <span class="kr-inner" ref=${inner}>
+        ${Array.from({ length: 9 }, (_, i) => html`<i class=${'kr-tick' + (i <= shown ? ' on' : '') + (i >= KR_KEY ? ' k' : '')} style=${`left:${(i / 8) * 100}%`}></i>`)}
+        <span class="kr-car"><span class="kr-thumb"></span>
+          <span class="kr-tip" ref=${tipRef} aria-hidden="true">${KR_LEVELS.map(([l], i) => html`<b class=${where(i)}>${l}</b>`)}</span>
+        </span>
+      </span>
+    </div>
+    <div class="kr-desc" aria-live="polite">
+      ${KR_LEVELS.map(([, d], i) => html`<p class=${where(i)} aria-hidden=${i === shown ? undefined : 'true'}>${d}</p>`)}
+    </div>
   </div>`;
 }
 
@@ -302,7 +327,6 @@ function PlayerEditor({ player, onClose, onSave, onDelete }) {
     <div class="col">
       <span class="label">Speelkracht</span>
       <${KrachtSlider} value=${p.kracht} onChange=${(v) => setP((q) => ({ ...q, kracht: v }))} />
-      <div class="between small"><span>groeit nog</span><span class=${'keylabel' + (p.kracht >= KEY_KRACHT ? ' on' : '')}>${p.kracht >= KEY_KRACHT ? 'dragende speler ✓' : 'draagt het spel'}</span></div>
     </div>
     <div class="col">
       <span class="label">Dominante rol</span>
