@@ -540,7 +540,7 @@ export function Icon({ name, size = 22 }) {
 const landing = {};
 const LANE_NAMES = { V: 'voor', M: 'midden', A: 'achter' };
 
-export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false, picking = false, hot = null, hotKey = 0, ghosts = null, animate = false, accent = null, badges = null, cheer = null, formable = false }) {
+export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = [], marked = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false, picking = false, hot = null, hotKey = 0, ghosts = null, animate = false, accent = null, badges = null, cheer = null, formable = false }) {
   const rows = ['V', 'M', 'A'].filter((l) => (lines[l] || 0) > 0);
   // linies gelijk verdeeld tussen de bovenrand en de keeper (middelpunten in %)
   const START = 5, END = 78;
@@ -583,7 +583,7 @@ export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = []
   let size = total <= 6 ? 'l' : total <= 8 ? 'm' : total <= 10 ? 's' : 'xs';
   if (compact && (size === 'l' || size === 'm')) size = 's';
   const maxPx = { l: 116, m: 92, s: 76, xs: 66 }[size];
-  const pillKind = (id) => (dashed.indexOf(id) !== -1 ? 'dashed' : '') + (muted.indexOf(id) !== -1 ? ' muted' : '') + (selected === id ? ' orange' : '');
+  const pillKind = (id) => (dashed.indexOf(id) !== -1 ? 'dashed' : '') + (muted.indexOf(id) !== -1 ? ' muted' : '') + (marked.indexOf(id) !== -1 ? ' marked' : '') + (selected === id ? ' orange' : '');
   const pillStyle = `max-width:min(${maxPx}px, calc(${(100 / (widest + 1)).toFixed(2)}cqw - 6px))`;
   const accStyle = (id) => { const c = accent && id ? accent(id) : null; return c ? `;--acc:${c}` : ''; };
   const goalMark = (id, keeper) => (hot && hot === id
@@ -883,19 +883,19 @@ export function BenchScroll({ focus = null, children }) {
     const el = ref.current;
     if (!el) return;
     const now = {};
-    const base = el.getBoundingClientRect().left;
     const first = at.current === null;
+    // de plek in de layout (offsetLeft), niet de getekende plek: zo herstart een lopende animatie niet bij elke
+    // nieuwe tekening tijdens het vegen (dan bleef een speler 'hangen' onder een andere)
     for (const n of el.querySelectorAll('[data-pid]')) {
-      const x = n.getBoundingClientRect().left - base + el.scrollLeft;
+      const w = n.closest('.neon') || n;
+      const x = w.offsetLeft;
       now[n.dataset.pid] = x;
       if (first || reduced() || typeof n.animate !== 'function') continue;
       const was = at.current[n.dataset.pid];
       try {
         if (was != null && Math.abs(was - x) > 1) {
           const d = Math.max(-64, Math.min(64, was - x));
-          n.animate([{ translate: `${d}px 0` }, { translate: '0 0' }], { duration: T.small + 80, easing: SPRING.soft });
-        } else if (was == null) {
-          n.animate([{ opacity: 0, scale: '.9' }, { opacity: 1, scale: '1' }], { duration: T.small + 60, easing: 'ease-out' });
+          w.animate([{ translate: `${d}px 0` }, { translate: '0 0' }], { duration: T.small + 80, easing: SPRING.soft });
         }
       } catch (e) { /* oud toestel */ }
     }

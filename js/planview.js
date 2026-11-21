@@ -269,7 +269,7 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
           ? html`<${Field} slots=${nx.slots} lines=${nx.lines || lines} keeperId=${nx.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
               onTap=${() => {}} neon=${changes(cards, i + 1).in} accent=${accentFor(team)} />`
           : html`<${Field} slots=${c.slots} lines=${lines} formable=${canEdit} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
-              onTap=${() => {}} neon=${planner ? nxOuts : ch.in} dashed=${!planner && ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} ghosts=${planner && !peek && !calm ? ghostsFor(nx, c.pos, nick) : null} />`}
+              onTap=${() => {}} neon=${planner ? nxOuts : []} marked=${planner ? [] : ch.in} dashed=${!planner && ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} ghosts=${planner && !peek && !calm ? ghostsFor(nx, c.pos, nick) : null} />`}
         ${planner && peek && nx && html`<span class="peeklabel" role="status"><${Icon} name="eye" size=${15} />${nx.kind === 'lineup' ? 'Opstelling ' + M.periodLabel(team, nx.period) : 'Na wissel ' + swapNoOf(nx)}</span>`}
       </div>
       <div class="benchrow">
