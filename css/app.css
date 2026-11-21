@@ -602,7 +602,7 @@ button.duo-side[aria-expanded="true"] .duo-chev { transform: rotate(-90deg); opa
 
 /* doelpunt in het veld */
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-.field.picking .spot .pill, .field.picking .keeperspot > * { animation: pickPulse 1.1s ease-in-out infinite; box-shadow: 0 0 0 3px var(--orange); }
+.field.picking .spot .pill, .field.picking .keeperspot > .pill { animation: pickPulse 1.1s ease-in-out infinite; box-shadow: 0 0 0 3px var(--orange); }
 @keyframes pickPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
 .goalmode .benchrow { opacity: .4; }
 @keyframes jelly { 0% { transform: scale(1); } 18% { transform: scale(1.32, .78); } 34% { transform: scale(.86, 1.16); } 50% { transform: scale(1.12, .92); } 66% { transform: scale(.96, 1.04); } 82% { transform: scale(1.02, .99); } 100% { transform: scale(1); } }
@@ -1312,30 +1312,59 @@ html.plsticky-on .toast { bottom: calc(92px + var(--safe-b)) !important; }
 @keyframes tipShake { 0%, 100% { translate: 0 0; } 20% { translate: -5px 0; } 40% { translate: 5px 0; } 60% { translate: -3px 0; } 80% { translate: 3px 0; } }
 @media (max-height: 720px) { .i-holdtip { top: calc(50% + 35px); } }
 
-/* peek: het verhaal van de volgende wissel schuift over het veld */
-.peekbtn { position: absolute; left: 10px; top: 10px; z-index: 7; display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 12px 0 9px; border: none; border-radius: 99px; background: rgba(255,255,255,.18); color: #fff; font: 900 12.5px/1 Nunito, sans-serif; letter-spacing: .02em; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.35); -webkit-touch-callout: none; user-select: none; transition: background var(--t-small) ease, color var(--t-small) ease, scale .3s var(--spring-play); }
-.peekbtn:active { scale: .94; }
-.peekbtn.on { background: #fff; color: var(--navy); box-shadow: 0 6px 16px rgba(0,0,0,.25); }
-.peekpanel { position: absolute; left: 8px; right: 8px; top: 8px; z-index: 6; display: flex; flex-direction: column; gap: 7px; padding: 50px 16px 14px; border-radius: 20px; background: rgba(255,255,255,.96); color: var(--ink); box-shadow: 0 18px 40px rgba(8,16,44,.45); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  translate: 0 -24px; scale: .96; opacity: 0; pointer-events: none; transform-origin: 30px 0;
-  transition: translate var(--t-out-small) ease, scale var(--t-out-small) ease, opacity var(--t-out-small) ease; }
-.peekpanel.open { translate: 0 0; scale: 1; opacity: 1; pointer-events: auto; transition: translate var(--t-screen) var(--spring-play), scale var(--t-screen) var(--spring-play), opacity var(--t-small) ease; }
-.peekpanel .pk-line { opacity: 0; translate: 0 6px; transition: opacity var(--t-out-small) ease, translate var(--t-out-small) ease; }
-.peekpanel.open .pk-line { opacity: 1; translate: 0 0; transition: opacity var(--t-small) ease .08s, translate var(--t-screen) var(--spring-soft) .08s; }
-.peekpanel.open .pk-line + .pk-line { transition-delay: .14s; }
-.peekpanel.open .pk-line.small { transition-delay: .2s; }
 .pk-when { font-size: 11.5px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; color: var(--blue); }
 .pk-after { margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--muted); }
 .pk-line { display: flex; flex-direction: column; gap: 3px; }
 .pk-main { font-size: 17px; font-weight: 900; line-height: 1.3; }
 .pk-sub { font-size: 14.5px; font-weight: 800; line-height: 1.3; }
 .pk-dim { font-weight: 700; color: var(--muted); }
-.pk-line.small .pk-main { font-size: 14.5px; }
-.pk-line.small .pk-sub { font-size: 13px; }
-.peekpanel .chg { white-space: nowrap; display: inline-block; }
-.reduce .peekpanel, .reduce .peekpanel .pk-line { transition-duration: .01s !important; transition-delay: 0s !important; }
+.pk-line.pk-next .pk-main { font-size: 14.5px; }
+.pk-line.pk-next .pk-sub { font-size: 13px; }
 /* in het verhaal dezelfde kleuren als op het veld: groen erin, oranje eruit, blauw doorschuiven */
-.peekpanel .chg.in, .nextcap .chg.in { background: #E3F6EA; color: #11703A; }
-.peekpanel .chg.out, .nextcap .chg.out { background: #FFEFD6; color: #8A4B00; }
-.peekpanel .chg.sh, .nextcap .chg.sh { background: #E6EDFF; color: var(--blue); border: none; }
-.fieldbox:has(.peekpanel.open) .focus { opacity: 0; pointer-events: none; }
+.isl-drawer .chg.in, .nextcap .chg.in { background: #E3F6EA; color: #11703A; }
+.isl-drawer .chg.out, .nextcap .chg.out { background: #FFEFD6; color: #8A4B00; }
+.isl-drawer .chg.sh, .nextcap .chg.sh { background: #E6EDFF; color: var(--blue); border: none; }
+
+/* ================= v0.18.4: uitleg als lade onder het eiland ================= */
+/* het eiland klapt uit: de lade schuift er (in dezelfde kleur) onder vandaan, over het veld heen */
+.isl-drawer { position: absolute; left: 0; right: 0; top: 100%; }
+.dr-clip { position: relative; z-index: 1; margin-top: -24px; display: grid; grid-template-rows: 0fr; border-radius: 0 0 24px 24px; background: #fff; color: var(--ink);
+  box-shadow: 0 18px 36px -14px rgba(8,16,44,.5); opacity: 0; transition: grid-template-rows var(--t-out-small) ease, opacity var(--t-out-small) ease var(--t-out-small); }
+.isl-drawer.open .dr-clip { grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows var(--t-screen) var(--spring-soft), opacity 0s; }
+.dr-body { min-height: 0; overflow: hidden; }
+.dr-in { display: flex; flex-direction: column; gap: 7px; padding: 36px 16px 22px; }
+.dr-in .pk-line { opacity: 0; translate: 0 -6px; transition: opacity var(--t-out-small) ease, translate var(--t-out-small) ease; }
+.isl-drawer.open .dr-in .pk-line { opacity: 1; translate: 0 0; transition: opacity var(--t-small) ease .1s, translate var(--t-screen) var(--spring-soft) .1s; }
+.isl-drawer.open .dr-in .pk-line + .pk-line { transition-delay: .16s; }
+.isl-drawer.open .dr-in .pk-line.pk-next { transition-delay: .22s; }
+.drawer-open .island { box-shadow: none; }
+.drawer-open .i-late { opacity: 0; }
+/* het lipje: hangt half onder het eiland, wijst omlaag (dicht) of omhoog (open) */
+.dr-grab { position: absolute; left: 50%; top: 100%; z-index: 4; width: 48px; height: 22px; margin: -11px 0 0 -24px; padding: 0; border: none; border-radius: 99px; display: grid; place-items: center;
+  background: #fff; color: var(--blue-2); box-shadow: 0 4px 12px rgba(8,16,44,.28), 0 0 0 1px rgba(14,21,48,.06); -webkit-touch-callout: none; user-select: none; touch-action: none;
+  transition: scale .3s var(--spring-play), background .4s ease, color .4s ease; }
+.dr-grab svg { rotate: 90deg; transition: rotate var(--t-screen) var(--spring-play); stroke-width: 2.8; }
+.isl-drawer.open .dr-grab svg { rotate: -90deg; }
+.dr-grab:active { scale: .9; }
+/* in de laatste minuut (donker eiland) ook de lade donker */
+.islandwrap.hot .dr-clip, .islandwrap.hot .dr-grab { background: var(--navy); color: #fff; }
+.islandwrap.hot .dr-grab { box-shadow: 0 4px 12px rgba(8,16,44,.4), 0 0 0 1.5px rgba(255,255,255,.25); }
+.islandwrap.hot .dr-in .pk-when { color: var(--orange); }
+.islandwrap.hot .dr-in .pk-after { color: rgba(255,255,255,.6); border-top-color: rgba(255,255,255,.14); }
+.islandwrap.hot .dr-in .pk-dim { color: rgba(255,255,255,.6); }
+.islandwrap.hot .isl-drawer .chg.in { background: rgba(74,222,128,.18); color: #A7F3C0; }
+.islandwrap.hot .isl-drawer .chg.out { background: rgba(245,165,36,.2); color: #FFD08A; }
+.islandwrap.hot .isl-drawer .chg.sh { background: rgba(127,166,255,.2); color: #C9D7FF; }
+.reduce .dr-clip, .reduce .dr-in .pk-line, .reduce .dr-grab svg { transition-duration: .01s !important; transition-delay: 0s !important; }
+
+/* na een wissel komen de zwevers en randen van de volgende wissel rustig binnen */
+.ghost { animation: ghostIn .7s ease both, ghostFloat 3.2s ease-in-out .7s infinite; }
+.ghost.right { animation: ghostIn .7s ease both, ghostFloatL 3.2s ease-in-out .7s infinite; }
+.ghost.hot { animation-duration: .7s, 1.4s; }
+@keyframes ghostIn { from { opacity: 0; scale: .7; } }
+.field .neon { animation: neonIn .6s ease both, neonGlow 3.2s ease-in-out .6s infinite; }
+@keyframes neonIn { from { opacity: .4; } }
+/* open lade ligt boven alles op het veld (focusbalk, lijnen, spelers) */
+.islandwrap.drawer-open { z-index: 30; }
+.dr-in .pk-line.pk-next .pk-main { color: inherit; opacity: .85; }
+.dr-in .pk-line.pk-next .pk-sub { opacity: .7; }
