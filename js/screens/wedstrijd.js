@@ -586,6 +586,74 @@ function LiveView({ match, team }) {
     }, reduced() ? 0 : 360);
   };
 
+  // na een wissel even rust op het veld: de volgende situatie (zwevers, randen, uitleg) pas als de ongedaan-pil
+  // weg is, anders is het te veel tegelijk
+  const swapActKey = act && (act.out || act.outs) ? act.key : null;
+  const [calmNext, setCalmNext] = useState(false);
+  useEffect(() => {
+    if (swapActKey) { setCalmNext(true); return undefined; }
+    if (!calmNext) return undefined;
+    const t = setTimeout(() => setCalmNext(false), 600);
+    return () => clearTimeout(t);
+  }, [swapActKey]);
+
+  // uitleg: het eiland klapt uit tot een lade met het verhaal van de volgende wissel (en die daarna).
+  // Tik op het lipje = open/dicht, vasthouden = alleen zolang je vasthoudt, omlaag vegen = open.
+  const [peek, setPeek] = useState(false);
+  const peekRef = useRef(null);
+  const peekDown = (e) => { peekRef.current = { t: Date.now(), y: e.clientY, was: peek, hold: setTimeout(() => { setPeek(true); haptic('select'); peekRef.current && (peekRef.current.held = true); }, 280) }; };
+  const peekMove = (e) => {
+    const p = peekRef.current;
+    if (!p || p.held) return;
+    // omlaag vegen opent de lade (en laat hem open)
+    if (e.clientY - p.y > 18) { clearTimeout(p.hold); peekRef.current = null; if (!peek) { setPeek(true); haptic('select'); } }
+    else if (p.y - e.clientY > 18) { clearTimeout(p.hold); peekRef.current = null; if (peek) setPeek(false); }
+  };
+  const peekUp = () => {
+    const p = peekRef.current; peekRef.current = null;
+    if (!p) return;
+    clearTimeout(p.hold);
+    if (p.held) setPeek(false);
+    else { setPeek(!p.was); haptic('select'); }
+  };
+  const canPeek = !!next && !pending && !goal && !timeUp && !calmNext;
+  useEffect(() => {
+    if (!peek) return undefined;
+    const away = (e) => { if (!e.target.closest('.islandwrap')) setPeek(false); };
+    document.addEventListener('pointerdown', away, true);
+    return () => document.removeEventListener('pointerdown', away, true);
+  }, [peek]);
+  useEffect(() => { if (!canPeek && peek) setPeek(false); }, [canPeek]);
+  const lines = M.linesOf(match, team);
+  const peekStory = canPeek ? M.swapStory(d.state.slots, lines, group.map((s) => ({ out: s.out, in: s.in, shift: s.shift }))) : [];
+  let after = null;
+  if (canPeek && match.plan) {
+    const rest = match.plan.steps.slice(group.length);
+    if (rest[0] && rest[0].type === 'lineup') after = { lineup: true, t: rest[0].t };
+    else if (rest[0]) {
+      const g2 = rest.filter((s) => s.type === 'swap' && s.t === rest[0].t);
+      after = { t: rest[0].t, story: M.swapStory(M.slotsAfter(d.state.slots, group), lines, g2.map((s) => ({ out: s.out, in: s.in, shift: s.shift }))) };
+    }
+  }
+  const storyLine = (st, small) => html`<div class=${'pk-line' + (small ? ' pk-next' : '')} key=${st.in + st.out}>
+    <span class="pk-main"><span class="chg in">↑ ${nick(st.in)}</span> erin voor <span class="chg out">↓ ${nick(st.out)}</span></span>
+    ${(st.shift || st.inPos) && html`<span class="pk-sub">${st.shift
+      ? html`<span class="chg sh">↔ ${nick(st.shift)}</span> ${st.shiftPos ? st.shiftPos.naar : 'schuift door'}${st.inPos ? html`<span class="pk-dim"> · ${nick(st.in)} ${st.inPos.op}</span>` : ''}`
+      : html`${nick(st.in)} ${st.inPos.op}`}</span>`}
+  </div>`;
+  const drawer = canPeek && html`<div class=${'isl-drawer' + (peek ? ' open' : '')}>
+    <div class="dr-clip"><div class="dr-body" aria-hidden=${!peek} role="status"><div class="dr-in">
+      <span class="pk-when">Zo gaat de wissel${next.fixed ? ' · vastgezet' : ''}</span>
+      ${peekStory.map((st) => storyLine(st, false))}
+      ${after && html`<span class="pk-when pk-after">Daarna · over ${M.fmt(Math.max(0, after.t - T))}</span>`}
+      ${after && (after.lineup ? html`<div class="pk-line pk-next"><span class="pk-main">Rust: nieuwe opstelling</span></div>` : after.story.map((st) => storyLine(st, true)))}
+    </div></div></div>
+    <button type="button" class="dr-grab" data-press="none" aria-expanded=${peek}
+      aria-label=${peek ? 'Uitleg van de wissel sluiten' : 'Uitleg van de wissel tonen'}
+      onPointerDown=${peekDown} onPointerMove=${peekMove} onPointerUp=${peekUp} onPointerCancel=${peekUp} onContextMenu=${(e) => e.preventDefault()}
+      onClick=${(e) => { if (e.detail === 0) setPeek(!peek); }}><${Icon} name="chev" size=${16} /></button>
+  </div>`;
+
   // ---------- wissel-eiland ----------
   const short = (s, n = 12) => (s && s.length > n ? s.slice(0, n - 1) + '…' : s);
   const LORD = { V: 0, M: 1, A: 2 };
@@ -624,7 +692,7 @@ function LiveView({ match, team }) {
     <span class="i-txt"><span class="i-k">Goal voor ${short(team.name, 18)}</span><span class="i-t1">Wie scoorde?</span><span class="i-t2">Tik de speler in het veld <span class="ga-arrow" aria-hidden="true">↓</span></span></span>
     <button type="button" class="ga-btn jelly" onClick=${() => scoreFor(null)}>Weet ik <br />niet</button>
     <button type="button" class="ga-x jelly" aria-label="Annuleren" onClick=${() => setGoal(null)}><${Icon} name="x" size=${18} /></button>
-  </div>` : html`<div class=${'islandwrap ' + isl.st + (spinning ? ' spinning' : '')}>
+  </div>` : html`<div class=${'islandwrap ' + isl.st + (spinning ? ' spinning' : '') + (peek && canPeek ? ' drawer-open' : '')}>
     <button type="button" class=${'island jelly ' + isl.st} onClick=${openNext} disabled=${isl.st === 'calm'} style=${isl.breathe ? `--breathe:${isl.breathe.toFixed(2)}s` : ''}
       aria-label=${next && !pending && !timeUp ? 'Open de planner' : undefined}>
       <span class="i-txt"><span class="i-k">${isl.k}</span><span class="i-t1">${isl.t1}</span>${isl.t2 && html`<span class="i-t2">${isl.t2}</span>`}</span>
@@ -642,50 +710,13 @@ function LiveView({ match, team }) {
         : html`<span class="i-lbl">${isl.ring}</span>`}
     </button>`}
     ${isl.late && html`<span class="i-late">${isl.late}</span>`}
-    ${isl.swap && !spinning && (holdHint || countdown <= 60) && html`<span class=${'i-holdtip' + (holdHint ? ' nudge' : '')} key=${'ht' + holdHint} aria-hidden="true">${holdHint ? 'Houd vast om te wisselen' : 'houd vast'}</span>`}
-  </div>`;
-
-  // peek: het verhaal van de volgende wissel (en die daarna) schuift over het veld. Kort tikken = open/dicht,
-  // vasthouden = alleen zolang je vasthoudt.
-  const [peek, setPeek] = useState(false);
-  const peekRef = useRef(null);
-  const peekDown = (e) => { peekRef.current = { t: Date.now(), was: peek, hold: setTimeout(() => { setPeek(true); haptic('select'); peekRef.current && (peekRef.current.held = true); }, 280) }; };
-  const peekUp = () => {
-    const p = peekRef.current; peekRef.current = null;
-    if (!p) return;
-    clearTimeout(p.hold);
-    if (p.held) setPeek(false);
-    else { setPeek(!p.was); haptic('select'); }
-  };
-  const canPeek = !!next && !pending && !goal && !timeUp;
-  useEffect(() => { if (!canPeek && peek) setPeek(false); }, [canPeek]);
-  const lines = M.linesOf(match, team);
-  const peekStory = canPeek ? M.swapStory(d.state.slots, lines, group.map((s) => ({ out: s.out, in: s.in, shift: s.shift }))) : [];
-  let after = null;
-  if (canPeek && match.plan) {
-    const rest = match.plan.steps.slice(group.length);
-    if (rest[0] && rest[0].type === 'lineup') after = { lineup: true, t: rest[0].t };
-    else if (rest[0]) {
-      const g2 = rest.filter((s) => s.type === 'swap' && s.t === rest[0].t);
-      after = { t: rest[0].t, story: M.swapStory(M.slotsAfter(d.state.slots, group), lines, g2.map((s) => ({ out: s.out, in: s.in, shift: s.shift }))) };
-    }
-  }
-  const storyLine = (st, small) => html`<div class=${'pk-line' + (small ? ' small' : '')} key=${st.in + st.out}>
-    <span class="pk-main"><span class="chg in">↑ ${nick(st.in)}</span> erin voor <span class="chg out">↓ ${nick(st.out)}</span></span>
-    ${(st.shift || st.inPos) && html`<span class="pk-sub">${st.shift
-      ? html`<span class="chg sh">↔ ${nick(st.shift)}</span> ${st.shiftPos ? st.shiftPos.naar : 'schuift door'}${st.inPos ? html`<span class="pk-dim"> · ${nick(st.in)} ${st.inPos.op}</span>` : ''}`
-      : html`${nick(st.in)} ${st.inPos.op}`}</span>`}
-  </div>`;
-  const peekPanel = canPeek && html`<div class=${'peekpanel' + (peek ? ' open' : '')} aria-hidden=${!peek} role="status">
-    <span class="pk-when">Volgende wissel · ${counts.done + 1} van ${counts.total} · ${countdown > 0 ? 'over ' + M.fmt(countdown) : 'nu'}${next.fixed ? ' · vastgezet' : ''}</span>
-    ${peekStory.map((st) => storyLine(st, false))}
-    ${after && html`<span class="pk-when pk-after">Daarna · over ${M.fmt(Math.max(0, after.t - T))}</span>`}
-    ${after && (after.lineup ? html`<div class="pk-line small"><span class="pk-main">Rust: nieuwe opstelling</span></div>` : after.story.map((st) => storyLine(st, true)))}
+    ${drawer}
+    ${isl.swap && !spinning && !peek && (holdHint || countdown <= 60) && html`<span class=${'i-holdtip' + (holdHint ? ' nudge' : '')} key=${'ht' + holdHint} aria-hidden="true">${holdHint ? 'Houd vast om te wisselen' : 'houd vast'}</span>`}
   </div>`;
 
   // zwevende wisselspelers achter de plekken die gaan veranderen
   const ghosts = {};
-  if (next && !pending && !goal && !timeUp) {
+  if (next && !pending && !goal && !timeUp && !calmNext) {
     const hot = countdown <= 60;
     for (const s of group) {
       if (s.shift && s.shift.id in d.state.pos) {
@@ -744,13 +775,8 @@ function LiveView({ match, team }) {
         <${Field} slots=${d.state.slots} lines=${M.linesOf(match, team)} keeperId=${d.state.keeper} nick=${nick} height="auto" formable=${!pending && !goal}
           onTap=${tapField} onKeeper=${goal === 'scorer' ? (id) => scoreFor(id) : !pending ? () => setSheet({ type: 'keeper' }) : null}
           picking=${goal === 'scorer'} hot=${cele && cele.us ? cele.id : null} hotKey=${cele ? cele.key : 0}
-          neon=${next && !pending && !goal && !timeUp ? group.map((s) => s.out) : []} sub=${(id) => M.fmt(d.state.played[id])}
+          neon=${next && !pending && !goal && !timeUp && !calmNext ? group.map((s) => s.out) : []} sub=${(id) => M.fmt(d.state.played[id])}
           ghosts=${ghosts} animate accent=${accent} badges=${d.goals} cheer=${cheer} />
-        ${peekPanel}
-        ${canPeek && html`<button type="button" class=${'peekbtn' + (peek ? ' on' : '')} data-press="none" aria-pressed=${peek}
-          aria-label=${peek ? 'Verberg de volgende wissel in woorden' : 'Toon de volgende wissel in woorden'}
-          onPointerDown=${peekDown} onPointerUp=${peekUp} onPointerCancel=${peekUp} onContextMenu=${(e) => e.preventDefault()}
-          onClick=${(e) => { if (e.detail === 0) setPeek(!peek); }}><${Icon} name="story" size=${18} /><span>${peek ? 'Sluit' : 'Uitleg'}</span></button>`}
         ${!goal && !pending && html`<${FocusRail} stand=${shownStand} auto=${team.rules.autoStand && match.standMode !== 'manual'} canAuto=${!!team.rules.autoStand}
           onSet=${(v) => mutate((m, t) => M.setStand(m, t, 'manual', v))} onAuto=${(on) => mutate((m, t) => M.setStand(m, t, on ? 'auto' : 'manual', stand))} />`}
         ${act && html`<div class=${'actpill' + (act.top ? ' top' : '') + (act.out || act.outs ? ' wide' : '') + (act.label ? ' labeled' : '')} key=${'a' + act.key} role="status">
@@ -765,7 +791,7 @@ function LiveView({ match, team }) {
         <${BenchScroll} focus=${next && !pending ? (group.find((s) => d.state.bench.indexOf(s.in) !== -1) || {}).in : null}>
           ${d.state.bench.map((id) => {
             const dis = d.state.disabled[id];
-            const isNext = next && !pending && group.some((s) => s.in === id);
+            const isNext = next && !pending && !calmNext && group.some((s) => s.in === id);
             const ac = accent(id);
             const pill = html`<button type="button" key=${id} data-pid=${id} class=${'benchpill' + (dis ? ' off' : '') + (everDropped(id) ? ' dropped' : '') + (dropped(id) ? ' drop' : '') + (ac ? ' acc' : '')} style=${ac ? '--acc:' + ac : ''} onClick=${() => tapBench(id)}>
               ${nick(id)}${d.goals[id] ? html`<span class="bgoal">${d.goals[id]}</span>` : ''}<span class="t">${dis ? (dis === 'wedstrijd' ? 'klaar' : 'rust') : isNext ? 'klaarmaken' : M.mins(d.state.played[id]) + ' min'}</span>
