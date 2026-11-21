@@ -347,6 +347,28 @@ export function fairness(final, ctx, ids) {
   };
 }
 
+// Hoe goed past een uitgerekende wedstrijd bij de regels? (eerlijkheid, kosten, en waarom niet)
+function assess(final, ctx, ids, m) {
+  const f = fairness(final, ctx, ids);
+  const marge = (ctx.rules.marge || 5) * 60;
+  const maxBench = ctx.rules.maxBenchOn ? (ctx.rules.maxBench || 10) * 60 : 0;
+  const okTime = !ctx.rules.equalTime || f.spread <= marge;
+  const fixed = ctx.rules.turnsTarget != null;
+  const slack = ctx.rules.turnsSlack || 0;
+  const okTurns = fixed
+    ? (slack ? f.minTurns >= ctx.rules.turnsTarget && f.maxTurns <= ctx.rules.turnsTarget + slack : f.dev === 0)
+    : (!ctx.rules.evenOften || f.turnsDiff <= slack);
+  const okBench = !maxBench || f.maxStint <= maxBench + 1;
+  const cost = (ctx.rules.equalTime ? Math.max(0, f.spread - marge) / 30 : 0) * 10 +
+    (fixed ? f.dev * 20 : (ctx.rules.evenOften ? f.turnsDiff : 0) * 5) +
+    (maxBench ? Math.max(0, f.maxStint - maxBench) / 60 : 0) * 3 + m * 0.05 + f.spread / 600;
+  const why = [];
+  if (!okTurns) why.push(fixed ? 'turns' : 'even');
+  if (!okTime) why.push('time');
+  if (!okBench) why.push('bench');
+  return { fair: f, ok: okTime && okTurns && okBench, cost, why };
+}
+
 // Hoofdfunctie: maak het plan voor de rest van de wedstrijd vanaf tijd T.
 // ctx: { players, lines, periodLen, periods, rules, stand, firstAt, lineupPending, excludeFair }
 export function planRest(start, ctx, T) {
@@ -374,22 +396,7 @@ export function planRest(start, ctx, T) {
       let bestOkM = null;
       for (const v of variants) {
         const sim = simulate(start, ctx, T, m, v);
-        const f = fairness(sim.final, ctx, ids);
-        const okTime = !ctx.rules.equalTime || f.spread <= marge;
-        const fixed = ctx.rules.turnsTarget != null;
-        const slack = ctx.rules.turnsSlack || 0;
-        const okTurns = fixed
-          ? (slack ? f.minTurns >= ctx.rules.turnsTarget && f.maxTurns <= ctx.rules.turnsTarget + slack : f.dev === 0)
-          : (!ctx.rules.evenOften || f.turnsDiff <= slack);
-        const okBench = !maxBench || f.maxStint <= maxBench + 1;
-        const cost = (ctx.rules.equalTime ? Math.max(0, f.spread - marge) / 30 : 0) * 10 +
-          (fixed ? f.dev * 20 : (ctx.rules.evenOften ? f.turnsDiff : 0) * 5) +
-          (maxBench ? Math.max(0, f.maxStint - maxBench) / 60 : 0) * 3 + m * 0.05 + f.spread / 600;
-        const why = [];
-        if (!okTurns) why.push(fixed ? 'turns' : 'even');
-        if (!okTime) why.push('time');
-        if (!okBench) why.push('bench');
-        const cand = { ...sim, fair: f, m, ok: okTime && okTurns && okBench, cost, why };
+        const cand = { ...sim, ...assess(sim.final, ctx, ids, m), m };
         if (cand.ok) { bestOkM = cand; break; }
         if (!best || cand.cost < best.cost) best = cand;
       }
@@ -401,6 +408,101 @@ export function planRest(start, ctx, T) {
     best = { ...sim, m: 0, ok: true, cost: 0, fair: fairness(sim.final, ctx, ids) };
   }
   return best;
+}
+
+// Plan met vastgezette momenten (speldjes). Tot en met het laatste speldje houdt de app de momenten van het
+// vrije plan aan (grid) en kiest daar zelf wie; op een speldje gebeurt precies wat de coach koos. Na het
+// laatste speldje rekent de app de rest weer helemaal zelf uit. Een speldje dat niet meer kan (iemand is
+// uitgeschakeld of staat al op een andere plek) slaat de app over en geeft het terug in 'broken'.
+export function planPinned(start, ctx, T, pins, grid) {
+  // twee manieren, de beste telt: het ritme van het vrije plan aanhouden tot het einde van die periode,
+  // of direct na het laatste speldje opnieuw laten rekenen
+  const a = pinnedRun(start, ctx, T, pins, grid, true);
+  const b = pinnedRun(start, ctx, T, pins, grid, false);
+  if (a.ok !== b.ok) return a.ok ? a : b;
+  return busy(a) + a.cost <= busy(b) + b.cost ? a : b;
+}
+// onrust: wisselmomenten die snel op elkaar volgen
+function busy(r) {
+  const ts = [...new Set(r.steps.filter((x) => x.type === 'swap').map((x) => x.t))];
+  let n = 0;
+  for (let i = 1; i < ts.length; i++) if (ts[i] - ts[i - 1] < 150) n++;
+  return n * 0.6;
+}
+
+function pinnedRun(start, ctx, T, pins, grid, rhythm) {
+  const fast = {};
+  for (const id in ctx.players) { const p = ctx.players[id]; fast[id] = { kracht: p.kracht, fp: fieldPrefs(p), main: p.main || null, flex: p.flex !== false }; }
+  const fctx = { ...ctx, players: fast };
+  const { periodLen, periods, rules } = ctx;
+  const perMoment = Math.max(1, Math.min(5, rules.perMoment || 1));
+  const end = periods * periodLen;
+  const state = cloneState(start);
+  const last = pins[pins.length - 1].t;
+  // het ritme van het vrije plan loopt door tot het einde van de periode van het laatste speldje
+  const cut = rhythm ? Math.min(end, (Math.floor(last / periodLen) + 1) * periodLen) : last;
+  const times = [...new Set(grid.filter((t) => t > T && t < cut).concat(pins.map((p) => p.t)))].sort((a, b) => a - b);
+  const steps = [];
+  const broken = [];
+  let now = T;
+  let p = Math.min(periods - 1, Math.floor(T / periodLen));
+  const lineupAt = (t, period) => {
+    advance(state, now, t);
+    now = t;
+    if (rules.newLineupAtBreak) {
+      const lu = breakLineup(state, fctx, t, null);
+      steps.push({ type: 'lineup', t, pos: lu.pos, bench: lu.bench, period });
+      applyLineup(state, lu, t);
+    }
+  };
+  if (ctx.lineupPending && T === p * periodLen && p > 0) lineupAt(T, p);
+  times.forEach((t, k) => {
+    if (t >= end) return;
+    while (Math.floor(t / periodLen) > p) { p++; lineupAt(p * periodLen, p); }
+    advance(state, now, t);
+    now = t;
+    const pin = pins.find((x) => x.t === t);
+    const used = new Set();
+    if (pin) {
+      for (const pr of pin.pairs) {
+        const ok = pr.out in state.pos && state.bench.indexOf(pr.in) !== -1 && !isDisabled(state, pr.in, t, fctx) && !used.has(pr.out) && !used.has(pr.in);
+        if (!ok) { broken.push({ t, out: pr.out, in: pr.in }); continue; }
+        const placed = placeIn(state.pos, pr.out, pr.in, fast, ctx.stand);
+        const sw = { out: pr.out, in: pr.in, line: placed.line, shift: placed.shift, pos: placed.pos };
+        steps.push({ type: 'swap', t, ...sw, pos: { ...sw.pos }, pinned: true, fixed: true, after: pin.after || 'terug' });
+        applySwap(state, sw, t);
+        used.add(pr.out); used.add(pr.in);
+      }
+      return;
+    }
+    const interval = (k + 1 < times.length ? times[k + 1] : cut) - t || 180;
+    for (let q = 0; q < perMoment; q++) {
+      const sw = chooseSwap(state, fctx, t, interval, 'played', 'played', used);
+      if (!sw) break;
+      steps.push({ type: 'swap', t, out: sw.out, in: sw.in, line: sw.line, shift: sw.shift, pos: { ...sw.pos } });
+      applySwap(state, sw, t);
+      used.add(sw.out); used.add(sw.in);
+    }
+  });
+  const ids = Object.keys(start.pos).concat(start.bench);
+  const moments = new Set(steps.filter((x) => x.type === 'swap').map((x) => x.t)).size;
+  if (!rhythm) {
+    const rest = planRest(state, { ...ctx, lineupPending: false, firstAt: null }, last);
+    const fair = rest.fair ? { ...rest.fair, maxStint: Math.max(rest.fair.maxStint || 0, state.maxStint) } : rest.fair;
+    return { ...rest, fair, steps: steps.concat(rest.steps), broken };
+  }
+  if (cut >= end) {
+    // laatste periode: tot het eind in het ritme van het vrije plan
+    advance(state, now, end);
+    for (const id of state.bench) noteStint(state, id, end);
+    return { steps, final: state, m: moments, ...assess(state, ctx, ids, moments), broken };
+  }
+  // vanaf de volgende periode rekent de app weer helemaal zelf, met wat er tot dan gespeeld is
+  advance(state, now, cut);
+  const prefixStint = state.maxStint;
+  const rest = planRest(state, { ...ctx, lineupPending: true, firstAt: null }, cut);
+  const fair = rest.fair ? { ...rest.fair, maxStint: Math.max(rest.fair.maxStint || 0, prefixStint) } : rest.fair;
+  return { ...rest, fair, steps: steps.concat(rest.steps), broken };
 }
 
 // Startsituatie voor een nieuwe wedstrijd: de sterkste spelers beginnen (de bank komt er snel in).

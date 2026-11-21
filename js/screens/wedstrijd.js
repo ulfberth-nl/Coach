@@ -8,7 +8,7 @@ import { nextScheduled, todayISO } from './seizoen.js';
 import { matchRules } from '../profiles.js';
 import { scheduleRefresh } from '../refresh.js';
 import { viewTransition, haptic } from '../motion.js';
-import { mutate, undoAction, SwapSheet, GroupSwapSheet, BenchSheet, GoalSheet, BreakSheet, JoinSheet, KeeperSheet } from './live.js';
+import { mutate, undoAction, liveAct, SwapSheet, GroupSwapSheet, BenchSheet, GoalSheet, BreakSheet, JoinSheet, KeeperSheet } from './live.js';
 import { Field, Neon, Roll, Sheet, Confirm, Seg, Stepper, Icon, accentFor, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, BenchScroll, beep, flash, unlockAudio, toast, go } from '../ui.js';
 
 // slepen in de startopstelling: twee spelers ruilen, of een speler naar een lege plek in een andere linie
@@ -78,7 +78,8 @@ export function rebuildConcept(d, changes = {}) {
   else if (present.indexOf(keeperId) === -1) keeperId = suggestKeeper(t, present, keeperCounts(d, t));
   // eigen opstelling (gesleept) blijft staan, behalve als de coach om een nieuw voorstel vraagt
   const lines = changes.resetLines ? null : m.lines || null;
-  const n = M.createMatch(t, { present, keeperId, priority: changes.priority || m.priority, opponent: m.opponent, date: m.date, lines, rules: matchRules(t, present, keeperId) });
+  const keep = changes.resetLines ? {} : { pins: m.pins, fairness: m.fairness, standMode: m.standMode, manualStand: m.manualStand };
+  const n = M.createMatch(t, { present, keeperId, priority: changes.priority || m.priority, opponent: m.opponent, date: m.date, lines, rules: matchRules(t, present, keeperId), ...keep });
   n.id = m.id;
   n.setup = m.setup || { present: false, keeper: false, opponent: false };
   for (const k of ['scheduleId', 'time', 'meet', 'field', 'home', 'season']) if (m[k] !== undefined) n[k] = m[k];
@@ -406,6 +407,8 @@ function LiveView({ match, team }) {
   const [act, setAct] = useState(null);
   useEffect(() => { if (!act) return undefined; const t = setTimeout(() => setAct(null), act.out ? 7000 : 6000); return () => clearTimeout(t); }, [act && act.key, act && act.status]);
   const showAct = (a) => { const v = { key: Date.now(), undos: 1, out: null, status: 'terug', top: false, ...a }; v.base = v.status !== 'terug' ? v.undos - (v.outs ? v.outs.length : 1) : v.undos; setAct(v); };
+  // terug uit de planner na 'Wissel nu': dezelfde ongedaan-pil als hier
+  useEffect(() => { if (liveAct.next) { const a = liveAct.next; liveAct.next = null; setTimeout(() => showAct(a), 120); } }, []);
   const undoAct = () => {
     const n = act.undos;
     mutate((m, t) => { for (let k = 0; k < n; k++) M.undo(m, t); });
@@ -511,8 +514,8 @@ function LiveView({ match, team }) {
   const openNext = () => {
     if (pending) setSheet({ type: 'break' });
     else if (timeUp) setSheet({ type: 'end' });
-    else if (group.length > 1) setSheet({ type: 'group' });
-    else if (next) setSheet({ type: 'swap', out: next.out, in: next.in, planned: true });
+    // de planner: groot veld, nu en straks, wissel nu of plan vooruit
+    else if (next) go('/plan');
   };
 
   // ---------- wissel-eiland ----------
