@@ -1,7 +1,7 @@
 // Gedeelde bouwstenen voor de schermen.
-import { html, useEffect, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
+import { html, render, useEffect, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { getState, update } from './store.js';
-import { haptic, reduced, cancelPress, T, EASE_OUT, SPRING, audioCtx, unlockAudio } from './motion.js';
+import { haptic, reduced, cancelPress, T, EASE_OUT, EASE_IN, SPRING, audioCtx, unlockAudio } from './motion.js';
 import { findClub, searchClubs, withClub, clubColors, clubAbbr, colorKey, splitTeam, norm } from './clubs.js';
 
 export const POS_COLORS = { K: 'var(--pos-K)', A: 'var(--pos-A)', M: 'var(--pos-M)', V: 'var(--pos-V)' };
@@ -21,28 +21,68 @@ export function useNow(interval = 1000) {
 }
 
 // ---------- melding onderin ----------
+// Komt verend binnen, gaat zacht weg, en is weg te vegen (opzij of omlaag).
 let toastState = null;
 const toastSubs = new Set();
 let toastTimer = null;
+const emit = () => toastSubs.forEach((f) => f(toastState));
 export function toast(text, action) {
-  toastState = { text, action, key: Date.now() };
-  toastSubs.forEach((f) => f(toastState));
+  toastState = { text, action, key: Date.now(), leaving: false };
+  emit();
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { toastState = null; toastSubs.forEach((f) => f(null)); }, action ? 5000 : 2600);
+  toastTimer = setTimeout(() => dismissToast(), action ? 5000 : 2600);
 }
-export function dismissToast() {
+export function dismissToast(instant) {
   if (!toastState) return;
-  toastState = null;
   clearTimeout(toastTimer);
-  toastSubs.forEach((f) => f(null));
+  if (instant || reduced()) { toastState = null; emit(); return; }
+  if (toastState.leaving) return;
+  const k = toastState.key;
+  toastState = { ...toastState, leaving: true };
+  emit();
+  toastTimer = setTimeout(() => { if (toastState && toastState.key === k) { toastState = null; emit(); } }, T.outSmall + 40);
 }
 export function ToastHost() {
   const [t, setT] = useState(toastState);
+  const ref = useRef(null);
+  const st = useRef(null);
   useEffect(() => { toastSubs.add(setT); return () => toastSubs.delete(setT); }, []);
   if (!t) return null;
-  return html`<div class="toast" role="status">
+  // vegen: volgt de vinger, ver genoeg (of snel) = weg, anders veert hij terug
+  const down = (e) => {
+    if (e.target.closest('button')) return;
+    st.current = { id: e.pointerId, x: e.clientX, y: e.clientY, on: false, at: performance.now() };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) { /* oud toestel */ }
+  };
+  const move = (e) => {
+    const s = st.current;
+    if (!s || e.pointerId !== s.id) return;
+    const dx = e.clientX - s.x, dy = Math.max(0, e.clientY - s.y);
+    if (!s.on && Math.hypot(dx, dy) < 6) return;
+    s.on = true;
+    s.dx = dx; s.dy = dy;
+    ref.current.style.translate = `${dx}px ${dy}px`;
+    ref.current.style.opacity = String(Math.max(0.2, 1 - Math.max(Math.abs(dx), dy * 1.5) / 220));
+  };
+  const up = () => {
+    const s = st.current;
+    st.current = null;
+    if (!s || !s.on) return;
+    const el = ref.current;
+    const fast = (Math.abs(s.dx) + s.dy) / Math.max(1, performance.now() - s.at) > 0.5;
+    if (Math.abs(s.dx) > 70 || s.dy > 40 || fast) {
+      const to = Math.abs(s.dx) >= s.dy ? `${s.dx > 0 ? 420 : -420}px ${s.dy}px` : `${s.dx}px 160px`;
+      try { el.animate([{ translate: el.style.translate || '0px 0px', opacity: el.style.opacity || '1' }, { translate: to, opacity: 0 }], { duration: T.outSmall, easing: EASE_IN, fill: 'forwards' }); } catch (x) { /* oud toestel */ }
+      setTimeout(() => dismissToast(true), T.outSmall);
+    } else {
+      el.style.translate = '';
+      el.style.opacity = '';
+    }
+  };
+  return html`<div ref=${ref} class=${'toast' + (t.leaving ? ' leaving' : '')} role="status" key=${t.key}
+    onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${up}>
     <span>${t.text}</span>
-    ${t.action && html`<button type="button" onClick=${() => { t.action.run(); toastState = null; setT(null); }}>${t.action.label}</button>`}
+    ${t.action && html`<button type="button" onClick=${() => { t.action.run(); dismissToast(true); }}>${t.action.label}</button>`}
   </div>`;
 }
 
@@ -327,23 +367,125 @@ export function Reveal({ open, children, cls = '' }) {
   return html`<div class=${'collapse' + (open ? ' open' : '') + (cls ? ' ' + cls : '')} inert=${!open} aria-hidden=${open ? undefined : 'true'}><div>${children}</div></div>`;
 }
 
+// Venster buiten het scherm (eigen laag in <body>), zodat het scherm erachter naar achteren kan wijken.
+function Portal({ children }) {
+  const host = useRef(null);
+  if (!host.current && typeof document !== 'undefined') { host.current = document.createElement('div'); host.current.className = 'portal'; }
+  useLayoutEffect(() => {
+    document.body.appendChild(host.current);
+    return () => { render(null, host.current); host.current.remove(); };
+  }, []);
+  useLayoutEffect(() => { render(children, host.current); });
+  return null;
+}
+
+// zolang er een venster open is, wijkt het scherm erachter een stukje naar achteren
+let openSheets = 0;
+function recede(on) {
+  openSheets = Math.max(0, openSheets + (on ? 1 : -1));
+  const root = document.documentElement;
+  if (openSheets && on) root.style.setProperty('--sy', window.scrollY + 'px');
+  root.classList.toggle('sheet-open', openSheets > 0);
+}
+
+const NO_SHEET_DRAG = 'input, textarea, select, .kr, .seg, [data-pid], .tl, .scrubzone, .no-sheet-drag';
+
 export function Sheet({ onClose, children, label, x = false, footer = null }) {
   const [closing, setClosing] = useState(false);
-  const close = () => { if (closing) return; setClosing(true); setTimeout(onClose, reduced() ? 0 : T.outScreen - 10); };
-  useEffect(() => { dismissToast(); }, []);
+  const done = useRef(false);
+  const back = useRef(null);
+  const sheet = useRef(null);
+  const cb = useRef(onClose);
+  cb.current = onClose;
+  // sluiten: vanaf waar het venster nu is (ook halverwege een veeg) naar beneden, sneller dan het binnenkwam
+  const close = () => {
+    if (done.current) return;
+    done.current = true;
+    setClosing(true);
+    recede(false);
+    const sh = sheet.current, bk = back.current;
+    const calm = reduced() || !sh || typeof sh.animate !== 'function';
+    const h = sh ? sh.offsetHeight : 400;
+    const cur = sh ? parseFloat(getComputedStyle(sh).translate.split(' ')[1] || '0') || 0 : 0;
+    const dur = calm ? 0 : Math.round(Math.max(150, T.outScreen * (1 - Math.min(0.7, cur / h))));
+    if (!calm) {
+      try {
+        sh.animate([{ translate: `0 ${cur}px` }, { translate: `0 ${h + 24}px` }], { duration: dur, easing: EASE_IN, fill: 'forwards' });
+        bk.animate([{ opacity: getComputedStyle(bk).opacity }, { opacity: 0 }], { duration: dur, easing: 'linear', fill: 'forwards' });
+      } catch (e) { /* oud toestel */ }
+    }
+    setTimeout(() => cb.current(), Math.max(0, dur - 10));
+  };
+  useEffect(() => { dismissToast(); recede(true); return () => { if (!done.current) recede(false); }; }, []);
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') close(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, []);
-  return html`<div class=${'sheet-backdrop' + (closing ? ' closing' : '')} onClick=${(e) => { if (e.target === e.currentTarget) close(); }}>
-    <div class=${'sheet' + (footer ? ' has-foot' : '')} role="dialog" aria-modal="true" aria-label=${label}>
+  // vinger-volgend sluiten: trek het venster omlaag (bovenaan of aan het handvat); ver genoeg of snel = dicht
+  useEffect(() => {
+    const sh = sheet.current, bk = back.current;
+    if (!sh) return undefined;
+    let d = null;
+    const down = (e) => {
+      if (e.button > 0 || done.current || e.target.closest(NO_SHEET_DRAG)) return;
+      const top = sh.getBoundingClientRect().top;
+      const grip = e.clientY - top < 34;
+      if (sh.scrollTop > 2 && !grip) return;
+      d = { id: e.pointerId, x: e.clientX, y: e.clientY, on: false, y1: 0, pts: [[performance.now(), e.clientY]] };
+    };
+    const move = (e) => {
+      if (!d || e.pointerId !== d.id) return;
+      const dy = e.clientY - d.y, dx = e.clientX - d.x;
+      if (!d.on) {
+        if (Math.abs(dx) > 10 && Math.abs(dx) > dy) { d = null; return; }
+        if (dy < -6) { d = null; return; }
+        if (dy < 8) return;
+        d.on = true;
+        cancelPress();
+        sh.classList.add('dragging');
+      }
+      // omhoog trekken mag een klein beetje (met weerstand)
+      d.y1 = dy > 0 ? dy : -Math.sqrt(-dy) * 2;
+      d.pts.push([performance.now(), e.clientY]);
+      if (d.pts.length > 6) d.pts.shift();
+      sh.style.translate = `0 ${d.y1}px`;
+      bk.style.opacity = String(1 - Math.min(1, Math.max(0, d.y1) / sh.offsetHeight) * 0.85);
+    };
+    const up = () => {
+      if (!d) return;
+      const x = d;
+      d = null;
+      if (!x.on) return;
+      sh.classList.remove('dragging');
+      const [t0, y0] = x.pts[0], [t1, y1] = x.pts[x.pts.length - 1];
+      const v = (y1 - y0) / Math.max(1, t1 - t0);
+      if (x.y1 > sh.offsetHeight * 0.3 || (v > 0.55 && x.y1 > 20)) { close(); return; }
+      sh.style.translate = '';
+      bk.style.opacity = '';
+    };
+    const block = (e) => { if (d && d.on) e.preventDefault(); };
+    sh.addEventListener('pointerdown', down);
+    sh.addEventListener('touchmove', block, { passive: false });
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    return () => {
+      sh.removeEventListener('pointerdown', down);
+      sh.removeEventListener('touchmove', block);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
+  }, []);
+  return html`<${Portal}><div ref=${back} class=${'sheet-backdrop' + (closing ? ' closing' : '')} onClick=${(e) => { if (e.target === e.currentTarget) close(); }}>
+    <div ref=${sheet} class=${'sheet' + (footer ? ' has-foot' : '')} role="dialog" aria-modal="true" aria-label=${label}>
       <span class="handle"></span>
       ${x && html`<button type="button" class="sheet-x" aria-label="Sluiten" onClick=${close}><${Icon} name="x" size=${20} /></button>`}
       ${children}
       ${footer && html`<div class="sheet-foot">${typeof footer === 'function' ? footer(close) : footer}</div>`}
     </div>
-  </div>`;
+  </div></${Portal}>`;
 }
 
 export function Confirm({ title, text, yes, no = 'Annuleren', danger, onYes, onClose }) {

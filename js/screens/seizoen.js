@@ -198,7 +198,7 @@ export function Seizoen({ state }) {
           <span class="mname"><${OppBadge} name=${m.opponent} size=${22} /> ${m.opponent || 'Tegenstander'}</span>
           <span class="msub">${scorers.length ? scorers.map((id) => nick(id) + (s.goals[id] > 1 ? ' ' + s.goals[id] + '×' : '')).join(', ') : s.score.us ? 'doelpunten zonder naam' : 'geen doelpunten'}</span>
         </span>
-        <span class=${'mscore ' + res}>${s.score.us} : ${s.score.them}</span>
+        <span class=${'mscore ' + res} data-hero=${'m-' + m.id}>${s.score.us} : ${s.score.them}</span>
       </button>
       <div class=${'collapse' + (isOpen ? ' open' : '')}><div>
         <div class="resdetail">

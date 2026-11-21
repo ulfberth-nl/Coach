@@ -7,6 +7,7 @@ import { keeperCounts, suggestKeeper, WHY_TEXT } from './home.js';
 import { nextScheduled, todayISO } from './seizoen.js';
 import { matchRules } from '../profiles.js';
 import { scheduleRefresh } from '../refresh.js';
+import { viewTransition } from '../motion.js';
 import { mutate, undoAction, SwapSheet, GroupSwapSheet, BenchSheet, GoalSheet, BreakSheet, JoinSheet, KeeperSheet } from './live.js';
 import { Field, Neon, Roll, Sheet, Confirm, Seg, Stepper, Icon, accentFor, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, beep, flash, unlockAudio, toast, go } from '../ui.js';
 
@@ -136,9 +137,10 @@ function PrepView({ state, match, team }) {
   const perMoment = Math.max(1, Math.min(5, team.rules.perMoment || 1));
   const every = swaps ? Math.round((M.matchEnd(team) / (swaps + team.periods)) / 30) / 2 : 0;
   const todo = [!setup.present && 'wie er is', team.keeper && !setup.keeper && 'de keeper', !setup.opponent && 'de tegenstander'].filter(Boolean);
+  // aftrap: het veld en het affiche gaan vloeiend over in het live-scherm, het scorebord valt erin
   const start = () => {
     unlockAudio();
-    mutateConcept((m) => M.startClock(m));
+    viewTransition('start', () => mutateConcept((m) => M.startClock(m)));
   };
   return html`<main class="matchscreen with-tabs">
     <${Affiche} match=${match} team=${team} onClick=${() => setSheet('opp')}>
@@ -667,7 +669,7 @@ function DoneView({ match, team }) {
     <${Affiche} match=${match} team=${team} onClick=${() => go('/afloop/' + match.id)} />
     <div class="card" style="flex:1 1 auto;align-items:center;justify-content:center;gap:10px;text-align:center">
       <span class="label">Afgelopen</span>
-      <span class="num" style="font-size:64px;line-height:1">${s.us}<span style="margin:0 6px;color:var(--line-2)">:</span>${s.them}</span>
+      <span class="num" style="font-size:64px;line-height:1" data-hero=${'m-' + match.id}>${s.us}<span style="margin:0 6px;color:var(--line-2)">:</span>${s.them}</span>
       <a class="btn soft" href=${'#/afloop/' + match.id}>Overzicht van de wedstrijd</a>
     </div>
     <button type="button" class="btn primary block startbtn" onClick=${() => update((d) => { d.currentMatchId = null; })}>Nieuwe wedstrijd klaarzetten</button>

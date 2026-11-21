@@ -123,6 +123,18 @@ export function haptic(kind = 'tap') {
 const HX_HOST = 'button, a[href]';
 const HX_SKIP = 'label, .no-hx';
 const useHx = () => isIOS || (typeof window !== 'undefined' && window.__HX === true);
+// De klik die het label doorgeeft aan de schakelaar mag nooit bij de knop aankomen. Deze wacht zit op de
+// schakelaar zelf: ook als de knop door de eerste klik al uit beeld is (bijv. een venster dat sluit),
+// wordt de tweede klik tegengehouden. Anders zou een actie twee keer gebeuren.
+function hxInputClick(e) {
+  e.stopPropagation();
+  const host = this.parentElement && this.parentElement.parentElement;
+  // een link navigeert niet meer zelf (het label neemt de klik over), dus hier
+  if (host && host.matches && host.matches('a[href]') && host.isConnected) {
+    const href = host.getAttribute('href');
+    if (href.charAt(0) === '#') location.hash = href; else location.href = host.href;
+  }
+}
 function addHx(el) {
   if (!el.matches(HX_HOST) || el.closest(HX_SKIP)) return;
   for (const c of el.children) if (c.classList.contains('hx')) return;
@@ -133,6 +145,7 @@ function addHx(el) {
   input.type = 'checkbox';
   input.setAttribute('switch', '');
   input.tabIndex = -1;
+  input.addEventListener('click', hxInputClick);
   label.appendChild(input);
   el.appendChild(label);
 }
@@ -155,18 +168,26 @@ function installHx() {
   document.addEventListener('click', (e) => {
     const t = e.target;
     if (!t || !t.parentElement) return;
-    if (t.classList && t.classList.contains('hx')) { lastHx = performance.now(); return; }
-    if (t.tagName === 'INPUT' && t.parentElement.classList.contains('hx')) {
-      // tweede klik die het label doorgeeft aan de schakelaar: niet nog eens naar de knop
-      e.stopPropagation();
-      // een link navigeert niet meer zelf (het label neemt de klik over), dus hier
-      const host = t.parentElement.parentElement;
-      if (host && host.matches('a[href]')) {
-        const href = host.getAttribute('href');
-        if (href.charAt(0) === '#') location.hash = href; else location.href = host.href;
-      }
-    }
+    if (t.classList && t.classList.contains('hx')) lastHx = performance.now();
   }, true);
+}
+
+// ---------- schermovergangen (View Transitions, iOS 18+) ----------
+// Oudere toestellen en 'Minder beweging' slaan de overgang over en tonen meteen het nieuwe scherm.
+export const canTransition = () => typeof document !== 'undefined' && typeof document.startViewTransition === 'function' && !reduced();
+export function viewTransition(kind, fn, after) {
+  if (!canTransition()) { fn(); return; }
+  const root = document.documentElement;
+  root.dataset.vt = kind;
+  try {
+    const t = document.startViewTransition(() => new Promise((res) => { fn(); setTimeout(() => { if (after) after(); res(); }, 0); }));
+    if (t.ready) t.ready.catch(() => {});
+    if (t.updateCallbackDone) t.updateCallbackDone.catch(() => {});
+    t.finished.catch(() => {}).finally(() => { if (root.dataset.vt === kind) delete root.dataset.vt; });
+  } catch (e) {
+    delete root.dataset.vt;
+    fn();
+  }
 }
 
 // ---------- één indruk-gedrag voor alle knoppen ----------
