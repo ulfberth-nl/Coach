@@ -253,6 +253,9 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
       <button type="button" class="btn primary" style="min-height:44px;padding:0 16px" onClick=${onSwapNow}>Nu wisselen</button>
     </div>`}
     ${compact && html`<div class="fieldcap">${title}${i > 0 && c.kind === 'swap' ? html` · ${multi ? html`<b>${c.ins.map(nick).join(', ')}</b> erin` : html`<b>${nick(c.in)}</b> erin voor ${nick(c.out)}`}` : ''}</div>`}
+    ${!compact && planner && html`<${NextCaption} i=${i} nx=${nx} c=${c} lines=${lines} team=${team} match=${match} nick=${nick} canPlan=${canPlan}
+      swapNo=${nx ? swapNoOf(nx) : 0} total=${cards.filter((x) => x.kind === 'swap').length} label=${label} onUnpin=${onUnpin}
+      isNow=${live ? i === nowIndex : i === 0} until=${live && nx ? nx.t - liveT : null} />`}
     <div ref=${zone} class="scrubzone">
       <div class=${'fieldbox' + (live && i < nowIndex ? ' past' : '') + (peek ? ' peeking' : '')}>
         ${peek && nx
@@ -270,7 +273,6 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
         </${BenchScroll}>
       </div>
     </div>
-    ${!compact && planner && html`<${NextCaption} cards=${cards} i=${i} nx=${nx} team=${team} match=${match} nick=${nick} canPlan=${canPlan} swapNo=${nx ? swapNoOf(nx) : 0} label=${label} onUnpin=${onUnpin} />`}
     ${children}
     ${!compact && !planner && (i === 0
       ? html`<span class="sub">${editable ? 'Sleep een speler naar een andere plek of naar de bank om te ruilen. Het plan rekent meteen mee.' : 'Startopstelling.'}</span>`
@@ -305,17 +307,26 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   </div>`;
 }
 
-// Planner: wat er bij het volgende moment gebeurt, met speldje (vastgezet door jou) of 'de app kiest'.
-function NextCaption({ cards, i, nx, team, match, nick, canPlan, swapNo, label, onUnpin }) {
+// Planner: het verhaal van het volgende moment, boven het veld. Per paar wie erin komt voor wie, waar hij gaat
+// spelen en wie doorschuift (in coachtaal: linksvoor, rechtsachter, …). Met speldje of 'de app kiest'.
+function NextCaption({ i, nx, c, lines, team, match, nick, canPlan, swapNo, total, label, onUnpin, isNow, until }) {
   if (match.finished) return null;
-  if (!nx) return html`<div class="nextcap"><span class="nc-what">Geen wissels meer in deze wedstrijd.</span></div>`;
-  if (nx.kind === 'lineup') return html`<div class="nextcap"><span class="nc-when">${M.periodWord(team) === 'helft' ? 'Rust' : 'Pauze'} · ${label(nx.t)}</span><span class="nc-what">Nieuwe opstelling voor de ${M.periodLabel(team, nx.period)}</span></div>`;
-  const pairs = nx.pairs || [{ out: nx.out, in: nx.in, shift: nx.shift }];
-  return html`<div class=${'nextcap' + (nx.pinned ? ' pinned' : '')} key=${'nc' + nx.t}>
-    <span class="nc-when">${i === 0 && !match.started ? 'Eerste wissel' : 'Daarna'} · wissel ${swapNo} · ${label(nx.t)}</span>
-    <span class=${'nc-what' + (pairs.length > 1 ? ' multi' : '')}>${pairs.map((p) => html`<span class="nc-pair"><span class="chg in">↑ ${nick(p.in)}</span> voor <span class="chg out">↓ ${nick(p.out)}</span>${p.shift ? html` <span class="chg sh">↔ ${nick(p.shift.id)}</span> naar ${LINE_NAMES[p.shift.to]}` : ''}</span>`)}</span>
+  if (!nx) return html`<div class="nextcap story"><span class="nc-when">Hierna</span><span class="nc-what">Geen wissels meer in deze wedstrijd.</span></div>`;
+  if (nx.kind === 'lineup') return html`<div class="nextcap story"><span class="nc-when">${M.periodWord(team) === 'helft' ? 'Rust' : 'Pauze'} · ${label(nx.t)}</span><span class="nc-what">Nieuwe opstelling voor de ${M.periodLabel(team, nx.period)}</span></div>`;
+  const story = M.swapStory(c.slots, lines, nx.pairs || [{ out: nx.out, in: nx.in, shift: nx.shift }]);
+  const when = until != null && isNow
+    ? (until > 0 ? `over ${M.fmt(until)}` : until > -1 ? 'nu' : `${M.fmt(-until)} te laat`)
+    : label(nx.t);
+  return html`<div class=${'nextcap story' + (nx.pinned ? ' pinned' : '') + (until != null && isNow && until <= 60 ? ' soon' : '')} key=${'nc' + nx.t}>
+    <span class="nc-when">${isNow ? (match.started ? 'Volgende wissel' : 'Eerste wissel') : 'Daarna'} · ${swapNo} van ${total} · ${when}</span>
+    <div class="nc-lines">${story.map((st) => html`<div class="nc-line" key=${st.in + st.out}>
+      <span class="nc-main"><span class="chg in">↑ ${nick(st.in)}</span> erin voor <span class="chg out">↓ ${nick(st.out)}</span></span>
+      <span class="nc-sub">${st.shift
+        ? html`<span class="chg sh">↔ ${nick(st.shift)}</span> ${st.shiftPos ? st.shiftPos.naar : 'schuift door'}${st.inPos ? html`<span class="nc-dim"> · ${nick(st.in)} ${st.inPos.op}</span>` : ''}`
+        : st.inPos ? html`${nick(st.in)} ${st.inPos.op}` : ''}</span>
+    </div>`)}</div>
     ${nx.pinned
       ? html`<span class="nc-pin"><span class="pinbadge"><${Icon} name="pin" size=${14} />Vastgezet door jou</span><button type="button" class="linkbtn" onClick=${() => onUnpin && onUnpin(nx.t, swapNo)}>Losmaken</button></span>`
-      : canPlan ? html`<span class="nc-hint">De app kiest dit. Sleep een speler om het zelf te bepalen.</span>` : null}
+      : canPlan ? html`<span class="nc-hint">De app kiest dit. Sleep op het veld om het zelf te bepalen.</span>` : null}
   </div>`;
 }

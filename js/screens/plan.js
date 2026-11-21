@@ -64,8 +64,8 @@ function Planner({ match, team }) {
   const swapNow = () => {
     const pairs = group.map((s) => ({ out: s.out, in: s.in, shift: s.shift }));
     if (!pairs.length) return;
-    mutate((m, t) => (pairs.length > 1 ? M.doSwapGroup(m, t, pairs) : M.doSwap(m, t, pairs[0].out, pairs[0].in, pairs[0].shift)));
-    liveAct.next = pairs.length > 1 ? { outs: pairs.map((p) => p.out), undos: 1 } : { out: pairs[0].out, undos: 1 };
+    // de wissel zelf gebeurt in het live-scherm, zodat je de animatie ziet
+    liveAct.run = { pairs };
     go('/');
   };
   const later = () => { mutate((m, t) => M.delay(m, t, 60)); toast('Wissel 1 minuut later'); };

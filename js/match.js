@@ -77,6 +77,35 @@ export function slotOf(slots, id) {
 }
 
 // Pas een wissel toe op de vaste plekken (wie erin komt neemt de plek; bij doorschuiven ruilen de plekken).
+// Plek op het veld in coachtaal: linksvoor, rechtsachter, centraal midden, … (links = links op het scherm,
+// het team speelt naar boven). Bij één speler in een linie: voorin, in het midden, achterin.
+const BASE = { V: 'voor', M: 'midden', A: 'achter' };
+export function posName(line, i, n) {
+  if (!line) return null;
+  if (n <= 1) return { V: { op: 'voorin', naar: 'naar voren', kort: 'voorin' }, M: { op: 'in het midden', naar: 'naar het midden', kort: 'midden' }, A: { op: 'achterin', naar: 'naar achteren', kort: 'achterin' } }[line];
+  const mid = (n - 1) / 2;
+  let name;
+  if (i === 0) name = 'links' + BASE[line];
+  else if (i === n - 1) name = 'rechts' + BASE[line];
+  else if (i === mid) name = line === 'V' ? 'midvoor' : 'centraal ' + BASE[line];
+  else name = 'centraal ' + BASE[line] + (i < mid ? ' links' : ' rechts');
+  return { op: 'op ' + name, naar: 'naar ' + name, kort: name };
+}
+const posOf = (slots, lines, id) => { const k = slotOf(slots, id); return k ? posName(k[0], +k.slice(1), lines[k[0]] || 0) : null; };
+
+// Het verhaal van een wisselmoment: per paar wie erin komt voor wie, waar hij gaat spelen en wie doorschuift
+// (en waarheen). Paren gaan na elkaar, zoals de wissels zelf.
+export function swapStory(slots, lines, pairs) {
+  let cur = { ...slots };
+  return pairs.map((p) => {
+    const shift = p.shift && slotOf(cur, p.shift.id) ? p.shift.id : null;
+    const out = posOf(cur, lines, p.out);
+    const line = shift ? { in: p.in, out: p.out, shift, shiftPos: out, inPos: posOf(cur, lines, shift) } : { in: p.in, out: p.out, inPos: out };
+    cur = slotSwap(cur, p.out, p.in, shift ? p.shift : null);
+    return line;
+  });
+}
+
 export function slotSwap(slots, out, inn, shift) {
   const next = { ...slots };
   const outSlot = slotOf(next, out);

@@ -34,6 +34,20 @@ assert.equal(M.formationLabel({ A: 2, M: 1, V: 2 }, 'V', 'M'), 'Naar het midden 
   assert.deepEqual(t, { A0: 'a', A1: 'b', M0: 'c', M1: 'e', V0: 'd' });
 }
 
+// verhaal van een wissel in coachtaal
+assert.equal(M.posName('V', 1, 2).kort, 'rechtsvoor');
+assert.equal(M.posName('A', 0, 2).op, 'op linksachter');
+assert.equal(M.posName('M', 0, 1).naar, 'naar het midden');
+assert.equal(M.posName('V', 1, 3).kort, 'midvoor');
+assert.equal(M.posName('A', 2, 4).kort, 'centraal achter rechts');
+{
+  const slots = { A0: 'a', A1: 'b', M0: 'c', V0: 'd', V1: 'e' };
+  const L = { A: 2, M: 1, V: 2 };
+  assert.deepEqual(M.swapStory(slots, L, [{ out: 'e', in: 'x' }]), [{ in: 'x', out: 'e', inPos: M.posName('V', 1, 2) }]);
+  const st = M.swapStory(slots, L, [{ out: 'e', in: 'x', shift: { id: 'c', to: 'V' } }])[0];
+  assert.equal(st.shift, 'c'); assert.equal(st.shiftPos.kort, 'rechtsvoor'); assert.equal(st.inPos.op, 'in het midden');
+}
+
 // klaargezette wedstrijd: aanvaller naar het middenveld
 const match = M.createMatch(team, { opponent: 'Test', present: ids, keeperId, priority: 'eerlijk' });
 const base = { ...team.lines };
