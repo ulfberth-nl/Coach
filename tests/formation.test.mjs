@@ -115,4 +115,37 @@ const sum = M.summary(match, team);
 const mins = ids.filter((id) => id !== keeperId).map((id) => sum.state.played[id] / 60);
 console.log('opstelling', M.formationText(match.lines), '·', swaps, 'wissels · speeltijd', Math.min(...mins).toFixed(1), '-', Math.max(...mins).toFixed(1), 'min');
 cardsOk(match);
+
+// rust: drie opstellingen, en een andere opstelling in de rust geldt daarna
+{
+  const m3 = M.createMatch(team, { opponent: 'R', present: ids, keeperId, priority: 'eerlijk' });
+  M.startClock(m3);
+  const L3 = M.periodLen(team);
+  for (;;) { const n = M.nextSwap(m3, team); const T = M.gameTime(m3, team); if (!n || n.type !== 'swap' || n.t >= L3) break; fakeNow += Math.max(0, n.t - T) * 1000; M.doSwap(m3, team, n.out, n.in, n.shift); }
+  fakeNow += (L3 - M.gameTime(m3, team)) * 1000;
+  M.endPeriod(m3, team);
+  assert.ok(M.lineupPending(m3, team));
+  const o = M.breakOptions(m3, team);
+  for (const k of ['aanbevolen', 'start', 'eind']) {
+    assert.ok(o[k], k);
+    assert.deepEqual(count(o[k].pos), { A: o[k].lines.A, M: o[k].lines.M, V: o[k].lines.V });
+    assert.equal(Object.keys(o[k].pos).length + o[k].bench.length, ids.length - (keeperId ? 1 : 0));
+    assert.ok(!(keeperId in o[k].pos) && o[k].bench.indexOf(keeperId) === -1, 'keeper niet in veld of bank');
+  }
+  assert.deepEqual(o.start.pos, m3.events[0].pos, 'zoals de start van de 1e helft');
+  // aanvaller naar het midden in de rust
+  const lu = o.aanbevolen;
+  const a = Object.keys(lu.pos).find((id) => lu.pos[id] === 'V');
+  const lines = M.formationAfter(lu.lines, 'V', 'M');
+  M.applyLineup(m3, team, { ...lu, lines, slots: M.moveSlot(lu.slots, a, 'V', 'M', lines, 0), pos: { ...lu.pos, [a]: 'M' } });
+  assert.deepEqual(m3.lines, lines);
+  M.startClock(m3);
+  const ds = M.derive(m3, team, M.gameTime(m3, team)).state;
+  assert.deepEqual(count(ds.pos), { A: lines.A, M: lines.M, V: lines.V });
+  for (const s of m3.plan.steps) if (s.pos) assert.deepEqual(count(s.pos), { A: lines.A, M: lines.M, V: lines.V });
+  const cs = M.timeline(m3, team).cards;
+  assert.deepEqual(cs[0].lines, team.lines, '1e helft nog in de oude opstelling');
+  assert.deepEqual(cs[cs.length - 1].lines, lines);
+  console.log('rust: aanbevolen/start/eind ok, opstelling na de rust', M.formationText(lines));
+}
 console.log('Opstellingstest geslaagd');

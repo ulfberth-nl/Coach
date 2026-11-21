@@ -8,7 +8,7 @@ import { nextScheduled, todayISO } from './seizoen.js';
 import { matchRules } from '../profiles.js';
 import { scheduleRefresh } from '../refresh.js';
 import { viewTransition, haptic, reduced, T as TEMPO } from '../motion.js';
-import { mutate, undoAction, liveAct, SwapSheet, GroupSwapSheet, BenchSheet, GoalSheet, BreakSheet, JoinSheet, KeeperSheet } from './live.js';
+import { mutate, undoAction, liveAct, SwapSheet, GroupSwapSheet, BenchSheet, GoalSheet, JoinSheet, KeeperSheet } from './live.js';
 import { Field, Neon, Roll, Sheet, Confirm, Seg, Stepper, Icon, accentFor, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, BenchScroll, beep, flash, unlockAudio, toast, go } from '../ui.js';
 
 // slepen in de startopstelling: twee spelers ruilen, of een speler naar een lege plek in een andere linie
@@ -478,11 +478,51 @@ function LiveView({ match, team }) {
     if (timeUp && !alerted.current['end' + match.clock.period]) { alerted.current['end' + match.clock.period] = 1; beep(2, 520); flash(); }
   }, [tick, running]);
 
+  // ---------- rust: iedereen staat aan de kant, je begint opnieuw met één opstelling ----------
+  const restOpts = useMemo(() => (pending ? M.breakOptions(match, team) : null), [pending, match, team]);
+  const [rest, setRest] = useState(null);
+  useEffect(() => {
+    if (!pending) { if (rest) setRest(null); return; }
+    // standaard: aanbevolen; na een keeperwissel opnieuw (de keeper hoort niet in het veld of op de bank)
+    if (restOpts && (!rest || rest.keeper !== restOpts.keeper)) setRest({ kind: rest && rest.kind !== 'eigen' ? rest.kind : 'aanbevolen', lu: restOpts[rest && rest.kind !== 'eigen' ? rest.kind : 'aanbevolen'], keeper: restOpts.keeper });
+  }, [pending, restOpts && restOpts.keeper]);
+  const pickRest = (kind) => { if (restOpts && restOpts[kind]) setRest({ kind, lu: restOpts[kind], keeper: restOpts.keeper }); };
+  const restDrop = (a, b) => {
+    if (!rest) return;
+    const lu = rest.lu;
+    if (b.slice(0, 5) === 'line:') {
+      const [, to, at] = b.split(':');
+      const from = lu.pos[a];
+      const lines = M.formationAfter(lu.lines, from, to);
+      if (!lines) return;
+      setRest({ ...rest, kind: 'eigen', lu: { ...lu, lines, slots: M.moveSlot(lu.slots, a, from, to, lines, +at), pos: { ...lu.pos, [a]: to } } });
+      return;
+    }
+    setRest({ ...rest, kind: 'eigen', lu: { ...lu, ...M.swapInLineup(lu, a, b) } });
+  };
+  const restHint = (a, b) => {
+    if (!rest) return null;
+    const lu = rest.lu;
+    if (b.slice(0, 5) === 'line:') return a in lu.pos ? M.formationLabel(lu.lines, lu.pos[a], b.split(':')[1]) : null;
+    const aF = a in lu.pos, bF = b in lu.pos;
+    if (aF === bF) return 'Ruil met ' + nick(b);
+    return aF ? nick(b) + ' begint' : 'Begint voor ' + nick(b);
+  };
+  const startRest = () => {
+    unlockAudio();
+    const lu = rest ? rest.lu : null;
+    mutate((m, t) => {
+      if (M.lineupPending(m, t)) { const x = lu || M.breakProposal(m, t); if (x) M.applyLineup(m, t, x); }
+      M.startClock(m);
+    });
+    haptic('success');
+  };
+
   const toggleClock = () => {
     unlockAudio();
     if (timeUp) { setSheet({ type: 'end' }); return; }
     if (running) { mutate((m) => M.pauseClock(m)); return; }
-    if (pending) { setSheet({ type: 'break' }); return; }
+    if (pending) { startRest(); return; }
     mutate((m) => M.startClock(m));
   };
 
@@ -512,11 +552,12 @@ function LiveView({ match, team }) {
     return aF ? nick(b) + ' erin' : 'Erin voor ' + nick(b);
   };
   useDragSwap(zone, !pending && !goal, onDrag, dragHint);
+  useDragSwap(zone, pending && !goal && !!rest, restDrop, restHint);
 
   const tapField = (id) => {
     if (goal === 'scorer') { scoreFor(id); return; }
     if (justDragged(zone)) return;
-    if (pending) { setSheet({ type: 'break' }); return; }
+    if (pending) return;
     if (group.length > 1 && group.some((s) => s.out === id)) { setSheet({ type: 'group' }); return; }
     const inn = next && next.out === id ? next.in : M.suggestIn(match, team, id);
     if (!inn) { toast('Er zit niemand inzetbaar op de bank'); return; }
@@ -524,7 +565,7 @@ function LiveView({ match, team }) {
   };
   const tapBench = (id) => { if (!justDragged(zone)) setSheet({ type: 'bench', id }); };
   const openNext = () => {
-    if (pending) setSheet({ type: 'break' });
+    if (pending) return;
     else if (timeUp) setSheet({ type: 'end' });
     // de planner: groot veld, nu en straks, wissel nu of plan vooruit
     else if (next) go('/plan');
@@ -681,6 +722,32 @@ function LiveView({ match, team }) {
     };
   } else isl = { st: 'calm', k: 'Geen wissels meer', t1: `deze ${pw}`, t2: '', ring: null };
   const C = 207.3;
+  // rust: paneel met drie opstellingen en de startknop, in plaats van het eiland
+  const restLu = pending && rest ? rest.lu : null;
+  let restPanel = null;
+  if (restLu) {
+    const prevLabel = M.periodLabel(team, match.clock.period - 1);
+    const cur = d.state.pos;
+    const comingIn = Object.keys(restLu.pos).filter((id) => !(id in cur));
+    const list = (ids) => ids.map(nick).join(ids.length > 2 ? ', ' : ' en ').replace(/, ([^,]*)$/, ' en $1');
+    const repl = (restLu.repl || []).map((r) => `${nick(r.in)} voor ${nick(r.out)}`).join(', ');
+    const why = rest.kind === 'eigen'
+      ? 'Eigen opstelling. Kies hierboven om opnieuw te beginnen.'
+      : rest.kind === 'aanbevolen'
+        ? (comingIn.length ? `${list(comingIn)} ${comingIn.length > 1 ? 'beginnen: zij speelden' : 'begint: speelde'} het minst.` : 'Dezelfde spelers als aan het eind, op hun beste plek.')
+        : `Zoals ${rest.kind === 'start' ? 'de start' : 'het eind'} van de ${prevLabel}.${repl ? ' ' + repl + ' (niet meer inzetbaar).' : ''}`;
+    restPanel = html`<div class="restpanel" role="region" aria-label="Opstelling na de rust">
+      <div class="rp-head">
+        <span class="rp-k">${M.periodWord(team) === 'helft' ? 'Rust' : 'Pauze'}<span class="rp-form" key=${M.formationText(restLu.lines)}>${M.formationText(restLu.lines)}</span></span>
+        <button type="button" class="rp-start" onClick=${startRest}><${Icon} name="play" size=${16} />Start ${M.periodLabel(team, match.clock.period)}</button>
+      </div>
+      <div class=${'rp-seg' + (rest.kind === 'eigen' ? ' none' : '')}>
+        <${Seg} label="Opstelling na de rust" value=${rest.kind} onChange=${pickRest}
+          options=${[['aanbevolen', 'Aanbevolen'], ['start', 'Als start'], ['eind', 'Als eind']]} />
+      </div>
+      <span class="rp-why" key=${rest.kind + ':' + comingIn.join()}>${why}</span>
+    </div>`;
+  }
   const noteOk = focusNote && !goal && !pending && !timeUp && !(next && countdown <= 60);
   const fIcon = { aanvallen: 'up2', balans: 'even', verdedigen: 'down2' };
   const island = noteOk ? html`<button type="button" class=${'island focusnote f-' + focusNote.stand} key=${'fn' + focusNote.key} onClick=${() => setFocusNote(null)}>
@@ -737,7 +804,7 @@ function LiveView({ match, team }) {
   const nextLabel = M.periodLabel(team, match.clock.period);
   const startable = !running && !pending && el < 1 && match.clock.period > 0;
   const bState = running ? (timeUp ? 'Tijd!' : nextLabel) : pending ? 'Rust' : startable ? 'Klaar voor de ' + nextLabel : 'Pauze · ' + nextLabel;
-  const bRight = pending ? 'tik: opstelling ' + nextLabel : timeUp ? 'tik om af te sluiten' : startable ? 'tik: start ' + nextLabel : el <= L ? 'nog ' + M.fmt(L - el) : '+' + M.fmt(el - L);
+  const bRight = pending ? 'tik: start ' + nextLabel : timeUp ? 'tik om af te sluiten' : startable ? 'tik: start ' + nextLabel : el <= L ? 'nog ' + M.fmt(L - el) : '+' + M.fmt(el - L);
   const scoreCls = d.score.us > d.score.them ? 'ahead' : d.score.us < d.score.them ? 'behind' : 'level';
   const board = html`<section class=${'board' + (running ? '' : ' paused') + (timeUp ? ' over' : '') + (goal === 'who' ? ' goalwho' : '') + (cele ? ' cele ' + (cele.us ? 'us' : 'them') : '')} key="board">
     ${cele && html`<span class="b-shine" key=${'sh' + cele.key} aria-hidden="true"></span>`}
@@ -769,11 +836,11 @@ function LiveView({ match, team }) {
       <button type="button" class="iconbtn" aria-label="Menu" onClick=${() => setSheet({ type: 'menu' })}><${Icon} name="more" size=${22} /></button>
     </${Affiche}>
     ${board}
-    ${island}
+    ${restLu ? restPanel : island}
     <div class="grow-field" ref=${zone}>
-      <div class=${'fieldbox' + (goal ? ' goalmode' : '')}>
-        <${Field} slots=${d.state.slots} lines=${M.linesOf(match, team)} keeperId=${d.state.keeper} nick=${nick} height="auto" formable=${!pending && !goal}
-          onTap=${tapField} onKeeper=${goal === 'scorer' ? (id) => scoreFor(id) : !pending ? () => setSheet({ type: 'keeper' }) : null}
+      <div class=${'fieldbox' + (goal ? ' goalmode' : '') + (restLu ? ' restmode' : '')}>
+        <${Field} slots=${restLu ? restLu.slots : d.state.slots} lines=${restLu ? restLu.lines : M.linesOf(match, team)} keeperId=${d.state.keeper} nick=${nick} height="auto" formable=${!goal}
+          onTap=${tapField} onKeeper=${goal === 'scorer' ? (id) => scoreFor(id) : () => setSheet({ type: 'keeper' })}
           picking=${goal === 'scorer'} hot=${cele && cele.us ? cele.id : null} hotKey=${cele ? cele.key : 0}
           neon=${next && !pending && !goal && !timeUp && !calmNext ? group.map((s) => s.out) : []} sub=${(id) => M.fmt(d.state.played[id])}
           ghosts=${ghosts} animate accent=${accent} badges=${d.goals} cheer=${cheer} />
@@ -788,13 +855,13 @@ function LiveView({ match, team }) {
       </div>
       <div class="benchrow">
         <span class="label">Bank</span>
-        <${BenchScroll} focus=${next && !pending ? (group.find((s) => d.state.bench.indexOf(s.in) !== -1) || {}).in : null}>
-          ${d.state.bench.map((id) => {
+        <${BenchScroll} key=${restLu ? 'rest' : 'live'} focus=${next && !pending ? (group.find((s) => d.state.bench.indexOf(s.in) !== -1) || {}).in : null}>
+          ${(restLu ? restLu.bench : d.state.bench).map((id) => {
             const dis = d.state.disabled[id];
             const isNext = next && !pending && !calmNext && group.some((s) => s.in === id);
             const ac = accent(id);
             const pill = html`<button type="button" key=${id} data-pid=${id} class=${'benchpill' + (dis ? ' off' : '') + (everDropped(id) ? ' dropped' : '') + (dropped(id) ? ' drop' : '') + (ac ? ' acc' : '')} style=${ac ? '--acc:' + ac : ''} onClick=${() => tapBench(id)}>
-              ${nick(id)}${d.goals[id] ? html`<span class="bgoal">${d.goals[id]}</span>` : ''}<span class="t">${dis ? (dis === 'wedstrijd' ? 'klaar' : 'rust') : isNext ? 'klaarmaken' : M.mins(d.state.played[id]) + ' min'}</span>
+              ${nick(id)}${d.goals[id] ? html`<span class="bgoal">${d.goals[id]}</span>` : ''}<span class="t">${dis && !restLu ? (dis === 'wedstrijd' ? 'klaar' : 'rust') : isNext ? 'klaarmaken' : M.mins(d.state.played[id]) + ' min'}</span>
             </button>`;
             return isNext ? html`<${Neon} key=${'n' + id}>${pill}</${Neon}>` : pill;
           })}
@@ -807,7 +874,6 @@ function LiveView({ match, team }) {
     ${sheet && sheet.type === 'swap' && html`<${SwapSheet} match=${match} team=${team} d=${d} init=${sheet} counts=${counts} onClose=${() => setSheet(null)} onDone=${showAct} />`}
     ${sheet && sheet.type === 'group' && html`<${GroupSwapSheet} match=${match} team=${team} d=${d} counts=${counts} onClose=${() => setSheet(null)} onDone=${showAct} />`}
     ${sheet && sheet.type === 'bench' && html`<${BenchSheet} match=${match} team=${team} d=${d} id=${sheet.id} onClose=${() => setSheet(null)} openSwap=${(s) => setSheet({ type: 'swap', ...s, planned: false })} />`}
-    ${sheet && sheet.type === 'break' && html`<${BreakSheet} match=${match} team=${team} d=${d} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'join' && html`<${JoinSheet} match=${match} team=${team} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'keeper' && html`<${KeeperSheet} match=${match} team=${team} d=${d} onClose=${() => setSheet(null)} />`}
     ${sheet && sheet.type === 'opp' && html`<${OpponentSheet} match=${match} onClose=${() => setSheet(null)} />`}
@@ -819,7 +885,6 @@ function LiveView({ match, team }) {
       onYes=${() => {
         const fin = mutate((m, t) => { M.endPeriod(m, t); return m.finished; });
         if (fin) setTimeout(() => go('/afloop/' + match.id), 0);
-        else if (team.rules.newLineupAtBreak) setTimeout(() => setSheet({ type: 'break' }), 0);
       }}
       onClose=${() => setSheet((s) => (s && s.type === 'end' ? null : s))} />`}
     ${sheet && sheet.type === 'finish' && html`<${Confirm} title="Wedstrijd nu afsluiten?" text="Bijvoorbeeld als hij eerder stopt. De tijd die niet gespeeld is telt niet mee."
