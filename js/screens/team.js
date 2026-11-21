@@ -8,7 +8,7 @@ import { PROFILES, PROFILE_ORDER, profileOf, cachedTune, rememberTune, consequen
 import { compute } from '../compute.js';
 import { scheduleRefresh } from '../refresh.js';
 
-export const APP_VERSION = '0.20.0';
+export const APP_VERSION = '0.21.0';
 
 // regels die het wisselprofiel bepaalt; zet je er zelf een, dan wordt het profiel 'Eigen'
 const TUNED = ['marge', 'equalTime', 'evenOften', 'maxBenchOn', 'maxBench', 'minInterval', 'turnsPerPeriod', 'priority', 'strongBias'];
@@ -240,7 +240,7 @@ export function Team({ state }) {
       <span class="label">Wie maakt het plan</span>
       <${Seg} label="Wie maakt het plan" value=${r.planMode === 'eigen' ? 'eigen' : 'app'} onChange=${(v) => setRule('planMode', v)} options=${[['app', 'De app'], ['eigen', 'Ikzelf']]} />
       <span class="small">${r.planMode === 'eigen'
-        ? 'Je maakt zelf het plan, per periode. De app adviseert alleen als je erom vraagt. Per wedstrijd kun je dit nog veranderen.'
+        ? 'Je maakt zelf het plan in een paar stappen. Per wedstrijd kies je hoe je speelt: Sterkste opstelling (iedereen in zijn kracht, wisselen binnen de linies) of Gebalanceerd (eerlijke speeltijd, met oog voor voorkeuren). De app adviseert alleen als je erom vraagt.'
         : 'De app maakt het plan; jij kunt momenten vastzetten. Per wedstrijd kun je ook zelf plannen.'}</span>
       <span class="sub">Kies hoe je wilt wisselen. De app rekent het door voor je ${squad.length} spelers, en per wedstrijd opnieuw met wie er is.</span>
       <div class="profiles" role="radiogroup" aria-label="Wisselprofiel">
