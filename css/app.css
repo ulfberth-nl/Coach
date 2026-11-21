@@ -1247,3 +1247,51 @@ html.plsticky-on .toast { bottom: calc(92px + var(--safe-b)) !important; }
 .nc-sub:empty { display: none; }
 .nc-dim { font-weight: 700; color: var(--muted); }
 .nextcap.story .chg { white-space: nowrap; display: inline-block; }
+
+/* ================= v0.18.2: kleurranden altijd aan, ronde wisselknop, planner-veld zo groot als live ================= */
+/* zwevers hebben altijd hun kleurrand: groen = erin, blauw = schuift door; in de laatste minuut sneller en feller */
+.ghost { padding: 3px; opacity: .88; }
+.ghost::before { content: ''; position: absolute; inset: 0; border-radius: inherit; background: conic-gradient(from var(--spin), #22C55E, #BBF7D0 30%, #FFFFFF 50%, #4ADE80 75%, #22C55E); animation: spin 3.4s linear infinite; box-shadow: 0 0 10px rgba(74,222,128,.5); }
+.ghost.shift { opacity: .86; }
+.ghost.shift::before { background: conic-gradient(from var(--spin), #2B57C9, #BFD0FF 30%, #FFFFFF 50%, #7FA6FF 75%, #2B57C9); box-shadow: 0 0 10px rgba(127,166,255,.5); }
+.ghost.hot { opacity: .98; }
+.ghost.hot::before { animation-duration: 1.6s; box-shadow: 0 0 16px rgba(74,222,128,.75); }
+.ghost.shift.hot::before { box-shadow: 0 0 14px rgba(127,166,255,.7); }
+.ghost.pinned b { box-shadow: 0 0 0 2px var(--orange), 0 8px 18px -6px rgba(0,0,0,.45); }
+.reduce .ghost::before { animation: none; }
+
+/* eiland met losse ronde knop: tik op de tekst = planner, tik op de ring = nu wisselen */
+.islandwrap { position: relative; z-index: 2; flex: 0 0 auto; }
+.islandwrap .island { width: 100%; }
+.i-ringspace { flex: 0 0 auto; width: 80px; height: 1px; }
+.islandwrap > .i-ring { position: absolute; right: 4px; top: 50%; margin: -42px 0 0; border: none; padding: 0; color: var(--ink); font: inherit; z-index: 3; touch-action: manipulation; }
+.islandwrap.hot > .i-ring { background: var(--navy); color: #fff; box-shadow: 0 0 0 3px rgba(255,255,255,.9), 0 10px 26px -8px rgba(13,27,69,.6); animation: breathe var(--breathe, 1.4s) ease-in-out infinite; }
+.islandwrap.hot > .i-ring .track { stroke: rgba(255,255,255,.14); }
+.islandwrap.hot > .i-ring .arc { stroke: var(--orange); filter: drop-shadow(0 0 5px rgba(245,165,36,.8)); }
+.islandwrap.late > .i-ring .arc { stroke: var(--red); filter: drop-shadow(0 0 5px rgba(229,72,77,.8)); }
+.islandwrap > .i-late { z-index: 4; }
+/* de wisselknop: pijlen in een rondje, met de tijd eronder */
+.swaplbl { flex-direction: column; gap: 1px; }
+.i-arrows { display: inline-flex; color: var(--blue-2); transition: color var(--t-small) ease; }
+.i-arrows svg { stroke-width: 2.6; }
+.i-time { font-size: 14px; line-height: 1; }
+.swapbtn.soon .i-arrows { color: var(--orange); animation: arrowsTurn 2.6s var(--spring-soft) infinite; }
+.swapbtn.due .i-time { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+.swapbtn.due .i-arrows { animation: arrowsTurn 1.3s var(--spring-play) infinite; filter: drop-shadow(0 0 6px rgba(245,165,36,.8)); }
+@keyframes arrowsTurn { 0% { rotate: 0deg; } 55%, 100% { rotate: 360deg; } }
+/* bij tikken: één snelle slag rond, de ring licht op en veert */
+.spinning > .swapbtn { animation: ringFire .5s var(--spring-play) both !important; }
+.spinning > .swapbtn .i-arrows { animation: arrowsFire .36s cubic-bezier(.3,.7,.2,1) both !important; color: var(--orange); }
+@keyframes arrowsFire { from { rotate: 0deg; scale: 1; } 60% { scale: 1.25; } to { rotate: 540deg; scale: 1; } }
+@keyframes ringFire { 0% { scale: 1; } 35% { scale: .88; box-shadow: 0 0 0 6px rgba(245,165,36,.55), 0 10px 26px -8px rgba(13,27,69,.6); } 100% { scale: 1; } }
+.reduce .swapbtn .i-arrows, .reduce .spinning > .swapbtn { animation: none !important; }
+@media (max-height: 720px) { .i-ringspace { width: 70px; } .islandwrap > .i-ring { margin-top: -37px; } .i-time { font-size: 13px; } }
+
+/* planner: het veld even groot als live (zelfde breedte en hoogte), zodat er ook 11 op passen */
+.screen.planner { padding-left: 12px; padding-right: 12px; }
+.planner .plcard .scrubzone { margin: 0 -10px; }
+.planner .plcard .fieldbox { flex: none; min-height: 0; height: clamp(333px, calc(100dvh - 354px), 640px); }
+.planner .plcard .benchrow { padding: 0 10px; }
+.i-ring .i-arrows svg { position: static; inset: auto; width: 22px; height: 22px; transform: none; overflow: visible; }
+.swapbtn.due .i-arrows svg { width: 28px; height: 28px; }
+@media (max-height: 720px) { .i-ring .i-arrows svg { width: 19px; height: 19px; } .swapbtn.due .i-arrows svg { width: 24px; height: 24px; } }

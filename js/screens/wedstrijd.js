@@ -530,6 +530,22 @@ function LiveView({ match, team }) {
     else if (next) go('/plan');
   };
 
+  // ronde wisselknop in het eiland: de pijlen draaien een slag rond, dan gebeurt de wissel op het veld
+  const [spinning, setSpinning] = useState(false);
+  const [spinKey, setSpinKey] = useState(0);
+  const swapFromRing = () => {
+    if (spinning || !group.length) return;
+    const pairs = group.map((s) => ({ out: s.out, in: s.in, shift: s.shift }));
+    setSpinning(true);
+    setSpinKey((k) => k + 1);
+    haptic('select');
+    setTimeout(() => {
+      mutate((m, t) => (pairs.length > 1 ? M.doSwapGroup(m, t, pairs) : M.doSwap(m, t, pairs[0].out, pairs[0].in, pairs[0].shift)));
+      showAct(pairs.length > 1 ? { outs: pairs.map((p) => p.out), undos: 1 } : { out: pairs[0].out, undos: 1 });
+      setSpinning(false);
+    }, reduced() ? 0 : 360);
+  };
+
   // ---------- wissel-eiland ----------
   const short = (s, n = 12) => (s && s.length > n ? s.slice(0, n - 1) + '…' : s);
   const LORD = { V: 0, M: 1, A: 2 };
@@ -553,6 +569,7 @@ function LiveView({ match, team }) {
       late: late ? '−' + M.fmt(-countdown) : null,
       frac: Math.max(0, Math.min(1, (T - (match.plan ? match.plan.at : 0)) / Math.max(1, next.t - (match.plan ? match.plan.at : 0)))),
       breathe: countdown <= 0 ? 0.55 : 0.55 + (Math.max(0, countdown) / 60) * 1.1,
+      swap: true,
     };
   } else isl = { st: 'calm', k: 'Geen wissels meer', t1: `deze ${pw}`, t2: '', ring: null };
   const C = 207.3;
@@ -567,11 +584,22 @@ function LiveView({ match, team }) {
     <span class="i-txt"><span class="i-k">Goal voor ${short(team.name, 18)}</span><span class="i-t1">Wie scoorde?</span><span class="i-t2">Tik de speler in het veld <span class="ga-arrow" aria-hidden="true">↓</span></span></span>
     <button type="button" class="ga-btn jelly" onClick=${() => scoreFor(null)}>Weet ik <br />niet</button>
     <button type="button" class="ga-x jelly" aria-label="Annuleren" onClick=${() => setGoal(null)}><${Icon} name="x" size=${18} /></button>
-  </div>` : html`<button type="button" class=${'island jelly ' + isl.st} onClick=${openNext} disabled=${isl.st === 'calm'} style=${isl.breathe ? `--breathe:${isl.breathe.toFixed(2)}s` : ''}>
-    <span class="i-txt"><span class="i-k">${isl.k}</span><span class="i-t1">${isl.t1}</span>${isl.t2 && html`<span class="i-t2">${isl.t2}</span>`}</span>
-    ${isl.ring && html`<span class="i-ring"><svg viewBox="0 0 80 80" aria-hidden="true"><circle class="track" cx="40" cy="40" r="33" /><circle class="arc" cx="40" cy="40" r="33" stroke-dasharray=${C} stroke-dashoffset=${isl.full || countdown <= 0 ? 0 : (C * (isl.frac || 0)).toFixed(1)} /></svg><span class="i-lbl">${isl.ring}</span></span>`}
+  </div>` : html`<div class=${'islandwrap ' + isl.st + (spinning ? ' spinning' : '')}>
+    <button type="button" class=${'island jelly ' + isl.st} onClick=${openNext} disabled=${isl.st === 'calm'} style=${isl.breathe ? `--breathe:${isl.breathe.toFixed(2)}s` : ''}
+      aria-label=${next && !pending && !timeUp ? 'Open de planner' : undefined}>
+      <span class="i-txt"><span class="i-k">${isl.k}</span><span class="i-t1">${isl.t1}</span>${isl.t2 && html`<span class="i-t2">${isl.t2}</span>`}</span>
+      ${isl.ring && html`<span class="i-ringspace" aria-hidden="true"></span>`}
+    </button>
+    ${isl.ring && html`<button type="button" class=${'i-ring' + (isl.swap ? ' swapbtn' : '') + (isl.swap && countdown <= 60 ? ' soon' : '') + (isl.swap && countdown <= 0 ? ' due' : '')}
+      style=${isl.breathe ? `--breathe:${isl.breathe.toFixed(2)}s` : ''} onClick=${isl.swap ? swapFromRing : openNext}
+      aria-label=${isl.swap ? 'Wissel nu: ' + group.map((s) => nick(s.in) + ' erin voor ' + nick(s.out)).join(', ') : isl.k}>
+      <svg viewBox="0 0 80 80" aria-hidden="true"><circle class="track" cx="40" cy="40" r="33" /><circle class="arc" cx="40" cy="40" r="33" stroke-dasharray=${C} stroke-dashoffset=${isl.full || countdown <= 0 ? 0 : (C * (isl.frac || 0)).toFixed(1)} /></svg>
+      ${isl.swap
+        ? html`<span class="i-lbl swaplbl"><span class="i-arrows" key=${'sp' + spinKey}><${Icon} name="swaparrows" size=${countdown <= 0 ? 30 : 22} /></span><span class="i-time">${isl.ring}</span></span>`
+        : html`<span class="i-lbl">${isl.ring}</span>`}
+    </button>`}
     ${isl.late && html`<span class="i-late">${isl.late}</span>`}
-  </button>`;
+  </div>`;
 
   // zwevende wisselspelers achter de plekken die gaan veranderen
   const ghosts = {};
