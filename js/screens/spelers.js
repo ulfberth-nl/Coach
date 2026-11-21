@@ -1,4 +1,4 @@
-import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
+import { html, useEffect, useLayoutEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { update, activeTeam, hashPin, uid } from '../store.js';
 import { Icon, Sheet, Confirm, Switch, Seg, Reveal, toast, POS_COLORS, POS_NAMES, KRACHT_BG } from '../ui.js';
 import { haptic } from '../motion.js';
@@ -184,10 +184,14 @@ const KR_WORDS = ['Begint net', 'Groeit nog', 'Groeit', 'Doet goed mee', 'Stevig
 const KR_KEY = Math.round(KEY_KRACHT / 12.5);
 function KrachtSlider({ value, onChange }) {
   const idx = Math.max(0, Math.min(8, Math.round(value / 12.5)));
+  const root = useRef(null);
   const inner = useRef(null);
   const st = useRef(null);
   const lastK = useRef(idx);
-  const [pos, setPos] = useState(null);
+  const cb = useRef(onChange);
+  cb.current = onChange;
+  const [drag, setDrag] = useState(false);
+  const [shownK, setShownK] = useState(null);
   const [tip, setTip] = useState(0);
   const [showTip, setShowTip] = useState(false);
   useEffect(() => {
@@ -196,7 +200,18 @@ function KrachtSlider({ value, onChange }) {
     const t = setTimeout(() => setShowTip(false), 1100);
     return () => clearTimeout(t);
   }, [tip]);
-  const root = useRef(null);
+  // positie en golf rechtstreeks op de schuif (elk beeldje, zonder opnieuw te tekenen)
+  const paint = (p, wave) => {
+    const el = root.current;
+    if (!el) return;
+    el.style.setProperty('--p', (p / 8).toFixed(4));
+    el.querySelectorAll('.kr-tick').forEach((t, i) => {
+      const d = i - p;
+      t.style.setProperty('--h', wave ? (1 + 1.5 * Math.exp(-(d * d) / 0.7)).toFixed(3) : '1');
+    });
+  };
+  // buiten het slepen volgt de schuif de waarde
+  useLayoutEffect(() => { if (!st.current || !st.current.on) paint(idx, false); });
   // iPhone: tijdens slepen nooit de pagina laten meeschuiven
   useEffect(() => {
     const el = root.current;
@@ -204,14 +219,14 @@ function KrachtSlider({ value, onChange }) {
     el.addEventListener('touchmove', block, { passive: false });
     return () => el.removeEventListener('touchmove', block);
   }, []);
-  const pick = (k) => { if (k !== lastK.current) { lastK.current = k; onChange(k * 12.5); haptic('select'); } };
+  const pick = (k) => { if (k !== lastK.current) { lastK.current = k; cb.current(k * 12.5); haptic('select'); } };
   const down = (e) => {
     if (e.button > 0) return;
     lastK.current = idx;
-    // maten één keer vastleggen; daarna telt alleen hoe ver de vinger schuift (geen gespring)
+    // maten één keer vastleggen; daarna telt alleen hoe ver de vinger schuift
     const r = inner.current.getBoundingClientRect();
     const w = Math.max(1, r.width);
-    st.current = { id: e.pointerId, x: e.clientX, y: e.clientY, on: false, w, start: Math.max(0, Math.min(8, ((e.clientX - r.left) / w) * 8)), raf: 0, p: 0 };
+    st.current = { id: e.pointerId, x: e.clientX, y: e.clientY, on: false, w, start: Math.max(0, Math.min(8, ((e.clientX - r.left) / w) * 8)), raf: 0, p: 0, k: idx };
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) { /* oud toestel */ }
   };
   const move = (e) => {
@@ -222,40 +237,38 @@ function KrachtSlider({ value, onChange }) {
       if (dx < 4 && dy < 4) return;
       if (dy > dx) { st.current = null; return; }
       s.on = true;
+      setDrag(true);
     }
     s.p = Math.max(0, Math.min(8, s.start + ((e.clientX - s.x) / s.w) * 8));
-    pick(Math.round(s.p));
-    if (!s.raf) s.raf = requestAnimationFrame(() => { s.raf = 0; if (st.current === s) setPos(s.p); });
+    const k = Math.round(s.p);
+    if (k !== s.k) { s.k = k; setShownK(k); pick(k); }
+    if (!s.raf) s.raf = requestAnimationFrame(() => { s.raf = 0; if (st.current === s) paint(s.p, true); });
   };
-  const up = (e) => {
+  const end = (tapAt) => {
     const s = st.current;
     st.current = null;
     if (!s) return;
     if (s.raf) cancelAnimationFrame(s.raf);
-    if (!s.on) { pick(Math.round(s.start)); setTip((t) => t + 1); }
-    setPos(null);
+    if (!s.on && tapAt) { pick(Math.round(s.start)); setTip((t) => t + 1); }
+    setDrag(false);
+    setShownK(null);
+    paint(lastK.current, false);
   };
-  const cancel = () => { const s = st.current; if (s && s.raf) cancelAnimationFrame(s.raf); st.current = null; setPos(null); };
   const key = (e) => {
     const d = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[e.key];
     let k = d ? idx + d : e.key === 'Home' ? 0 : e.key === 'End' ? 8 : null;
     if (k == null) return;
     e.preventDefault();
     k = Math.max(0, Math.min(8, k));
-    if (k !== idx) { lastK.current = k; onChange(k * 12.5); setTip((t) => t + 1); }
+    if (k !== idx) { lastK.current = k; cb.current(k * 12.5); setTip((t) => t + 1); }
   };
-  const p = pos != null ? pos : idx;
-  const shown = pos != null ? Math.round(pos) : idx;
-  return html`<div ref=${root} class=${'kr' + (pos != null ? ' dragging' : '') + (pos != null || showTip ? ' tip' : '') + (shown >= KR_KEY ? ' key' : '')}
+  const shown = drag && shownK != null ? shownK : idx;
+  return html`<div ref=${root} class=${'kr' + (drag ? ' dragging' : '') + (drag || showTip ? ' tip' : '') + (shown >= KR_KEY ? ' key' : '')}
     role="slider" tabindex="0" aria-label="Speelkracht" aria-valuemin="0" aria-valuemax="8" aria-valuenow=${idx} aria-valuetext=${KR_WORDS[idx]}
-    style=${`--p:${(p / 8).toFixed(4)}`} onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${cancel} onKeyDown=${key} onBlur=${() => setShowTip(false)}>
+    onPointerDown=${down} onPointerMove=${move} onPointerUp=${() => end(true)} onPointerCancel=${() => end(false)} onKeyDown=${key} onBlur=${() => setShowTip(false)}>
     <span class="kr-rail" style=${'background:' + KRACHT_BG}><span class="kr-cover"></span></span>
     <span class="kr-inner" ref=${inner}>
-      ${Array.from({ length: 9 }, (_, i) => {
-        const d = i - p;
-        const lift = pos != null ? Math.exp(-(d * d) / 0.7) : 0;
-        return html`<i class=${'kr-tick' + (i <= shown ? ' on' : '') + (i >= KR_KEY ? ' k' : '')} style=${`left:${(i / 8) * 100}%;--h:${(1 + 1.5 * lift).toFixed(3)}`}></i>`;
-      })}
+      ${Array.from({ length: 9 }, (_, i) => html`<i class=${'kr-tick' + (i <= shown ? ' on' : '') + (i >= KR_KEY ? ' k' : '')} style=${`left:${(i / 8) * 100}%`}></i>`)}
       <span class="kr-car"><span class="kr-thumb"></span><span class="kr-tip" aria-hidden="true">${KR_WORDS[shown]}</span></span>
     </span>
   </div>`;

@@ -18,7 +18,7 @@ export const EASE_IN = 'cubic-bezier(.45, 0, .9, .4)';
 
 // ---------- voorkeuren van deze telefoon (niet in de back-up, niet gedeeld) ----------
 const PKEY = 'spabo-coach-device';
-const DEFAULTS = { haptics: true, calm: false };
+const DEFAULTS = { haptics: true, calm: false, clicks: true };
 let prefs = (() => {
   try { return { ...DEFAULTS, ...(JSON.parse(localStorage.getItem(PKEY)) || {}) }; } catch (e) { return { ...DEFAULTS }; }
 })();
@@ -70,10 +70,43 @@ function iosTick() {
   ticking = true;
   try { label.click(); } finally { ticking = false; label.remove(); }
 }
+// ---------- klikgeluid ----------
+// Bij schuiven en scrollen kan een iPhone geen tikje geven (alleen bij een echte tik). Daar klinkt dan
+// een heel kort, zacht klikje, zoals bij een draaiwieltje. Uit te zetten bij Team → Deze telefoon.
+let ac = null;
+let lastClick = 0;
+export function audioCtx() { return ac; }
+export function unlockAudio() {
+  try {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    if (ac.state === 'suspended') ac.resume();
+  } catch (e) { ac = null; }
+  return ac;
+}
+function clickSound() {
+  if (!ac || ac.state !== 'running') return;
+  try {
+    const t = ac.currentTime + 0.005;
+    const o = ac.createOscillator();
+    const g = ac.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(2300, t);
+    o.frequency.exponentialRampToValueAtTime(1300, t + 0.02);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.08, t + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+    o.connect(g).connect(ac.destination);
+    o.start(t);
+    o.stop(t + 0.035);
+  } catch (e) { /* geen geluid mogelijk */ }
+}
+
 export const hapticsSupported = () => canVibrate || coarse;
 export function haptic(kind = 'tap') {
-  if (!prefs.haptics) return;
   const now = performance.now();
+  // schuiven/scrollen op een toestel zonder trilfunctie: klikgeluid
+  if (kind === 'select' && !canVibrate && prefs.clicks && now - lastClick > 28) { lastClick = now; clickSound(); }
+  if (!prefs.haptics) return;
   if (now - lastTick < 35) return; // nooit twee tikjes over elkaar heen
   if (isIOS && now - lastHx < 120) return; // de vinger tikte net op de onzichtbare schakelaar: die gaf al een tikje
   lastTick = now;
@@ -207,6 +240,10 @@ export function installPress() {
   document.addEventListener('pointercancel', () => release(true), true);
   // iPhone: zonder touch-luisteraar komen sommige drukacties te laat binnen
   document.addEventListener('touchstart', () => {}, { passive: true });
+  // geluid mag pas na een aanraking: bij elke tik zo nodig aanzetten
+  const wake = () => { if (!ac || ac.state !== 'running') unlockAudio(); };
+  document.addEventListener('touchend', wake, { capture: true, passive: true });
+  document.addEventListener('pointerup', wake, { capture: true, passive: true });
   installHx();
   // tikje bij elke tik op een knop; onderdelen met een eigen tikje hebben data-haptic="own"
   document.addEventListener('click', (e) => {

@@ -78,8 +78,21 @@ function load() {
 
 let state = load();
 
-function persist() {
+// Opslaan gebeurt net na de tik (samengevoegd), zodat tikken niet hoeft te wachten op de opslag.
+// Bij wegklikken of vergrendelen wordt er meteen opgeslagen.
+let saveTimer = 0;
+function writeNow() {
+  clearTimeout(saveTimer);
+  saveTimer = 0;
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* opslag vol of geblokkeerd */ }
+}
+function persist() {
+  if (typeof window === 'undefined') return;
+  if (!saveTimer) saveTimer = setTimeout(writeNow, 120);
+}
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  window.addEventListener('pagehide', writeNow);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') writeNow(); });
 }
 
 export function getState() { return state; }
@@ -120,7 +133,7 @@ export function importData(json) {
   const s = JSON.parse(json);
   if (!s || s.version !== 1 || !Array.isArray(s.teams)) throw new Error('Dit bestand herken ik niet.');
   state = s;
-  persist();
+  writeNow();
   listeners.forEach((l) => l(state));
 }
 

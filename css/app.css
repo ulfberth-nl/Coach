@@ -84,7 +84,7 @@ a { color: var(--blue); }
 .input:focus { outline: 2px solid var(--blue-2); outline-offset: 1px; }
 .seg { position: relative; display: flex; gap: 4px; padding: 4px; border-radius: 16px; background: #fff; border: 1px solid var(--line); touch-action: pan-y; }
 /* blokje vloeit naar de keuze: schuift met een zachte veer, rekt even uit in de looprichting (motion: Seg) */
-.seg .seg-ind { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px - (var(--n) - 1) * 4px) / var(--n)); border-radius: 12px; background: var(--blue); box-shadow: 0 4px 12px rgba(31,60,136,0.3); translate: calc(var(--i) * (100% + 4px)) 0; transition: translate var(--t-screen) var(--spring-soft); }
+.seg .seg-ind { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px - (var(--n) - 1) * 4px) / var(--n)); border-radius: 12px; background: var(--blue); box-shadow: 0 4px 12px rgba(31,60,136,0.3); translate: calc(var(--i, 0) * (100% + 4px)) 0; transition: translate var(--t-screen) var(--spring-soft); }
 .seg.dragging .seg-ind { transition: none; }
 .seg button { position: relative; z-index: 1; flex: 1 1 0; min-width: 0; height: 40px; border: none; border-radius: 12px; background: transparent; font-size: 14px; font-weight: 700; padding: 0 4px; white-space: nowrap; transition: color var(--t-small) ease; }
 .seg button.on { color: #fff; font-weight: 800; }
@@ -902,10 +902,10 @@ button.duo-side[aria-expanded="true"] .duo-chev { transform: rotate(-90deg); opa
 /* rail met kleurverloop; het lichte deel schuift weg (alleen transform), duim op een drager die meeschuift */
 .kr { position: relative; height: 50px; margin-top: 2px; touch-action: pan-y; outline: none; cursor: pointer; -webkit-user-select: none; user-select: none; }
 .kr-rail { position: absolute; left: 11px; right: 11px; top: 14px; height: 10px; border-radius: 999px; overflow: hidden; }
-.kr-cover { position: absolute; top: 0; bottom: 0; left: 5px; width: calc(100% - 5px); background: var(--line-3); box-shadow: inset 0 1px 2px rgba(17,24,39,.08); translate: calc(var(--p) * (100% - 5px)) 0; transition: translate var(--t-screen) var(--spring-play); }
+.kr-cover { position: absolute; top: 0; bottom: 0; left: 5px; width: calc(100% - 5px); background: var(--line-3); box-shadow: inset 0 1px 2px rgba(17,24,39,.08); translate: calc(var(--p, 0) * (100% - 5px)) 0; transition: translate var(--t-screen) var(--spring-play); }
 .kr-inner { position: absolute; left: 16px; right: 16px; top: 0; bottom: 0; pointer-events: none; container-type: inline-size; }
 /* drager zonder breedte: schuift in containerbreedte mee en steekt nooit buiten de schuif (anders scrolt het venster zijwaarts) */
-.kr-car { position: absolute; left: 0; top: 0; bottom: 0; width: 0; translate: calc(var(--p) * 100cqw) 0; transition: translate var(--t-screen) var(--spring-play); }
+.kr-car { position: absolute; left: 0; top: 0; bottom: 0; width: 0; translate: calc(var(--p, 0) * 100cqw) 0; transition: translate var(--t-screen) var(--spring-play); }
 .kr.dragging .kr-car, .kr.dragging .kr-cover { transition: none; }
 .kr-thumb { position: absolute; left: -16px; top: 3px; width: 32px; height: 32px; border-radius: 999px; background: #fff; border: 3px solid var(--ink); box-shadow: 0 3px 10px rgba(17,24,39,.28); transition: scale var(--t-small) var(--spring-soft), border-color var(--t-small) ease; }
 .kr.dragging .kr-thumb { scale: 1.14; }
@@ -918,7 +918,7 @@ button.duo-side[aria-expanded="true"] .duo-chev { transform: rotate(-90deg); opa
 .kr-tick.k.on { background: #1f8a3a; }
 /* wolkje boven de duim; schuift bij de randen mee zodat het in beeld blijft */
 .kr-tip { position: absolute; left: 0; bottom: calc(100% + 2px); padding: 6px 12px; border-radius: 12px; background: var(--navy, #0D1B45); color: #fff; font-size: 13px; font-weight: 900; white-space: nowrap; pointer-events: none;
-  --tx: calc(50% - (.5 - var(--p)) * 56%); translate: calc(-1 * var(--tx)) 0; transform-origin: var(--tx) 100%;
+  --tx: calc(50% - (.5 - var(--p, 0)) * 56%); translate: calc(-1 * var(--tx)) 0; transform-origin: var(--tx) 100%;
   opacity: 0; scale: .7; transition: opacity var(--t-out-small) ease, scale var(--t-out-small) var(--ease-in); }
 .kr-tip::after { content: ''; position: absolute; left: var(--tx); bottom: -4px; width: 10px; height: 10px; margin-left: -5px; border-radius: 2px; background: inherit; rotate: 45deg; }
 .kr.tip .kr-tip { opacity: 1; scale: 1; transition: opacity var(--t-small) ease, scale var(--t-screen) var(--spring-play); }
@@ -998,3 +998,6 @@ button:disabled > .hx, .no-hx .hx { display: none; }
 .pin-key.small { font-size: 14px; font-weight: 800; color: rgba(255,255,255,.8); }
 .pin-key.hide { opacity: 0; pointer-events: none; }
 @media (max-height: 700px) { .pin-pad { --pk: min(68px, 19vw); gap: 10px 22px; } .pin-lock { width: 62px; height: 62px; border-radius: 22px; } .pin-title { font-size: 22px; margin-top: 4px; } .pin-head { padding-bottom: 10px; } }
+/* optimistisch: oude getallen blijven staan terwijl de rekendraad bijwerkt */
+.prof-mini.stale, .prof-cons.stale { opacity: .55; transition: opacity var(--t-small) ease; }
+.prof-upd { font-weight: 700; color: var(--muted); text-transform: none; letter-spacing: 0; animation: waitPulse 1.2s ease-in-out infinite; }

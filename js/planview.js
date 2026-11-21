@@ -4,6 +4,7 @@ import { html, useState, useMemo, useRef, useEffect } from '../vendor/preact-htm
 import * as M from './match.js';
 import { LINE_NAMES } from './planner.js';
 import { Field, Icon, POS_COLORS, useDragSwap, accentFor } from './ui.js';
+import { haptic } from './motion.js';
 
 const BENCH = '#DCE2EE';
 
@@ -99,6 +100,9 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   const c = cards[i];
   const ch = changes(cards, i);
   const canEdit = editable && i === 0;
+  // klikje bij elk wisselmoment dat je passeert (trillen op Android, klikgeluid op de iPhone)
+  const lastI = useRef(i);
+  useEffect(() => { if (lastI.current !== i) { lastI.current = i; haptic('select'); } }, [i]);
   useDragSwap(zone, canEdit, (a, b) => onSwap && onSwap(a, b), (a, b) => 'Ruil met ' + M.nickOf(team, b));
   useScrub(zone, { get: getF, set: setF, skipPills: () => editable && Math.round(getF()) === 0 });
 
