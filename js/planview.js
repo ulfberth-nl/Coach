@@ -135,8 +135,10 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   const [peek, setPeek] = useState(false);
   // kleurranden van het volgende moment: oranje = eruit (veld), groen = erin (bank)
   const nxPairs = nx && nx.kind === 'swap' ? nx.pairs || [{ out: nx.out, in: nx.in }] : [];
-  const nxOuts = nxPairs.map((p) => p.out);
-  const nxIns = nxPairs.map((p) => p.in);
+  // planner: op een opstelling (start van een periode) staat alleen die opstelling, nog zonder zwevers
+  const calm = planner && c.kind === 'lineup';
+  const nxOuts = calm ? [] : nxPairs.map((p) => p.out);
+  const nxIns = calm ? [] : nxPairs.map((p) => p.in);
   // klikje bij elk wisselmoment dat je passeert (trillen op Android, klikgeluid op de iPhone)
   const lastI = useRef(i);
   useEffect(() => { if (lastI.current !== i) { lastI.current = i; haptic('select'); setPeek(false); } if (onIndex) onIndex(i); }, [i]);
@@ -242,12 +244,13 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
       ${live && html`<span class="tl-now" style=${`left:${nowPct}%`}></span>`}
       <span class="tl-head" style=${`left:${headPct}%`}><span class="tl-time" style=${`transform:translateX(-${headPct}%)`}>${pillText}</span></span>
     </div>
-    ${!compact && html`<div class="between">
+    ${!compact && html`<div class=${'between' + (planner ? ' plnav' : '')}>
       <button type="button" class="iconbtn" aria-label="Vorige" onClick=${() => setF(i - 1, true)} disabled=${i === 0}><span style="transform:rotate(180deg);display:inline-flex"><${Icon} name="chev" /></span></button>
-      <div class="col" style="gap:0;align-items:center">
+      <div class=${planner ? 'plnav-t' : 'col'} style=${planner ? '' : 'gap:0;align-items:center'}>
         <span class="h2">${planner && live && i === nowIndex ? 'Nu' : title}</span>
         ${planner && live && i !== nowIndex
-          ? html`<button type="button" class="tonow" onClick=${() => setF(nowIndex, true)}>${label(c.t)} · terug naar nu</button>`
+          ? html`<button type="button" class="tonow" onClick=${() => setF(nowIndex, true)}>terug naar nu</button>`
+          : planner ? (status && i !== nowIndex ? html`<span class="small">${status}</span>` : null)
           : html`<span class="small">${label(c.t)}${status && !(planner && i === nowIndex) ? ' · ' + status : ''}</span>`}
       </div>
       <button type="button" class="iconbtn" aria-label="Volgende" onClick=${() => setF(i + 1, true)} disabled=${i === cards.length - 1}><${Icon} name="chev" /></button>
@@ -266,7 +269,7 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
           ? html`<${Field} slots=${nx.slots} lines=${nx.lines || lines} keeperId=${nx.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
               onTap=${() => {}} neon=${changes(cards, i + 1).in} accent=${accentFor(team)} />`
           : html`<${Field} slots=${c.slots} lines=${lines} formable=${canEdit} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
-              onTap=${() => {}} neon=${planner ? nxOuts : ch.in} dashed=${!planner && ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} ghosts=${planner && !peek ? ghostsFor(nx, c.pos, nick) : null} />`}
+              onTap=${() => {}} neon=${planner ? nxOuts : ch.in} dashed=${!planner && ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} ghosts=${planner && !peek && !calm ? ghostsFor(nx, c.pos, nick) : null} />`}
         ${planner && peek && nx && html`<span class="peeklabel" role="status"><${Icon} name="eye" size=${15} />${nx.kind === 'lineup' ? 'Opstelling ' + M.periodLabel(team, nx.period) : 'Na wissel ' + swapNoOf(nx)}</span>`}
       </div>
       <div class="benchrow">
@@ -336,6 +339,6 @@ function NextCaption({ i, nx, c, lines, team, match, nick, canPlan, swapNo, tota
     </div>`)}</div>
     ${nx.pinned
       ? html`<span class="nc-pin"><span class="pinbadge"><${Icon} name="pin" size=${14} />Vastgezet door jou</span><button type="button" class="linkbtn" onClick=${() => onUnpin && onUnpin(nx.t, swapNo)}>Losmaken</button></span>`
-      : canPlan ? html`<span class="nc-hint">De app kiest dit. Sleep op het veld om het zelf te bepalen.</span>` : null}
+      : canPlan ? html`<span class="nc-hint">Sleep op het veld om het zelf te kiezen.</span>` : null}
   </div>`;
 }

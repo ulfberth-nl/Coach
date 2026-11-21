@@ -61,20 +61,24 @@ export function NextBar({ match, team, cards }) {
   const next = live && !pending ? M.nextSwap(match, team) : null;
   const group = live && !pending ? M.nextGroup(match, team) : [];
   const moves = live && !pending ? M.nextMoves(match, team) : [];
-  const countdown = next ? next.t - T : null;
+  // game plan: eerst een moment met alleen plekwissels
+  const mo = live && !pending ? M.nextMovesOnly(match, team) : null;
+  const moNow = !!(mo && (!next || mo.t < next.t));
+  const countdown = moNow ? mo.t - T : next ? next.t - T : null;
   const alerted = useRef({});
   useEffect(() => {
-    if (!running || !next) return;
-    const key = next.t + ':' + next.out + ':' + next.in;
+    if (!running || !(next || moNow)) return;
+    const key = moNow ? 'mv' + mo.t : next.t + ':' + next.out + ':' + next.in;
     if (countdown <= 60 && countdown > 1 && !alerted.current[key + 'a']) { alerted.current[key + 'a'] = 1; beep(1, 660); }
     if (countdown <= 0 && !alerted.current[key + 'b']) { alerted.current[key + 'b'] = 1; beep(3); flash(); }
   }, [Math.floor(T || 0)]);
-  const sticky = live && !!(next || pending);
+  const sticky = live && !!(next || pending || moNow);
   useEffect(() => { document.documentElement.classList.toggle('plsticky-on', sticky); return () => document.documentElement.classList.remove('plsticky-on'); }, [sticky]);
   if (!sticky) return null;
   const nick = (id) => M.nickOf(team, id);
   const nextNo = next ? cards.filter((c) => c.kind === 'swap' && c.t <= next.t).length : 0;
   const swapNow = () => {
+    if (moNow) { liveAct.run = { moves: true }; go('/'); return; }
     const pairs = group.map((s) => ({ out: s.out, in: s.in, shift: s.shift }));
     if (!pairs.length) return;
     liveAct.run = { pairs };
@@ -85,6 +89,11 @@ export function NextBar({ match, team, cards }) {
     ${pending
       ? html`<span class="ps-txt"><b>Rust</b><span>Zet de opstelling klaar in het wedstrijdscherm.</span></span>
         <a class="btn primary" href="#/">Naar de wedstrijd</a>`
+      : moNow ? html`<span class=${'ps-txt' + (countdown <= 0 ? ' due' : countdown <= 60 ? ' soon' : '')}>
+          <b>Plekwissel · ${countdown > 0 ? M.fmt(countdown) : 'nu!'}</b>
+          <span>${mo.moves.map((x) => (x.to ? nick(x.a) + ' naar ' + ({ V: 'voor', M: 'midden', A: 'achter' })[x.to] : nick(x.a) + ' ↔ ' + nick(x.b))).join(', ')}</span>
+        </span>
+        <button type="button" class="btn primary" onClick=${swapNow}>Doe nu</button>`
       : html`<span class=${'ps-txt' + (countdown <= 0 ? ' due' : countdown <= 60 ? ' soon' : '')}>
           <b>Wissel ${nextNo} · ${countdown > 0 ? M.fmt(countdown) : 'nu!'}</b>
           <span>${group.map((s) => nick(s.in)).join(', ')} erin${group.length === 1 ? ' voor ' + nick(group[0].out) : ''}${moves.length ? ` · ${moves.length === 1 ? '1 plekwissel' : moves.length + ' plekwissels'}` : ''}${next.pinned && !match.plan.own ? ' · vastgezet' : ''}</span>

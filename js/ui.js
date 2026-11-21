@@ -368,7 +368,7 @@ export function Reveal({ open, children, cls = '' }) {
 }
 
 // Venster buiten het scherm (eigen laag in <body>), zodat het scherm erachter naar achteren kan wijken.
-function Portal({ children }) {
+export function Portal({ children }) {
   const host = useRef(null);
   if (!host.current && typeof document !== 'undefined') { host.current = document.createElement('div'); host.current.className = 'portal'; }
   useLayoutEffect(() => {

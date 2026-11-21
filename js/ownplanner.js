@@ -207,6 +207,7 @@ function outcome(st, acc, ctx, end) {
     minPlayed: played.length ? Math.min(...played) : 0,
     maxPlayed: played.length ? Math.max(...played) : 0,
     maxStretch: Math.max(0, ...avail.map((id) => stretch[id] || 0)),
+    stretches: avail.map((id) => stretch[id] || 0),
     swaps: acc.swaps, moments: acc.moments.size,
     kracht: acc.field ? acc.fit / acc.field : 1
   };
@@ -215,7 +216,10 @@ function outcome(st, acc, ctx, end) {
 // Hoe goed is een uitkomst (lager is beter): eerlijk binnen de bankregel, dan in hun kracht, dan weinig wissels.
 function badness(f, ctx, style) {
   const maxB = ctx.rules && ctx.rules.maxBenchOn ? (ctx.rules.maxBench || 10) * 60 : Infinity;
-  return (f.maxPlayed - f.minPlayed) + 1.5 * Math.max(0, f.maxStretch - maxB) + (1 - f.kracht) * (style === 'sterk' ? 1200 : 120) + f.swaps * 4;
+  // ook wie er nog meer te lang aan de kant zit telt mee (niet alleen de langste), zodat een gedwongen lange
+  // bankbeurt niet 'gratis' meer kinderen lang laat zitten
+  const overSum = maxB === Infinity || !f.stretches ? 0 : f.stretches.reduce((a, x) => a + Math.max(0, x - maxB), 0);
+  return (f.maxPlayed - f.minPlayed) + 1.5 * Math.max(0, f.maxStretch - maxB) + 0.6 * overSum + (1 - f.kracht) * (style === 'sterk' ? 1200 : 120) + f.swaps * 4;
 }
 
 // Vooruitkijken bij een vrije opstelling: wie er in de rust naar de bank gaat, bepaalt hoe de rest uitpakt.

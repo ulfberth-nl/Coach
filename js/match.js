@@ -111,6 +111,7 @@ export function swapStory(slots, lines, pairs) {
 export function moveStory(slots, lines, moves) {
   let cur = { ...slots };
   return moves.map((mv) => {
+    if (mv.to) return { a: mv.a, to: mv.to };
     const sa = slotOf(cur, mv.a), sb = slotOf(cur, mv.b);
     if (!sa || !sb) return { a: mv.a, b: mv.b };
     const st = { a: mv.a, b: mv.b, aPos: posName(sb[0], +sb.slice(1), lines[sb[0]] || 0), bPos: posName(sa[0], +sa.slice(1), lines[sa[0]] || 0) };
@@ -520,7 +521,7 @@ export function periodOptions(match, team, p) {
     const ev = match.events.find((e) => e.type === 'lineup' && e.period === q);
     if (ev) return { pos: ev.pos, bench: ev.bench, slots: ev.slots || makeSlots(ev.pos, lines, players) };
     const s = steps.find((x) => x.type === 'lineup' && x.period === q);
-    if (s) return { pos: s.pos, bench: s.bench, slots: s.slots ? { ...s.slots } : makeSlots(s.pos, lines, players), own: !!s.own };
+    if (s) return { pos: s.pos, bench: s.bench, slots: s.slots ? { ...s.slots } : makeSlots(s.pos, s.lines || lines, players), own: !!s.own, ...(s.lines ? { lines: { ...s.lines } } : {}) };
     return null;
   };
   // het eind van de vorige periode: de situatie vlak voor de rust
@@ -935,10 +936,13 @@ export function lastUndoable(match) {
 export function undo(match, team) {
   const u = lastUndoable(match);
   if (!u) return null;
+  const grp = u.ev.g ? match.events.filter((e) => e.g === u.ev.g) : [u.ev];
   match.events.splice(u.index, 1);
   if (u.ev.g) match.events = match.events.filter((e) => e.g !== u.ev.g);
   if (u.ev.type === 'join') match.present = match.present.filter((id) => id !== u.ev.playerId);
-  if (u.ev.type === 'formation') match.lines = u.ev.prev;
+  // opstellingswijziging (ook als die meeging met een gepland moment): terug naar de opstelling van daarvoor
+  const form = grp.find((e) => e.type === 'formation');
+  if (form) match.lines = form.prev;
   replan(match, team);
   return u.ev;
 }
@@ -962,7 +966,7 @@ export function nextSwap(match, team) {
 export function nextMoves(match, team) {
   const first = nextSwap(match, team);
   if (!first || !match.plan) return [];
-  return match.plan.steps.filter((x) => x.type === 'move' && x.t <= first.t).map((x) => ({ a: x.a, b: x.b }));
+  return match.plan.steps.filter((x) => x.type === 'move' && x.t <= first.t).map((x) => (x.to ? { a: x.a, to: x.to } : { a: x.a, b: x.b }));
 }
 
 // Het eerstvolgende moment precies zoals gepland uitvoeren (eigen plan): wissels met hun doorschuiver, dan de
@@ -985,11 +989,7 @@ export function doPlannedMoment(match, team) {
     pos = np;
     done.push({ out: s.out, in: s.in, shift });
   }
-  for (const mv of moves) {
-    if (!(mv.a in pos) || !(mv.b in pos)) continue;
-    match.events.push({ id: uid(), type: 'move', t: T, a: mv.a, b: mv.b, g });
-    pos = { ...pos, [mv.a]: pos[mv.b], [mv.b]: pos[mv.a] };
-  }
+  pos = applyPlannedMoves(match, team, T, pos, moves, g);
   match.firstAt = null;
   match.fixed = null;
   consumePins(match, T, done);
@@ -997,6 +997,49 @@ export function doPlannedMoment(match, team) {
   match.pins = (match.pins || []).filter((p) => !(p.t <= group[0].t && !(p.pairs && p.pairs.length)));
   replan(match, team);
   return done;
+}
+
+// Plekwissels uit het plan als gebeurtenissen: twee spelers ruilen ('move'), of één speler naar een andere linie
+// ('formation', de opstelling verandert, bijv. een verdediger erbij).
+function applyPlannedMoves(match, team, T, pos, moves, g) {
+  for (const mv of moves) {
+    if (mv.to) {
+      const from = pos[mv.a];
+      const cur = linesOf(match, team);
+      const lines = from ? formationAfter(cur, from, mv.to) : null;
+      if (!lines) continue;
+      match.events.push({ id: uid(), type: 'formation', t: T, playerId: mv.a, from, to: mv.to, at: null, lines, prev: { ...cur }, g });
+      match.lines = lines;
+      pos = { ...pos, [mv.a]: mv.to };
+      continue;
+    }
+    if (!(mv.a in pos) || !(mv.b in pos)) continue;
+    match.events.push({ id: uid(), type: 'move', t: T, a: mv.a, b: mv.b, g });
+    pos = { ...pos, [mv.a]: pos[mv.b], [mv.b]: pos[mv.a] };
+  }
+  return pos;
+}
+
+// Game plan: een moment met alleen plekwissels (geen wissel ervoor in deze periode, of eerder dan de volgende
+// wissel). Het live-scherm toont het als eigen moment.
+export function nextMovesOnly(match, team) {
+  if (!match.plan || match.finished || !isOwn(match, team)) return null;
+  const end = (match.clock.period + 1) * periodLen(team);
+  const first = match.plan.steps[0];
+  if (!first || first.type !== 'move' || first.t >= end) return null;
+  const t = first.t;
+  const moves = match.plan.steps.filter((x) => x.type === 'move' && x.t === t).map((x) => (x.to ? { a: x.a, to: x.to } : { a: x.a, b: x.b }));
+  return { t, moves };
+}
+export function doPlannedMoves(match, team) {
+  const mo = nextMovesOnly(match, team);
+  if (!mo) return 0;
+  const T = gameTime(match, team);
+  const before = match.events.length;
+  applyPlannedMoves(match, team, T, { ...derive(match, team, T).state.pos }, mo.moves, uid());
+  match.pins = (match.pins || []).filter((p) => !(p.t <= mo.t && !(p.pairs && p.pairs.length)));
+  replan(match, team);
+  return match.events.length - before;
 }
 
 // Alle wissels van het eerstvolgende moment (1 of meer spelers tegelijk)
@@ -1167,18 +1210,29 @@ export function timeline(match, team) {
   if (!match.finished) {
     for (const s of (match.plan ? match.plan.steps : [])) {
       if (s.type === 'lineup') {
+        if (s.lines) lines = { ...s.lines };
         slots = s.slots ? { ...s.slots } : makeSlots(s.pos, lines, players);
         pos = { ...s.pos }; bench = s.bench.slice();
         cards.push({ kind: 'lineup', t: s.t, period: s.period, slots, pos, bench, keeper, lines, past: false, own: !!s.own });
       } else if (s.type === 'move') {
-        // plekwissel (game plan): twee veldspelers ruilen van linie, bij de wissels van dit moment
-        if (!pos || !(s.a in pos) || !(s.b in pos)) continue;
-        pos = { ...pos, [s.a]: pos[s.b], [s.b]: pos[s.a] };
-        const sa = slotOf(slots, s.a), sb = slotOf(slots, s.b);
-        slots = { ...slots, [sa]: s.b, [sb]: s.a };
+        // plekwissel (game plan): twee veldspelers ruilen van linie, of één speler gaat naar een andere linie
+        if (s.to) {
+          if (!pos || !(s.a in pos)) continue;
+          const nl = formationAfter(lines, pos[s.a], s.to);
+          if (!nl) continue;
+          slots = moveSlot(slots, s.a, pos[s.a], s.to, nl, null);
+          pos = { ...pos, [s.a]: s.to };
+          lines = nl;
+        } else {
+          if (!pos || !(s.a in pos) || !(s.b in pos)) continue;
+          pos = { ...pos, [s.a]: pos[s.b], [s.b]: pos[s.a] };
+          const sa = slotOf(slots, s.a), sb = slotOf(slots, s.b);
+          slots = { ...slots, [sa]: s.b, [sb]: s.a };
+        }
         const prev = cards[cards.length - 1];
-        if (prev && !prev.past && (prev.kind === 'swap' || prev.kind === 'move') && prev.t === s.t) cards[cards.length - 1] = { ...prev, slots, pos, moves: (prev.moves || []).concat([{ a: s.a, b: s.b }]) };
-        else cards.push({ kind: 'move', t: s.t, pairs: [], outs: [], ins: [], moves: [{ a: s.a, b: s.b }], slots, pos, bench, keeper, lines, past: false });
+        const mv = s.to ? { a: s.a, to: s.to } : { a: s.a, b: s.b };
+        if (prev && !prev.past && (prev.kind === 'swap' || prev.kind === 'move') && prev.t === s.t) cards[cards.length - 1] = { ...prev, slots, pos, lines, moves: (prev.moves || []).concat([mv]) };
+        else cards.push({ kind: 'move', t: s.t, pairs: [], outs: [], ins: [], moves: [mv], slots, pos, bench, keeper, lines, past: false });
       } else {
         slots = slotSwap(slots, s.out, s.in, s.shift);
         pos = { ...s.pos }; bench = bench.filter((x) => x !== s.in).concat([s.out]);
@@ -1466,18 +1520,30 @@ export function gpEnsure(match, team, n) {
       const ob = gpBlocks(match, team, old.n).filter((x) => x.p === bl.p && x.t <= bl.t).pop();
       return ob ? (old.grid[ob.b] ? { ...old.grid[ob.b] } : null) : null;
     });
-    match.gameplan = { n, grid, src: blocks.map(() => (old ? 'base' : null)), base: !!old };
+    match.gameplan = { n, grid, src: blocks.map(() => (old ? 'base' : null)), base: !!old, lines: (gp && gp.lines) || { ...linesOf(match, team) } };
   }
+  if (!match.gameplan.lines) match.gameplan.lines = { ...linesOf(match, team) };
   return match.gameplan;
 }
-export function gpLinesCount(match, team) { return linesOf(match, team); }
+// De basisopstelling van het bord (zoals bij de opzet); een blok mag een andere verdeling hebben (bijv. een
+// verdediger erbij), zolang er evenveel spelers in het veld staan en elke linie van de basis bezet blijft.
+export function gpBaseLines(match, team) { return (match.gameplan && match.gameplan.lines) || linesOf(match, team); }
+export const gpCount = (pos) => { const c = { A: 0, M: 0, V: 0 }; for (const id in pos || {}) c[pos[id]]++; return c; };
 export function gpComplete(match, team, pos) {
   if (!pos) return false;
-  const lines = linesOf(match, team);
+  const lines = gpBaseLines(match, team);
+  const F = LINES.reduce((a, l) => a + (lines[l] || 0), 0);
   const ids = gpFieldIds(match);
   const cnt = { V: 0, M: 0, A: 0 };
   for (const id in pos) { if (ids.indexOf(id) === -1) return false; cnt[pos[id]]++; }
-  return LINES.every((l) => cnt[l] === (lines[l] || 0));
+  return LINES.reduce((a, l) => a + cnt[l], 0) === F && LINES.every((l) => !(lines[l] > 0) || cnt[l] > 0);
+}
+// Mag er in dit blok nog iemand bij in linie 'l'? Alleen als het blok nog niet vol is.
+export function gpRoom(match, team, pos, l) {
+  const lines = gpBaseLines(match, team);
+  const F = LINES.reduce((a, x) => a + (lines[x] || 0), 0);
+  const c = gpCount(pos);
+  return LINES.reduce((a, x) => a + c[x], 0) < F && (c[l] < (lines[l] || 0) || LINES.every((x) => c[x] >= (lines[x] || 0) || x === l));
 }
 // Zet de opstelling van blok b (door de coach of de voorzet). Het eerste volle blok op een leeg bord is de basis:
 // dat loopt door tot het eind van de wedstrijd. Daarna staat elk blok op zichzelf.
@@ -1509,6 +1575,7 @@ export function gpExtend(match, team, b, toEnd = false) {
 }
 export function gpClear(match, team) {
   const n = match.gameplan ? match.gameplan.n : 4;
+  if (match.gameplan && match.gameplan.lines) match.lines = { ...match.gameplan.lines };
   match.gameplan = null;
   gpEnsure(match, team, n);
   gpSync(match, team);
@@ -1553,6 +1620,16 @@ export function gpDiff(A, B) {
     moves.push({ a, b });
     pos = { ...pos, [a]: pos[b], [b]: pos[a] };
   }
+  // andere verdeling over de linies: losse verplaatsingen (eerst wie uit een volle linie weg moet)
+  for (let guard = 0; guard < 20; guard++) {
+    const wrong = Object.keys(pos).filter((id) => id in B && pos[id] !== B[id]);
+    if (!wrong.length) break;
+    const cnt = gpCount(pos);
+    const a = wrong.find((x) => cnt[pos[x]] > 1);
+    if (!a) break;
+    moves.push({ a, to: B[a] });
+    pos = { ...pos, [a]: B[a] };
+  }
   return { pairs, moves };
 }
 
@@ -1563,8 +1640,7 @@ export function gpSync(match, team) {
   const blocks = gpBlocks(match, team, gp.n);
   const ids = gpFieldIds(match);
   const players = playersMap(team);
-  const lines = linesOf(match, team);
-  if (!gp.base) { match.pins = []; match.periodLineups = null; replan(match, team); return; }
+  if (!gp.base) { match.pins = []; match.periodLineups = null; if (gp.lines) match.lines = { ...gp.lines }; replan(match, team); return; }
   const pins = [];
   const lineups = {};
   let prev = null, prevSlots = null;
@@ -1573,24 +1649,35 @@ export function gpSync(match, team) {
     if (!gpComplete(match, team, pos)) pos = prev; // onvolledig blok: telt als ongewijzigd (zie Controle)
     if (!pos) continue;
     if (bl.i === 0) {
-      const slots = reslot(prevSlots, pos, lines, players);
-      lineups[bl.p] = { pos: { ...pos }, bench: ids.filter((id) => !(id in pos)), slots };
+      const bl0 = gpCount(pos);
+      const slots = reslot(prevSlots, pos, bl0, players);
+      lineups[bl.p] = { pos: { ...pos }, bench: ids.filter((id) => !(id in pos)), slots, lines: bl0 };
       prevSlots = slots;
     } else if (prev) {
       const { pairs, moves } = gpDiff(prev, pos);
       if (pairs.length || moves.length) pins.push({ t: bl.t, pairs, moves, after: 'terug' });
       // plekken (links/rechts) volgen de wissels zoals live
       let sl = { ...prevSlots };
-      for (const pr of pairs) sl = slotSwap(sl, pr.out, pr.in, pr.shift || null);
-      for (const mv of moves) { const sa = slotOf(sl, mv.a), sb = slotOf(sl, mv.b); sl = { ...sl, [sa]: mv.b, [sb]: mv.a }; }
+      let cur = { ...prev };
+      for (const pr of pairs) {
+        sl = slotSwap(sl, pr.out, pr.in, pr.shift || null);
+        const lo = cur[pr.out]; delete cur[pr.out];
+        if (pr.shift) { cur[pr.in] = cur[pr.shift.id]; cur[pr.shift.id] = lo; } else cur[pr.in] = lo;
+      }
+      for (const mv of moves) {
+        if (mv.to) { const nl = gpCount({ ...cur, [mv.a]: mv.to }); sl = moveSlot(sl, mv.a, cur[mv.a], mv.to, nl, null); cur = { ...cur, [mv.a]: mv.to }; continue; }
+        const sa = slotOf(sl, mv.a), sb = slotOf(sl, mv.b); sl = { ...sl, [sa]: mv.b, [sb]: mv.a };
+        cur = { ...cur, [mv.a]: cur[mv.b], [mv.b]: cur[mv.a] };
+      }
       prevSlots = sl;
     }
     prev = pos;
   }
-  // startopstelling = eerste blok
+  // startopstelling = eerste blok (met zijn eigen verdeling over de linies)
   if (lineups[0]) {
     const ev = match.events[0];
     match.events[0] = { ...ev, pos: { ...lineups[0].pos }, bench: lineups[0].bench.slice(), slots: { ...lineups[0].slots } };
+    match.lines = gpCount(lineups[0].pos);
   }
   match.periodLineups = lineups;
   match.pins = pins;
@@ -1616,7 +1703,7 @@ export function gpStats(match, team) {
   const gp = match.gameplan;
   const blocks = gpBlocks(match, team, gp ? gp.n : 4);
   const ids = gpFieldIds(match);
-  const F = Object.values(linesOf(match, team)).reduce((a, b) => a + b, 0);
+  const F = Object.values(gpBaseLines(match, team)).reduce((a, b) => a + b, 0);
   const res = { blocks: [], kids: {}, target: 0, targetBlocks: 0, maxBench: 0, maxBenchWho: null };
   for (const id of ids) res.kids[id] = { blocks: 0, sec: 0, run: 0, maxRun: 0, out: 0 };
   const players = playersMap(team);
@@ -1710,4 +1797,37 @@ export function gpFill(match, team, style = planStyle(match, team)) {
   gp.base = true;
   gpSync(match, team);
   return n;
+}
+
+// Standaardplan → game plan: per blok de opstelling uit het plan van de app op dat moment, als voorzet die de
+// coach daarna aanpast. Het aantal blokken volgt hoe vaak de app per periode wisselt (2 t/m 6).
+export function gpFromPlan(match, team) {
+  if (match.started) return null;
+  const { cards } = timeline(match, team);
+  const L = periodLen(team);
+  const per = [];
+  for (let p = 0; p < team.periods; p++) per.push(new Set(cards.filter((c) => c.kind === 'swap' && c.t > p * L && c.t < (p + 1) * L).map((c) => c.t)).size + 1);
+  const n = Math.max(GP_SIZES[0], Math.min(GP_SIZES[GP_SIZES.length - 1], Math.max(...per)));
+  const blocks = gpBlocks(match, team, n);
+  const base = { ...linesOf(match, team) };
+  // per blok: wie het grootste deel van dat blok in het standaardplan op welke linie speelt
+  const grid = blocks.map((bl) => { const mid = bl.t + bl.len / 2; const c = cards.filter((x) => x.t <= mid + 0.5 && Math.floor(x.t / L) === bl.p).pop() || cards.filter((x) => x.t <= bl.t + 0.5).pop(); return c ? { ...c.pos } : null; });
+  match.ownStash = null;
+  match.planMode = 'eigen';
+  match.ownSteps = { done: { opzet: true, start: true }, at: 'wissels' };
+  match.gameplan = { n, grid, src: blocks.map(() => 'ai'), base: true, lines: base };
+  gpSync(match, team);
+  // het standaardplan wisselt vaak vaker dan blokken toelaten: is een voorzet in blokken eerlijker, dan die
+  const r = effRules(match, team);
+  const rule = r.maxBenchOn ? (r.maxBench || 10) * 60 : Infinity;
+  const score = (st) => (st.max - st.min) + 1.5 * Math.max(0, st.maxBench - rule) + 0.3 * st.maxBench;
+  const s1 = score(gpStats(match, team));
+  const sampled = JSON.parse(JSON.stringify(match.gameplan));
+  const rec = gpRecommend(match, team).recommended;
+  match.gameplan = null;
+  match.lines = { ...base };
+  gpEnsure(match, team, rec);
+  gpFill(match, team);
+  if (s1 <= score(gpStats(match, team))) { match.gameplan = sampled; gpSync(match, team); return { n, fill: false }; }
+  return { n: rec, fill: true };
 }

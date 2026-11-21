@@ -142,6 +142,8 @@ function Affiche({ match, team, onClick, children }) {
   </header>`;
 }
 
+const LNAME_LIVE = { V: 'voor', M: 'het midden', A: 'achter' };
+
 // ================= voorbereiden =================
 function PrepView({ state, match, team }) {
   const [sheet, setSheet] = useState(null);
@@ -389,7 +391,10 @@ function LiveView({ match, team }) {
   const nick = (id) => M.nickOf(team, id);
   const group = M.nextGroup(match, team);
   const next = group[0] || null;
-  const countdown = next ? next.t - T : null;
+  // game plan: een moment met alleen plekwissels (of een andere opstelling) dat vóór de volgende wissel komt
+  const mo = M.nextMovesOnly(match, team);
+  const moNow = !!(mo && (!next || mo.t < next.t));
+  const countdown = moNow ? mo.t - T : next ? next.t - T : null;
   const pending = M.lineupPending(match, team);
   const timeUp = !match.finished && el >= L;
   const counts = M.swapCounts(match);
@@ -411,7 +416,10 @@ function LiveView({ match, team }) {
     if (liveAct.next) { const a = liveAct.next; liveAct.next = null; setTimeout(() => showAct(a), 120); }
     // 'Wissel nu' in de planner: de wissel gebeurt hier, na de schermovergang, zodat je hem ziet gebeuren
     const run = liveAct.run;
-    if (run) {
+    if (run && run.moves) {
+      liveAct.run = null;
+      setTimeout(() => { mutate((m, t) => M.doPlannedMoves(m, t)); toast('Plekwissel gedaan, zoals gepland', undoAction); }, reduced() ? 60 : TEMPO.screen + 150);
+    } else if (run) {
       liveAct.run = null;
       setTimeout(() => {
         const ps = run.pairs;
@@ -469,8 +477,8 @@ function LiveView({ match, team }) {
   const alerted = useRef({});
   useEffect(() => {
     if (!running) return;
-    if (next) {
-      const key = next.t + ':' + next.out + ':' + next.in;
+    if (next || moNow) {
+      const key = moNow ? 'mv' + mo.t : next.t + ':' + next.out + ':' + next.in;
       if (countdown <= 60 && countdown > 1 && !alerted.current[key + 'a']) { alerted.current[key + 'a'] = 1; beep(1, 660); }
       if (countdown <= 0 && !alerted.current[key + 'b']) { alerted.current[key + 'b'] = 1; beep(3); flash(); }
     }
@@ -611,7 +619,19 @@ function LiveView({ match, team }) {
   const ringMove = (e) => { const h = holdRef.current; if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > 24) ringStop(false); };
   useEffect(() => { if (!holdHint) return undefined; const t = setTimeout(() => setHoldHint(0), 2600); return () => clearTimeout(t); }, [holdHint]);
   const swapFromRing = () => {
-    if (spinning || !group.length) return;
+    if (spinning) return;
+    if (moNow) {
+      setSpinning(true); setSpinKey((k) => k + 1); haptic('success');
+      setTimeout(() => {
+        mutate((m, t) => M.doPlannedMoves(m, t));
+        toast(mo.moves.some((x) => x.to) ? 'Andere opstelling, zoals gepland' : 'Plekwissel gedaan, zoals gepland', undoAction);
+        setSpinning(false);
+        const r = document.querySelector('.islandwrap > .i-ring');
+        if (r) { r.classList.remove('held'); r.style.setProperty('--hold', '0'); }
+      }, reduced() ? 0 : 360);
+      return;
+    }
+    if (!group.length) return;
     const pairs = group.map((s) => ({ out: s.out, in: s.in, shift: s.shift }));
     setSpinning(true);
     setSpinKey((k) => k + 1);
@@ -657,7 +677,7 @@ function LiveView({ match, team }) {
     if (p.held) setPeek(false);
     else { setPeek(!p.was); haptic('select'); }
   };
-  const canPeek = !!next && !pending && !goal && !timeUp && !calmNext;
+  const canPeek = !!next && !moNow && !pending && !goal && !timeUp && !calmNext;
   useEffect(() => {
     if (!peek) return undefined;
     const away = (e) => { if (!e.target.closest('.islandwrap')) setPeek(false); };
@@ -679,10 +699,13 @@ function LiveView({ match, team }) {
       after = { t: rest[0].t, story: M.swapStory(M.slotsAfter(d.state.slots, group), lines, g2.map((s) => ({ out: s.out, in: s.in, shift: s.shift }))) };
     }
   }
-  const moveLine = (st) => html`<div class="pk-line" key=${'mv' + st.a + st.b}>
+  const moveLine = (st) => (st.to ? html`<div class="pk-line" key=${'mv' + st.a}>
+    <span class="pk-main"><span class="chg sh">↔ ${nick(st.a)}</span> naar ${LNAME_LIVE[st.to]}</span>
+    <span class="pk-sub">Andere opstelling, zoals gepland</span>
+  </div>` : html`<div class="pk-line" key=${'mv' + st.a + st.b}>
     <span class="pk-main"><span class="chg sh">↔ ${nick(st.a)}</span> en <span class="chg sh">${nick(st.b)}</span> ruilen van linie</span>
     ${st.aPos && html`<span class="pk-sub">${nick(st.a)} ${st.aPos.naar} · ${nick(st.b)} ${st.bPos.naar}</span>`}
-  </div>`;
+  </div>`);
   const storyLine = (st, small) => html`<div class=${'pk-line' + (small ? ' pk-next' : '')} key=${st.in + st.out}>
     <span class="pk-main"><span class="chg in">↑ ${nick(st.in)}</span> erin voor <span class="chg out">↓ ${nick(st.out)}</span></span>
     ${(st.shift || st.inPos) && html`<span class="pk-sub">${st.shift
@@ -711,7 +734,22 @@ function LiveView({ match, team }) {
   let isl;
   if (pending) isl = { st: 'hot', k: 'Rust', t1: `Opstelling ${M.periodLabel(team, match.clock.period)}`, t2: 'Tik om de opstelling klaar te zetten', ring: 'rust', full: true };
   else if (timeUp) isl = { st: 'hot', k: 'Tijd!', t1: `Einde ${M.periodLabel(team, match.clock.period)}`, t2: 'Tik om af te sluiten', ring: 'eind', full: true };
-  else if (next) {
+  else if (moNow) {
+    const late = countdown < -0.5;
+    const one = mo.moves[0];
+    const mtxt = (x) => (x.to ? `${nick(x.a)} naar ${LNAME_LIVE[x.to]}` : `${nick(x.a)} ↔ ${nick(x.b)}`);
+    isl = {
+      st: late ? 'hot late' : countdown <= 60 ? 'hot' : '',
+      k: mo.moves.some((x) => x.to) ? 'Andere opstelling · gepland' : 'Plekwissel · gepland',
+      t1: mo.moves.length > 1 ? html`${mo.moves.length} spelers van linie` : one.to ? html`<em>${nick(one.a)}</em> naar ${LNAME_LIVE[one.to]}` : html`<em>${nick(one.a)}</em> ↔ ${nick(one.b)}`,
+      t2: mo.moves.length > 1 ? mo.moves.map(mtxt).join(', ') : one.to ? 'Geen wissel, alleen een andere linie' : 'Ze ruilen van linie, geen wissel',
+      ring: countdown <= 0 ? 'nu' : M.fmt(countdown),
+      late: late ? '−' + M.fmt(-countdown) : null,
+      frac: Math.max(0, Math.min(1, (T - (match.plan ? match.plan.at : 0)) / Math.max(1, mo.t - (match.plan ? match.plan.at : 0)))),
+      breathe: countdown <= 0 ? 0.55 : 0.55 + (Math.max(0, countdown) / 60) * 1.1,
+      swap: true,
+    };
+  } else if (next) {
     const n = counts.done + 1;
     const late = countdown < -0.5;
     const s0 = next;
@@ -787,7 +825,7 @@ function LiveView({ match, team }) {
       onPointerDown=${isl.swap ? ringDown : undefined} onPointerUp=${isl.swap ? () => ringStop(true) : undefined} onPointerCancel=${isl.swap ? () => ringStop(false) : undefined} onPointerMove=${isl.swap ? ringMove : undefined}
       onContextMenu=${(e) => e.preventDefault()}
       onClick=${isl.swap ? (e) => { if (e.detail === 0) swapFromRing(); } : openNext}
-      aria-label=${isl.swap ? 'Houd vast om nu te wisselen: ' + group.map((s) => nick(s.in) + ' erin voor ' + nick(s.out)).join(', ') : isl.k}>
+      aria-label=${isl.swap ? (moNow ? 'Houd vast: plekwissel zoals gepland' : 'Houd vast om nu te wisselen: ' + group.map((s) => nick(s.in) + ' erin voor ' + nick(s.out)).join(', ')) : isl.k}>
       <svg viewBox="0 0 80 80" aria-hidden="true"><circle class="track" cx="40" cy="40" r="33" /><circle class="arc" cx="40" cy="40" r="33" stroke-dasharray=${C} stroke-dashoffset=${isl.full || countdown <= 0 ? 0 : (C * (isl.frac || 0)).toFixed(1)} />${isl.swap && html`<circle class="holdarc" cx="40" cy="40" r="33" stroke-dasharray=${C} />`}</svg>
       ${isl.swap
         ? html`<span class="i-lbl swaplbl"><span class="i-arrows" key=${'sp' + spinKey}><${Icon} name="swaparrows" size=${countdown <= 0 ? 30 : 22} /></span><span class="i-time">${isl.ring}</span></span>`
@@ -800,7 +838,7 @@ function LiveView({ match, team }) {
 
   // zwevende wisselspelers achter de plekken die gaan veranderen
   const ghosts = {};
-  if (next && !pending && !goal && !timeUp && !calmNext) {
+  if (next && !moNow && !pending && !goal && !timeUp && !calmNext) {
     const hot = countdown <= 60;
     for (const s of group) {
       if (s.shift && s.shift.id in d.state.pos) {
@@ -962,7 +1000,8 @@ function DoneView({ match, team }) {
   </main>`;
 }
 
-// Hoe wissel je deze wedstrijd? Twee manieren naast elkaar, de actieve zichtbaar gemarkeerd.
+// Hoe wissel je deze wedstrijd? Twee manieren naast elkaar, de actieve met een vinkje. Het standaardplan maakt
+// de app: dat voelt ook zo (kleurverloop dat rondloopt). Het game plan bouw je zelf.
 function PlanChoice({ match, team, swaps, perMoment }) {
   const own = M.isOwn(match, team);
   const plan = match.plan;
@@ -976,28 +1015,37 @@ function PlanChoice({ match, team, swaps, perMoment }) {
     toast('Je wisselt met het standaardplan. Je game plan blijft bewaard.', { label: 'Ongedaan', run: () => switchPlanMode('eigen', true) });
   };
   const pickGp = () => { if (!own) switchPlanMode('eigen', true); haptic('select'); go('/plan'); };
+  const takeOver = () => {
+    const res = mutate((m, t) => M.gpFromPlan(m, t));
+    setSheet(null);
+    if (res) {
+      haptic('success');
+      toast(res.fill ? `✦ In blokken kan het eerlijker: een voorzet met ${res.n} blokken per ${M.periodWord(team)} staat klaar.` : `✦ Het standaardplan staat als game plan klaar (${res.n} blokken per ${M.periodWord(team)}).`);
+      go('/plan');
+    }
+  };
   const stdLine = swaps ? `${swaps} ${perMoment > 1 ? 'momenten' : 'wissels'} · ${M.mins(plan.fair.minPlayed)}–${M.mins(plan.fair.maxPlayed)} min p.p.` : 'Geen wissels nodig';
   return html`<section class="pchoice">
     <div class="pc-head"><span class="pc-q">Hoe wissel je deze wedstrijd?</span>
       <button type="button" class="pc-info" onClick=${() => setSheet('uitleg')}>Uitleg</button></div>
     <div class="pc-opts">
-      <button type="button" class=${'pc-opt' + (!own ? ' on' : '')} aria-pressed=${!own ? 'true' : 'false'} onClick=${pickStd}>
+      <button type="button" class=${'pc-opt ai' + (!own ? ' on' : '')} aria-pressed=${!own ? 'true' : 'false'} onClick=${pickStd}>
+        <span class="pc-glow" aria-hidden="true"></span>
         ${!own && html`<span class="pc-badge" aria-label="Actief"><${Icon} name="check" size=${13} /></span>`}
-        <span class="pc-top"><span class="pc-ico"><${Icon} name="swaparrows" size=${16} /></span><b class="pc-t">Standaardplan</b></span>
-        <span class="pc-s">${own ? 'Klaar om te spelen, volgens je teaminstellingen' : html`${stdLine}${!plan.ok && html` <span class="warnicon" title=${(plan.why || []).map((w) => WHY_TEXT[w]).join(', ')}>!</span>`}`}</span>
-        <span class="pc-cta">${own ? 'Gebruik dit' : 'Bekijk als rooster'}<${Icon} name="chev" size=${14} /></span>
+        <span class="pc-top"><span class="pc-ico ai"><${Icon} name="spark" size=${16} /></span><b class="pc-t">Standaardplan</b></span>
+        <span class="pc-s">${own ? html`<span class="pc-cta">Gebruik dit<${Icon} name="chev" size=${13} /></span>` : html`${stdLine}${!plan.ok && html` <span class="warnicon" title=${(plan.why || []).map((w) => WHY_TEXT[w]).join(', ')}>!</span>`}`}</span>
       </button>
       <button type="button" class=${'pc-opt gp' + (own ? ' on' : '')} aria-pressed=${own ? 'true' : 'false'} onClick=${pickGp}>
         ${own && html`<span class="pc-badge" aria-label="Actief"><${Icon} name="check" size=${13} /></span>`}
         <span class="pc-top"><span class="pc-ico"><${Icon} name="edit" size=${16} /></span><b class="pc-t">Game plan</b></span>
-        <span class="pc-s">${own ? (st ? `${full} van ${st.blocks.length} blokken vol · ${M.mins(st.min)}–${M.mins(st.max)} min p.p.` : 'Nog niet gemaakt') : 'Zelf de puzzel leggen, blok voor blok'}</span>
-        <span class="pc-cta">${own ? (st ? (full === st.blocks.length ? 'Bekijk' : 'Verder') : 'Begin') : 'Maak een game plan'}<${Icon} name="chev" size=${14} /></span>
+        <span class="pc-s">${own ? (st ? `${full}/${st.blocks.length} blokken · ${M.mins(st.min)}–${M.mins(st.max)} min` : 'Nog niet gemaakt') : html`<span class="pc-build">Zelf bouwen<${Icon} name="chev" size=${13} /></span>`}</span>
       </button>
     </div>
     ${sheet === 'rooster' && html`<${Sheet} onClose=${() => setSheet(null)} label="Standaardplan">
-      <span class="h2" style="font-size:22px">Standaardplan</span>
+      <span class="h2" style="font-size:22px"><span class="ai-grad">✦ Standaardplan</span></span>
       <span class="sub">Zo wisselt de app, volgens je teaminstellingen. Per kind: wanneer op welke linie, en wanneer aan de kant.</span>
       <div class="card" style="box-shadow:none;border:1px solid var(--line)"><${Rooster} match=${match} team=${team} /></div>
+      <button type="button" class="btn block plain" onClick=${takeOver}>Pas aan als game plan</button>
       <div class="row">
         <button type="button" class="btn plain grow" onClick=${() => { setSheet(null); go('/plan'); }}>Open de planner</button>
         <button type="button" class="btn primary grow" onClick=${() => setSheet(null)}>Klaar</button>
@@ -1005,7 +1053,7 @@ function PlanChoice({ match, team, swaps, perMoment }) {
     </${Sheet}>`}
     ${sheet === 'uitleg' && html`<${Sheet} onClose=${() => setSheet(null)} label="Twee manieren om te wisselen">
       <span class="h2" style="font-size:22px">Twee manieren om te wisselen</span>
-      <div class="pc-ex"><span class="pc-ico"><${Icon} name="swaparrows" size=${18} /></span><div><b>Standaardplan</b>
+      <div class="pc-ex"><span class="pc-ico ai"><${Icon} name="spark" size=${18} /></span><div><b>Standaardplan</b>
         <p>De app maakt het plan uit je teaminstellingen: wisselprofiel, eerlijkheid en posities. Klaar om te spelen. Tijdens de wedstrijd rekent de app mee met wat er gebeurt.</p></div></div>
       <div class="pc-ex gp"><span class="pc-ico"><${Icon} name="edit" size=${18} /></span><div><b>Game plan</b>
         <p>Jij legt de puzzel op een liniebord: eerst de startopstelling, dan per blok wie waar speelt. De app rekent mee en kan een voorzet doen. Tijdens de wedstrijd volgt <b>Wissel nu</b> precies jouw plan.</p></div></div>

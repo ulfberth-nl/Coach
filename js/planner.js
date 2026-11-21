@@ -541,7 +541,7 @@ export function planOwn(start, ctx, T, pins, lineups) {
     const bench = all.filter((id) => !(id in pos));
     // de plekken zoals de coach ze neerzette (links/rechts), als er niemand vervangen hoefde te worden
     const same = lu.slots && Object.keys(pos).length === want.length && want.every((id) => id in pos);
-    steps.push({ type: 'lineup', t, pos, bench, period, own: true, ...(same ? { slots: { ...lu.slots } } : {}) });
+    steps.push({ type: 'lineup', t, pos, bench, period, own: true, ...(same ? { slots: { ...lu.slots } } : {}), ...(same && lu.lines ? { lines: { ...lu.lines } } : {}) });
     applyLineup(state, { pos, bench }, t);
   };
   if (ctx.lineupPending && T === p * periodLen && p > 0) lineupAt(T, p);
@@ -568,7 +568,17 @@ export function planOwn(start, ctx, T, pins, lineups) {
       used.add(pr.out); used.add(pr.in);
     }
     // game plan: veldspelers die van linie ruilen (zonder wissel), na de wissels van dit moment
+    // of één veldspeler naar een andere linie (andere opstelling, bijv. een verdediger erbij)
     for (const mv of pin.moves || []) {
+      if (mv.to) {
+        const from = state.pos[mv.a];
+        const left = Object.values(state.pos).filter((x) => x === from).length;
+        if (!from || from === mv.to || left < 2) { broken.push({ t: pin.t, move: true, out: mv.a, in: mv.a }); continue; }
+        const pos = { ...state.pos, [mv.a]: mv.to };
+        state.pos = pos;
+        steps.push({ type: 'move', t: pin.t, a: mv.a, from, to: mv.to, pos: { ...pos }, own: true });
+        continue;
+      }
       if (!(mv.a in state.pos) || !(mv.b in state.pos)) { broken.push({ t: pin.t, move: true, out: mv.a, in: mv.b }); continue; }
       const pos = { ...state.pos, [mv.a]: state.pos[mv.b], [mv.b]: state.pos[mv.a] };
       state.pos = pos;

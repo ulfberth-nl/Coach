@@ -139,3 +139,66 @@ const m4 = M.createMatch(team, { opponent: 'Weg', present: ids.filter((id) => id
 assert.ok(m4.gameplan.grid.every((p) => !p || !(gone in p)), 'afwezige speler is van het bord');
 
 console.log('gameplan ok');
+
+// ---------- andere opstelling in een blok (een verdediger erbij) ----------
+{
+  const mf = M.createMatch(team, { opponent: 'Formatie', present: ids, keeperId, planMode: 'eigen' });
+  M.gpEnsure(mf, team, 4); M.gpFill(mf, team);
+  const B = M.gpBlocks(mf, team);
+  const b = 2;
+  const pos = { ...mf.gameplan.grid[b] };
+  const v = Object.keys(pos).find((id) => pos[id] === 'V' && Object.values(pos).filter((x) => x === 'V').length > 1);
+  assert.ok(v, 'een voorspeler om naar achteren te halen');
+  pos[v] = 'A';
+  assert.ok(M.gpComplete(mf, team, pos), 'andere verdeling is ook vol');
+  M.gpSetBlock(mf, team, b, pos);
+  const single = mf.plan.steps.filter((s) => s.type === 'move' && s.to);
+  assert.ok(single.some((s) => s.t === B[b].t), 'losse verplaatsing in het plan: ' + JSON.stringify(mf.pins.find((p) => p.t === B[b].t)));
+  const card = M.timeline(mf, team).cards.find((c) => c.t === B[b].t);
+  assert.equal(card.lines.A, (mf.gameplan.lines.A || 0) + 1, 'kaart heeft de nieuwe opstelling');
+  // live: het moment uitvoeren verandert de opstelling, ongedaan maken zet hem terug
+  M.startClock(mf);
+  let guard = 0;
+  while (M.gameTime(mf, team) < B[b].t && guard++ < 10) {
+    const nx = M.nextSwap(mf, team), mo = M.nextMovesOnly(mf, team);
+    const t = Math.min(nx ? nx.t : Infinity, mo ? mo.t : Infinity);
+    if (t === Infinity) break;
+    fakeNow += (t - M.gameTime(mf, team)) * 1000;
+    if (mo && mo.t <= t) M.doPlannedMoves(mf, team); else M.doPlannedMoment(mf, team);
+  }
+  const d = M.derive(mf, team, M.gameTime(mf, team));
+  assert.ok(sameLines(d.state.pos, mf.gameplan.grid[b]), 'live staat zoals blok ' + (b + 1));
+  assert.equal(M.linesOf(mf, team).A, (mf.gameplan.lines.A || 0) + 1, 'live opstelling met een verdediger erbij');
+  M.undo(mf, team);
+  assert.equal(M.linesOf(mf, team).A, mf.gameplan.lines.A || 0, 'ongedaan: opstelling terug');
+}
+
+// ---------- alleen een plekwissel: eigen moment live ----------
+{
+  const mm = M.createMatch(team, { opponent: 'Plek', present: ids, keeperId, planMode: 'eigen' });
+  M.gpEnsure(mm, team, 4);
+  const f2 = M.gpFieldIds(mm); const ln = M.linesOf(mm, team);
+  const st0 = {}; let q = 0; for (const l of ['V', 'M', 'A']) for (let i = 0; i < (ln[l] || 0); i++) st0[f2[q++]] = l;
+  M.gpSetBlock(mm, team, 0, st0);
+  const xv = Object.keys(st0).find((id) => st0[id] === 'V'), xa = Object.keys(st0).find((id) => st0[id] === 'A');
+  M.gpSetBlock(mm, team, 3, { ...st0, [xv]: 'A', [xa]: 'V' });
+  M.startClock(mm);
+  const mo = M.nextMovesOnly(mm, team);
+  assert.ok(mo && mo.t === M.gpBlocks(mm, team)[3].t, 'plekwissel is een eigen moment');
+  fakeNow += (mo.t - M.gameTime(mm, team)) * 1000;
+  assert.equal(M.doPlannedMoves(mm, team), 1);
+  const d2 = M.derive(mm, team, M.gameTime(mm, team));
+  assert.equal(d2.state.pos[xv], 'A');
+  assert.equal(M.nextMovesOnly(mm, team), null);
+}
+
+// ---------- standaardplan overnemen als game plan ----------
+{
+  const ms = M.createMatch(team, { opponent: 'Over', present: ids, keeperId });
+  assert.ok(!M.isOwn(ms, team));
+  const res = M.gpFromPlan(ms, team);
+  assert.ok(res.n >= 2 && res.n <= 6);
+  assert.ok(M.isOwn(ms, team) && ms.gameplan.base);
+  assert.ok(M.gpStats(ms, team).blocks.every((b) => b.ok), 'alle blokken vol');
+}
+console.log('gameplan formatie ok');
