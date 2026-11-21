@@ -1,11 +1,12 @@
-import { html, useMemo, useState } from '../../vendor/preact-htm.js';
+import { html, useEffect, useMemo, useState } from '../../vendor/preact-htm.js';
 import { update, activeTeam, currentMatch, newTeam, exportData, importData } from '../store.js';
 import { replan, periodWord, createMatch, matchEnd, mins } from '../match.js';
 import { suggestKeeper } from './home.js';
 import { rebuildConcept } from './wedstrijd.js';
-import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, toast, STANDS } from '../ui.js';
+import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, Reveal, toast, STANDS } from '../ui.js';
+import { devicePrefs, setDevicePref, onDevicePrefs, osReduced } from '../motion.js';
 
-export const APP_VERSION = '0.12.3';
+export const APP_VERSION = '0.13.0';
 
 // Eerlijkheid in drie standen; zetten de onderliggende regels in één keer
 const FAIR = {
@@ -44,6 +45,8 @@ export function Team({ state }) {
   const [confirm, setConfirm] = useState(null);
   const pw = periodWord(team);
   const [more, setMore] = useState(false);
+  const [dev, setDev] = useState(devicePrefs());
+  useEffect(() => onDevicePrefs((p) => setDev({ ...p })), []);
   const preset = presetOf(r);
   const preview = useMemo(() => {
     const present = team.players.filter((p) => p.active !== false).map((p) => p.id);
@@ -180,13 +183,13 @@ export function Team({ state }) {
         <span class="label">Meer instellingen</span><span class=${'chev' + (more ? ' open' : '')}><${Icon} name="chev" size=${18} /></span>
       </button>
       <div class=${'collapse' + (more ? ' open' : '')}><div class="col" style="gap:6px">
-        ${!r.turnsPerPeriod && html`<${Setting} title="Iedereen even vaak gewisseld"><${Switch} label="Iedereen even vaak gewisseld" on=${r.evenOften} onChange=${(v) => setRule('evenOften', v)} /></${Setting}>`}
+        <${Reveal} open=${!r.turnsPerPeriod}><${Setting} title="Iedereen even vaak gewisseld"><${Switch} label="Iedereen even vaak gewisseld" on=${r.evenOften} onChange=${(v) => setRule('evenOften', v)} /></${Setting}></${Reveal}>
         <${Setting} title="Gelijke speeltijd"><${Switch} label="Gelijke speeltijd" on=${r.equalTime} onChange=${(v) => setRule('equalTime', v)} /></${Setting}>
-        ${r.equalTime && html`<${Setting} title="Maximaal verschil in speeltijd"><${Stepper} label="Marge" value=${r.marge} min=${1} max=${15} suffix=" min" onChange=${(v) => setRule('marge', v)} /></${Setting}>`}
+        <${Reveal} open=${!!r.equalTime}><${Setting} title="Maximaal verschil in speeltijd"><${Stepper} label="Marge" value=${r.marge} min=${1} max=${15} suffix=" min" onChange=${(v) => setRule('marge', v)} /></${Setting}></${Reveal}>
         <${Setting} title="Niet te lang op de bank"><${Switch} label="Niet te lang op de bank" on=${!!r.maxBenchOn} onChange=${(v) => setRule('maxBenchOn', v)} /></${Setting}>
-        ${r.maxBenchOn && html`<${Setting} title="Maximaal achter elkaar op de bank"><${Stepper} label="Maximaal op de bank" value=${r.maxBench || 10} min=${3} max=${30} suffix=" min" onChange=${(v) => setRule('maxBench', v)} /></${Setting}>`}
+        <${Reveal} open=${!!r.maxBenchOn}><${Setting} title="Maximaal achter elkaar op de bank"><${Stepper} label="Maximaal op de bank" value=${r.maxBench || 10} min=${3} max=${30} suffix=" min" onChange=${(v) => setRule('maxBench', v)} /></${Setting}></${Reveal}>
         <${Setting} title="Minimaal tussen wissels"><${Stepper} label="Minimaal tussen wissels" value=${r.minInterval || 2} min=${1} max=${8} suffix=" min" onChange=${(v) => setRule('minInterval', v)} /></${Setting}>
-        ${r.turnsPerPeriod === 3 && html`<span class="small">Nu: 3× per ${pw}.</span>`}
+        <${Reveal} open=${r.turnsPerPeriod === 3}><span class="small">Nu: 3× per ${pw}.</span></${Reveal}>
         <${Setting} title="3× per ${pw} naar de bank" sub="Voor grote selecties"><${Switch} label="3 keer" on=${r.turnsPerPeriod === 3} onChange=${(v) => setRule('turnsPerPeriod', v ? 3 : 0)} /></${Setting}>
       </div></div>
     </section>
@@ -194,19 +197,26 @@ export function Team({ state }) {
     <section class="card">
       <span class="h2">Opstelling en stand</span>
       <${Setting} title="Opstelling volgt de stand" sub="Past de stand automatisch aan bij een goal"><${Switch} label="Opstelling volgt de stand" on=${r.autoStand} onChange=${(v) => setRule('autoStand', v)} /></${Setting}>
-      ${r.autoStand && html`
+      <${Reveal} open=${!!r.autoStand}><div class="col" style="gap:10px">
         <span class="label">Bij achterstand</span>
         <${Seg} label="Bij achterstand" value=${r.standAchter} onChange=${(v) => setRule('standAchter', v)} options=${STANDS} />
         <span class="label">Bij gelijke stand</span>
         <${Seg} label="Bij gelijke stand" value=${r.standGelijk} onChange=${(v) => setRule('standGelijk', v)} options=${STANDS} />
         <span class="label">Bij voorsprong</span>
-        <${Seg} label="Bij voorsprong" value=${r.standVoor} onChange=${(v) => setRule('standVoor', v)} options=${STANDS} />`}
+        <${Seg} label="Bij voorsprong" value=${r.standVoor} onChange=${(v) => setRule('standVoor', v)} options=${STANDS} />
+      </div></${Reveal}>
       <span class="small">Verdedigen: sterkere wissels achterin. Aanvallen: sterkere wissels voorin. Het midden blijft altijd sterk.</span>
     </section>
 
     <section class="card">
       <span class="h2">Overzichten</span>
       <${Setting} title="Keepertijd telt mee" sub="Uit: keepertijd telt niet als speeltijd"><${Switch} label="Keepertijd telt mee" on=${r.keeperCounts} onChange=${(v) => setRule('keeperCounts', v)} /></${Setting}>
+    </section>
+
+    <section class="card">
+      <span class="h2">Deze telefoon</span>
+      <${Setting} title="Tikje bij tikken" sub="Voel een tikje bij knoppen en keuzes. iPhone vanaf iOS 18 en Android."><${Switch} label="Tikje bij tikken" on=${!!dev.haptics} onChange=${(v) => setDevicePref('haptics', v)} /></${Setting}>
+      <${Setting} title="Minder beweging" sub=${osReduced() ? 'Staat aan via Beperk beweging op je telefoon.' : 'Rustiger beeld: geen veren, wiebels en zwevers.'}><${Switch} label="Minder beweging" on=${!!dev.calm || osReduced()} disabled=${osReduced()} onChange=${(v) => setDevicePref('calm', v)} /></${Setting}>
     </section>
 
     <section class="card">

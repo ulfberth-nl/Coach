@@ -1,5 +1,6 @@
 import { html, render, useEffect, useState } from '../vendor/preact-htm.js';
 import { useStore } from './store.js';
+import { installPress } from './motion.js';
 import { ToastHost, FlashHost, Icon, toast } from './ui.js';
 import { Wedstrijd } from './screens/wedstrijd.js';
 import { Plan } from './screens/plan.js';
@@ -52,6 +53,7 @@ function App() {
   `;
 }
 
+installPress();
 render(html`<${App} />`, document.getElementById('app'));
 
 // offline werken + nieuwe versie melden
