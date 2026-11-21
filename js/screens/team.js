@@ -5,16 +5,56 @@ import { suggestKeeper } from './home.js';
 import { rebuildConcept } from './wedstrijd.js';
 import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, Reveal, toast, STANDS } from '../ui.js';
 import { devicePrefs, setDevicePref, onDevicePrefs, osReduced } from '../motion.js';
+import { PROFILES, PROFILE_ORDER, profileOf, tune, tuneAsync, matchRules, consequences } from '../profiles.js';
 
-export const APP_VERSION = '0.13.0';
+export const APP_VERSION = '0.14.0';
 
-// Eerlijkheid in drie standen; zetten de onderliggende regels in één keer
-const FAIR = {
-  streng: { label: 'Streng', sub: 'Iedereen even lang: hooguit 2 minuten verschil.', rules: { equalTime: true, marge: 2, priority: 'eerlijk', evenOften: true } },
-  normaal: { label: 'Normaal', sub: 'Iedereen ongeveer even lang: hooguit 5 minuten verschil.', rules: { equalTime: true, marge: 5, priority: 'eerlijk', evenOften: true } },
-  ruim: { label: 'Ruim', sub: 'De beste bezetting gaat voor; sterkere spelers mogen iets langer staan (hooguit 8 minuten verschil).', rules: { equalTime: true, marge: 8, priority: 'bezetting', evenOften: true } }
-};
-const presetOf = (r) => Object.keys(FAIR).find((k) => Object.entries(FAIR[k].rules).every(([key, v]) => r[key] === v)) || 'eigen';
+// regels die het wisselprofiel bepaalt; zet je er zelf een, dan wordt het profiel 'Eigen'
+const TUNED = ['marge', 'equalTime', 'evenOften', 'maxBenchOn', 'maxBench', 'minInterval', 'turnsPerPeriod', 'priority', 'strongBias'];
+
+// Profielen doorrekenen voor de selectie (in stapjes, gekozen profiel eerst)
+function useProfiles(team, present, keeper, current) {
+  const sig = JSON.stringify([present, keeper, team.lines, team.periods, team.periodMin, team.keeper, team.type, team.rules.perMoment, team.rules.newLineupAtBreak,
+    team.players.map((p) => [p.id, p.kracht, p.prefs, p.main, p.flex])]);
+  const [res, setRes] = useState({});
+  useEffect(() => {
+    let alive = true;
+    const out = {};
+    const keys = PROFILE_ORDER.slice().sort((a, b) => (b === current) - (a === current));
+    (async () => {
+      for (const k of keys) {
+        const r = await tuneAsync(team, k, present, keeper, () => alive);
+        if (!alive) return;
+        out[k] = r;
+        setRes({ ...out });
+      }
+    })();
+    return () => { alive = false; };
+  }, [sig]);
+  return res;
+}
+
+function ProfileCard({ k, on, r, ref0, n, onPick }) {
+  const P = PROFILES[k];
+  const s = r && r.stats;
+  const pp = s ? (s.minP === s.maxP ? s.minP + ' min' : s.minP + '–' + s.maxP + ' min') : '';
+  return html`<div class=${'prof' + (on ? ' on' : '')}>
+    <button type="button" class="prof-btn" role="radio" aria-checked=${on ? 'true' : 'false'} onClick=${onPick}>
+      <span class="prof-radio" aria-hidden="true"></span>
+      <span class="prof-txt">
+        <span class="prof-title">${P.label}<span class="prof-tag">${P.tag}</span></span>
+        <span class="prof-sub">${P.sub}</span>
+        <span class=${'prof-mini' + (s ? '' : ' wait')}>${s ? `${s.moments} wissels · ${pp} p.p. · max ${Math.round(s.maxStint)}′ bank` : 'rekent het door…'}</span>
+      </span>
+    </button>
+    <${Reveal} open=${on}><div class="prof-more">
+      <span class="label">Wat de app doet</span>
+      <p class="prof-does">${P.does}</p>
+      ${s && html`<span class="label">Gevolgen voor je ${n} spelers</span>
+        <ul class="prof-cons">${consequences(k, s, ref0).map((c) => html`<li class=${c.warn ? 'warn' : ''}>${c.t}</li>`)}</ul>`}
+    </div></${Reveal}>
+  </div>`;
+}
 
 // logo verkleinen tot 256 px zodat het licht blijft in de opslag
 function readLogo(file) {
@@ -47,10 +87,14 @@ export function Team({ state }) {
   const [more, setMore] = useState(false);
   const [dev, setDev] = useState(devicePrefs());
   useEffect(() => onDevicePrefs((p) => setDev({ ...p })), []);
-  const preset = presetOf(r);
+  const prof = profileOf(r);
+  const squad = team.players.filter((p) => p.active !== false).map((p) => p.id);
+  const squadKeeper = team.keeper ? suggestKeeper(team, squad, {}) : null;
+  const profs = useProfiles(team, squad, squadKeeper, prof);
   const preview = useMemo(() => {
-    const present = team.players.filter((p) => p.active !== false).map((p) => p.id);
-    const keeper = team.keeper ? suggestKeeper(team, present, {}) : null;
+    if (prof !== 'eigen') return null;
+    const present = squad;
+    const keeper = squadKeeper;
     const F = team.lines.A + team.lines.M + team.lines.V;
     if (present.filter((id) => id !== keeper).length < F) return null;
     const plan = createMatch(team, { present, keeperId: keeper, priority: r.priority }).plan;
@@ -62,17 +106,27 @@ export function Team({ state }) {
       minP: mins(f.minPlayed), maxP: mins(f.maxPlayed), maxStint: mins(f.maxStint || 0),
       turns: f.minTurns === f.maxTurns ? `Iedereen ${f.minTurns}× naar de bank` : `${f.minTurns}–${f.maxTurns}× naar de bank`
     };
-  }, [team]);
+  }, [team, prof]);
 
-  const set = (fn) => update((draft) => {
+  const set = (fn, changes) => update((draft) => {
     const t = activeTeam(draft);
     fn(t);
     const m = currentMatch(draft);
     if (m && !m.finished && m.teamId === t.id) {
-      try { if (m.started) replan(m, t); else rebuildConcept(draft); } catch (e) { /* plan volgt bij de volgende actie */ }
+      try {
+        if (m.started) { m.rules = matchRules(t, m.present, m.keeperId); if (changes && changes.priority) m.priority = changes.priority; replan(m, t); }
+        else rebuildConcept(draft, changes);
+      } catch (e) { /* plan volgt bij de volgende actie */ }
     }
   });
-  const setRule = (k, v) => set((t) => { t.rules[k] = v; });
+  // zelf een regel zetten die het profiel bepaalt: profiel wordt 'Eigen'
+  const setRule = (k, v) => set((t) => { t.rules[k] = v; if (TUNED.indexOf(k) !== -1) t.rules.profile = 'eigen'; });
+  const pickProfile = (k) => {
+    if (k === prof) return;
+    const tr = profs[k] || tune(team, k, squad, squadKeeper);
+    const rules = tr ? tr.rules : { ...PROFILES[k].variants[0] };
+    set((t) => { Object.assign(t.rules, rules, { profile: k }); if (!('strongBias' in rules)) delete t.rules.strongBias; }, { priority: rules.priority || 'eerlijk' });
+  };
   const setLines = (k, v) => set((t) => {
     const next = { ...t.lines, [k]: v };
     if (next.A + next.M + next.V < 1) return;
@@ -157,32 +211,25 @@ export function Team({ state }) {
 
     <section class="card">
       <span class="h2">Wisselen</span>
-      <span class="label">Hoe vaak gaat elk kind naar de bank?</span>
-      <${Seg} label="Wisselritme" value=${[0, 1, 2].indexOf(r.turnsPerPeriod || 0) !== -1 ? (r.turnsPerPeriod || 0) : -1} onChange=${(v) => setRule('turnsPerPeriod', v)} options=${[[0, 'App kiest'], [1, '1× per ' + pw], [2, '2× per ' + pw]]} />
-      <span class="small">${r.turnsPerPeriod ? `Ieder kind ${r.turnsPerPeriod}× per ${pw} op de bank; de app kiest de momenten.` : 'De app kiest het kleinste aantal wissels dat eerlijk uitkomt.'}</span>
-      <span class="label">Hoeveel spelers tegelijk wisselen?</span>
-      <${Seg} label="Spelers per wissel" value=${Math.max(1, Math.min(5, r.perMoment || 1))} onChange=${(v) => setRule('perMoment', v)} options=${[1, 2, 3, 4, 5].map((n) => [n, String(n)])} />
-      <span class="small">${(r.perMoment || 1) > 1 ? `Per wisselmoment gaan er ${r.perMoment} kinderen tegelijk naar de bank (of minder als de bank kleiner is).` : 'Telkens één kind tegelijk.'}${team.type === 'zaal' && (r.perMoment || 1) < Math.min(5, F) ? html` <button type="button" class="link" onClick=${() => setRule('perMoment', Math.min(5, F))}>Hele veldploeg (${Math.min(5, F)})</button>` : ''}</span>
-      <span class="label">Eerlijkheid</span>
-      <${Seg} label="Eerlijkheid" value=${preset} onChange=${(v) => set((t) => { Object.assign(t.rules, FAIR[v].rules); })} options=${Object.keys(FAIR).map((k) => [k, FAIR[k].label])} />
-      <span class="small">${preset in FAIR ? FAIR[preset].sub : 'Eigen instellingen (zie hieronder).'}</span>
+      <span class="sub">Kies hoe je wilt wisselen. De app rekent het door voor je ${squad.length} spelers, en per wedstrijd opnieuw met wie er is.</span>
+      <div class="profiles" role="radiogroup" aria-label="Wisselprofiel">
+        ${PROFILE_ORDER.map((k) => html`<${ProfileCard} key=${k} k=${k} on=${prof === k} r=${profs[k]} ref0=${profs.balans && profs.balans.stats} n=${squad.length} onPick=${() => pickProfile(k)} />`)}
+      </div>
+      <${Reveal} open=${prof === 'eigen'}><div class="prof-eigen"><span><b>Eigen instellingen</b> · je hebt zelf regels gezet</span><button type="button" class="link" onClick=${() => pickProfile('balans')}>Terug naar In balans</button></div></${Reveal}>
       <${Setting} title="Nieuwe opstelling na de rust" sub="Gratis moment om meerdere kinderen te wisselen"><${Switch} label="Nieuwe opstelling na de rust" on=${r.newLineupAtBreak} onChange=${(v) => setRule('newLineupAtBreak', v)} /></${Setting}>
 
-      ${preview && html`<div class="preview">
-        <span class="label">Zo ziet een wedstrijd eruit met je ${preview.n} spelers</span>
-        <div class="pv-grid">
-          <div><b class="num">${preview.swaps}</b><span>${(r.perMoment || 1) > 1 ? 'wisselmomenten' : 'wissels'}</span></div>
-          <div><b class="num">~${String(preview.every).replace('.', ',')}′</b><span>tussen wissels</span></div>
-          <div><b class="num">${preview.minP === preview.maxP ? preview.minP : preview.minP + '–' + preview.maxP}′</b><span>speeltijd per kind</span></div>
-          <div><b class="num">${preview.maxStint}′</b><span>langst op de bank</span></div>
-        </div>
-        <span class="small">${preview.turns}${!preview.ok ? ' · niet alles past precies, dit is de eerlijkste verdeling' : ''}</span>
-      </div>`}
-
       <button type="button" class="between" style="background:none;border:none;padding:0;min-height:44px;width:100%" aria-expanded=${more ? 'true' : 'false'} onClick=${() => setMore(!more)}>
-        <span class="label">Meer instellingen</span><span class=${'chev' + (more ? ' open' : '')}><${Icon} name="chev" size=${18} /></span>
+        <span class="label">Eigen instellingen</span><span class=${'chev' + (more ? ' open' : '')}><${Icon} name="chev" size=${18} /></span>
       </button>
-      <div class=${'collapse' + (more ? ' open' : '')}><div class="col" style="gap:6px">
+      <${Reveal} open=${more}><div class="col" style="gap:6px">
+        <span class="small">Hier zet je de regels zelf. Pas je iets aan dat het profiel bepaalt, dan heet je keuze 'Eigen'.</span>
+        <span class="label">Hoeveel spelers tegelijk wisselen?</span>
+        <${Seg} label="Spelers per wissel" value=${Math.max(1, Math.min(5, r.perMoment || 1))} onChange=${(v) => setRule('perMoment', v)} options=${[1, 2, 3, 4, 5].map((n) => [n, String(n)])} />
+        <span class="small">${(r.perMoment || 1) > 1 ? `Per wisselmoment gaan er ${r.perMoment} kinderen tegelijk naar de bank (of minder als de bank kleiner is).` : 'Telkens één kind tegelijk.'}${team.type === 'zaal' && (r.perMoment || 1) < Math.min(5, F) ? html` <button type="button" class="link" onClick=${() => setRule('perMoment', Math.min(5, F))}>Hele veldploeg (${Math.min(5, F)})</button>` : ''}</span>
+        <span class="label">Hoe vaak gaat elk kind naar de bank?</span>
+        <${Seg} label="Wisselritme" value=${[0, 1, 2].indexOf(r.turnsPerPeriod || 0) !== -1 ? (r.turnsPerPeriod || 0) : -1} onChange=${(v) => setRule('turnsPerPeriod', v)} options=${[[0, 'App kiest'], [1, '1× per ' + pw], [2, '2× per ' + pw]]} />
+        <span class="label">Voorrang</span>
+        <${Seg} label="Voorrang" value=${r.priority === 'bezetting' ? 'bezetting' : 'eerlijk'} onChange=${(v) => setRule('priority', v)} options=${[['eerlijk', 'Eerlijkheid'], ['bezetting', 'Beste bezetting']]} />
         <${Reveal} open=${!r.turnsPerPeriod}><${Setting} title="Iedereen even vaak gewisseld"><${Switch} label="Iedereen even vaak gewisseld" on=${r.evenOften} onChange=${(v) => setRule('evenOften', v)} /></${Setting}></${Reveal}>
         <${Setting} title="Gelijke speeltijd"><${Switch} label="Gelijke speeltijd" on=${r.equalTime} onChange=${(v) => setRule('equalTime', v)} /></${Setting}>
         <${Reveal} open=${!!r.equalTime}><${Setting} title="Maximaal verschil in speeltijd"><${Stepper} label="Marge" value=${r.marge} min=${1} max=${15} suffix=" min" onChange=${(v) => setRule('marge', v)} /></${Setting}></${Reveal}>
@@ -191,7 +238,17 @@ export function Team({ state }) {
         <${Setting} title="Minimaal tussen wissels"><${Stepper} label="Minimaal tussen wissels" value=${r.minInterval || 2} min=${1} max=${8} suffix=" min" onChange=${(v) => setRule('minInterval', v)} /></${Setting}>
         <${Reveal} open=${r.turnsPerPeriod === 3}><span class="small">Nu: 3× per ${pw}.</span></${Reveal}>
         <${Setting} title="3× per ${pw} naar de bank" sub="Voor grote selecties"><${Switch} label="3 keer" on=${r.turnsPerPeriod === 3} onChange=${(v) => setRule('turnsPerPeriod', v ? 3 : 0)} /></${Setting}>
-      </div></div>
+        ${preview && html`<div class="preview">
+          <span class="label">Zo ziet een wedstrijd eruit met je ${preview.n} spelers</span>
+          <div class="pv-grid">
+            <div><b class="num">${preview.swaps}</b><span>${(r.perMoment || 1) > 1 ? 'wisselmomenten' : 'wissels'}</span></div>
+            <div><b class="num">~${String(preview.every).replace('.', ',')}′</b><span>tussen wissels</span></div>
+            <div><b class="num">${preview.minP === preview.maxP ? preview.minP : preview.minP + '–' + preview.maxP}′</b><span>speeltijd per kind</span></div>
+            <div><b class="num">${preview.maxStint}′</b><span>langst op de bank</span></div>
+          </div>
+          <span class="small">${preview.turns}${!preview.ok ? ' · niet alles past precies, dit is de eerlijkste verdeling' : ''}</span>
+        </div>`}
+      </div></${Reveal}>
     </section>
 
     <section class="card">

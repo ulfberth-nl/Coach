@@ -99,7 +99,7 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   const c = cards[i];
   const ch = changes(cards, i);
   const canEdit = editable && i === 0;
-  useDragSwap(zone, canEdit, (a, b) => onSwap && onSwap(a, b));
+  useDragSwap(zone, canEdit, (a, b) => onSwap && onSwap(a, b), (a, b) => 'Ruil met ' + M.nickOf(team, b));
   useScrub(zone, { get: getF, set: setF, skipPills: () => editable && Math.round(getF()) === 0 });
 
   const timeOf = (x) => {

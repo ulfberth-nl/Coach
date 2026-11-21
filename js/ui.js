@@ -1,7 +1,7 @@
 // Gedeelde bouwstenen voor de schermen.
 import { html, useEffect, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { getState, update } from './store.js';
-import { haptic, reduced, cancelPress, T, EASE_OUT } from './motion.js';
+import { haptic, reduced, cancelPress, T, EASE_OUT, SPRING } from './motion.js';
 import { findClub, searchClubs, withClub, clubColors, clubAbbr, colorKey, splitTeam, norm } from './clubs.js';
 
 export const POS_COLORS = { K: 'var(--pos-K)', A: 'var(--pos-A)', M: 'var(--pos-M)', V: 'var(--pos-V)' };
@@ -175,6 +175,15 @@ export function Seg({ value, options, onChange, label, small }) {
   const cb = useRef(onChange);
   cb.current = onChange;
   const [drag, setDrag] = useState(null);
+  const dragging = useRef(false);
+  // iPhone: tijdens vegen nooit de pagina laten meeschuiven
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return undefined;
+    const block = (e) => { if (dragging.current) e.preventDefault(); };
+    el.addEventListener('touchmove', block, { passive: false });
+    return () => el.removeEventListener('touchmove', block);
+  }, []);
   useLayoutEffect(() => {
     const p = prev.current;
     prev.current = i;
@@ -184,14 +193,13 @@ export function Seg({ value, options, onChange, label, small }) {
     el.style.transformOrigin = i > p ? '0 50%' : '100% 50%';
     try { el.animate([{ scale: '1 1' }, { scale: `${(1 + Math.min(0.6, 0.3 * d)).toFixed(2)} .88`, offset: 0.32 }, { scale: '1 1' }], { duration: T.screen + 60, easing: EASE_OUT }); } catch (e) { /* oud toestel */ }
   }, [i]);
-  const posAt = (x) => {
-    const r = root.current.getBoundingClientRect();
-    const w = (r.width - 8 - (n - 1) * 4) / n;
-    return Math.max(0, Math.min(n - 1, (x - r.left - 4 - w / 2) / (w + 4)));
-  };
   const down = (e) => {
     if (e.button > 0 || n < 2 || root.current.querySelector('button:disabled')) return;
-    const s = { id: e.pointerId, x: e.clientX, y: e.clientY, on: false, hover: i };
+    // maten één keer vastleggen; daarna telt alleen hoe ver de vinger is geschoven (geen gespring)
+    const r = root.current.getBoundingClientRect();
+    const step = (r.width - 8 - (n - 1) * 4) / n + 4;
+    const startPos = Math.max(0, Math.min(n - 1, (e.clientX - r.left - 4 - (step - 4) / 2) / step));
+    const s = { id: e.pointerId, x: e.clientX, y: e.clientY, on: false, hover: i, raf: 0, pos: startPos };
     const move = (ev) => {
       if (ev.pointerId !== s.id) return;
       if (!s.on) {
@@ -199,10 +207,12 @@ export function Seg({ value, options, onChange, label, small }) {
         if (dy > 10 && dy > dx) { stop(); return; }
         if (dx < 8) return;
         s.on = true;
+        dragging.current = true;
       }
-      const pos = posAt(ev.clientX), hover = Math.round(pos);
+      s.pos = Math.max(0, Math.min(n - 1, startPos + (ev.clientX - s.x) / step));
+      const hover = Math.round(s.pos);
       if (hover !== s.hover) { s.hover = hover; haptic('select'); }
-      setDrag({ pos, hover });
+      if (!s.raf) s.raf = requestAnimationFrame(() => { s.raf = 0; if (dragging.current) setDrag({ pos: s.pos, hover: s.hover }); });
     };
     const up = (ev) => {
       if (ev.pointerId !== s.id) return;
@@ -214,6 +224,8 @@ export function Seg({ value, options, onChange, label, small }) {
       if (s.hover !== i) cb.current(options[s.hover][0]);
     };
     const stop = () => {
+      dragging.current = false;
+      if (s.raf) cancelAnimationFrame(s.raf);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', stop);
@@ -462,49 +474,95 @@ export const KRACHT_BG = 'linear-gradient(90deg, #1F3C88, #2B57C9 72%, #F5A524)'
 
 // ---------- slepen om te ruilen (vinger of muis) ----------
 // Elementen met data-pid binnen de container kunnen op elkaar worden gesleept.
-export function useDragSwap(ref, enabled, onSwap) {
+// Zo voelt het op een telefoon goed:
+// - wat je sleept zweeft boven je vinger (je vinger verbergt het niet);
+// - het dichtstbijzijnde doel binnen een ruime straal 'pakt' de speler (geen precies mikken);
+// - boven de zwevende speler staat wat er gaat gebeuren ('Speler 8 erin', 'Ruil met …');
+// - bij loslaten vliegt de speler naar het doel, of terug als er geen doel is.
+// hint(a, b) geeft die tekst, of null als b geen geldig doel is.
+const MAGNET = 78;
+export function useDragSwap(ref, enabled, onSwap, hint) {
   const cb = useRef(onSwap);
   cb.current = onSwap;
+  const hb = useRef(hint);
+  hb.current = hint;
   useEffect(() => {
     const root = ref.current;
     if (!root || !enabled) return undefined;
     root.classList.add('draggable');
     let st = null;
+    const centre = (el) => { const p = el.querySelector('.pill') || el; const r = p.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
     const down = (e) => {
+      if (e.button > 0) return;
       const el = e.target.closest('[data-pid]');
       if (!el || !el.dataset.pid || !root.contains(el)) return;
-      st = { id: el.dataset.pid, x: e.clientX, y: e.clientY, el, ghost: null, over: null };
+      st = { id: el.dataset.pid, x: e.clientX, y: e.clientY, el, ghost: null, tip: null, over: null, targets: [] };
+    };
+    const begin = () => {
+      cancelPress();
+      const src = st.el.querySelector('.pill') || st.el;
+      const g = src.cloneNode(true);
+      g.querySelectorAll('.hx').forEach((n) => n.remove());
+      g.classList.add('drag-ghost');
+      document.body.appendChild(g);
+      const tip = document.createElement('div');
+      tip.className = 'drag-tip';
+      document.body.appendChild(tip);
+      st.ghost = g;
+      st.tip = tip;
+      st.from = centre(st.el);
+      st.el.classList.add('drag-src');
+      // alle mogelijke doelen met hun middelpunt (het veld en de bank bewegen niet tijdens het slepen)
+      st.targets = [...root.querySelectorAll('[data-pid]')].filter((t) => t.dataset.pid && t.dataset.pid !== st.id).map((t) => {
+        const label = hb.current ? hb.current(st.id, t.dataset.pid) : '';
+        return label === null ? null : { el: t, id: t.dataset.pid, label, ...centre(t) };
+      }).filter(Boolean);
+      if (!reduced()) { try { g.animate([{ scale: '1' }, { scale: '1.15' }], { duration: T.small, easing: SPRING.play }); } catch (x) { /* oud toestel */ } }
+      haptic('select');
     };
     const move = (e) => {
       if (!st) return;
       if (!st.ghost) {
         if (Math.hypot(e.clientX - st.x, e.clientY - st.y) < 8) return;
-        const src = st.el.querySelector('.pill') || st.el;
-        const g = src.cloneNode(true);
-        cancelPress();
-        g.classList.add('drag-ghost');
-        document.body.appendChild(g);
-        st.ghost = g;
-        st.el.classList.add('drag-src');
+        begin();
       }
       e.preventDefault();
+      // mikpunt net boven het contactpunt van de vinger; dichtstbijzijnde doel binnen de straal
+      const ax = e.clientX, ay = e.clientY - 8;
+      let best = null, bd = MAGNET;
+      for (const t of st.targets) { const dd = Math.hypot(t.x - ax, t.y - ay); if (dd < bd) { bd = dd; best = t; } }
       st.ghost.style.left = e.clientX + 'px';
       st.ghost.style.top = e.clientY + 'px';
-      const under = document.elementFromPoint(e.clientX, e.clientY);
-      const t = under && under.closest('[data-pid]');
-      const over = t && root.contains(t) && t.dataset.pid && t.dataset.pid !== st.id ? t : null;
-      if (over !== st.over) {
-        if (st.over) st.over.classList.remove('drop-target');
-        if (over) over.classList.add('drop-target');
-        st.over = over;
+      st.tip.style.left = e.clientX + 'px';
+      st.tip.style.top = e.clientY + 'px';
+      if (best !== st.over) {
+        if (st.over) st.over.el.classList.remove('drop-target');
+        if (best) { best.el.classList.add('drop-target'); haptic('select'); }
+        st.tip.textContent = best ? best.label : '';
+        st.tip.classList.toggle('on', !!(best && best.label));
+        st.ghost.classList.toggle('locked', !!best);
+        st.over = best;
       }
+    };
+    const fly = (g, tip, to, ok) => {
+      tip.remove();
+      if (reduced() || typeof g.animate !== 'function') { g.remove(); return; }
+      const r = g.getBoundingClientRect();
+      const dx = to.x - (r.left + r.width / 2), dy = to.y - (r.top + r.height / 2);
+      try {
+        const a = g.animate([{ transform: 'none', opacity: 1 }, { transform: `translate(${dx}px, ${dy}px) scale(${ok ? 0.8 : 0.9})`, opacity: ok ? 0.2 : 0 }],
+          { duration: ok ? T.small : T.outScreen, easing: ok ? EASE_OUT : 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+        a.onfinish = () => g.remove();
+      } catch (x) { g.remove(); }
     };
     const up = () => {
       if (!st) return;
       if (st.ghost) {
-        st.ghost.remove();
         st.el.classList.remove('drag-src');
-        if (st.over) { st.over.classList.remove('drop-target'); cb.current(st.id, st.over.dataset.pid); }
+        const over = st.over;
+        if (over) over.el.classList.remove('drop-target');
+        fly(st.ghost, st.tip, over || st.from, !!over);
+        if (over) cb.current(st.id, over.id);
         root.dataset.justDragged = '1';
         setTimeout(() => { delete root.dataset.justDragged; }, 60);
       }
