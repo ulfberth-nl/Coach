@@ -7,7 +7,7 @@ import { keeperCounts, suggestKeeper, WHY_TEXT } from './home.js';
 import { nextScheduled, todayISO } from './seizoen.js';
 import { matchRules } from '../profiles.js';
 import { scheduleRefresh } from '../refresh.js';
-import { viewTransition, haptic } from '../motion.js';
+import { viewTransition, haptic, reduced, T as TEMPO } from '../motion.js';
 import { mutate, undoAction, liveAct, SwapSheet, GroupSwapSheet, BenchSheet, GoalSheet, BreakSheet, JoinSheet, KeeperSheet } from './live.js';
 import { Field, Neon, Roll, Sheet, Confirm, Seg, Stepper, Icon, accentFor, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, BenchScroll, beep, flash, unlockAudio, toast, go } from '../ui.js';
 
@@ -408,7 +408,19 @@ function LiveView({ match, team }) {
   useEffect(() => { if (!act) return undefined; const t = setTimeout(() => setAct(null), act.out ? 7000 : 6000); return () => clearTimeout(t); }, [act && act.key, act && act.status]);
   const showAct = (a) => { const v = { key: Date.now(), undos: 1, out: null, status: 'terug', top: false, ...a }; v.base = v.status !== 'terug' ? v.undos - (v.outs ? v.outs.length : 1) : v.undos; setAct(v); };
   // terug uit de planner na 'Wissel nu': dezelfde ongedaan-pil als hier
-  useEffect(() => { if (liveAct.next) { const a = liveAct.next; liveAct.next = null; setTimeout(() => showAct(a), 120); } }, []);
+  useEffect(() => {
+    if (liveAct.next) { const a = liveAct.next; liveAct.next = null; setTimeout(() => showAct(a), 120); }
+    // 'Wissel nu' in de planner: de wissel gebeurt hier, na de schermovergang, zodat je hem ziet gebeuren
+    const run = liveAct.run;
+    if (run) {
+      liveAct.run = null;
+      setTimeout(() => {
+        const ps = run.pairs;
+        mutate((m, t) => (ps.length > 1 ? M.doSwapGroup(m, t, ps) : M.doSwap(m, t, ps[0].out, ps[0].in, ps[0].shift)));
+        showAct(ps.length > 1 ? { outs: ps.map((p) => p.out), undos: 1 } : { out: ps[0].out, undos: 1 });
+      }, reduced() ? 60 : TEMPO.screen + 150);
+    }
+  }, []);
   const undoAct = () => {
     const n = act.undos;
     mutate((m, t) => { for (let k = 0; k < n; k++) M.undo(m, t); });
@@ -530,13 +542,13 @@ function LiveView({ match, team }) {
     const n = counts.done + 1;
     const late = countdown < -0.5;
     const s0 = next;
-    const lineName = (id) => ({ V: 'voor', M: 'midden', A: 'achter' }[d.state.pos[id]] || '');
+    const story = M.swapStory(d.state.slots, M.linesOf(match, team), [{ out: s0.out, in: s0.in, shift: s0.shift }])[0];
     isl = {
       st: late ? 'hot late' : countdown <= 60 ? 'hot' : '',
       k: late ? `Te laat · wissel ${n}` : countdown <= 60 ? `Bijna · wissel ${n} van ${counts.total}` : `Volgende wissel · ${n} van ${counts.total}`,
       t1: group.length > 1 ? html`${group.length} spelers tegelijk` : html`<em>${nick(s0.in)}</em> erin voor ${nick(s0.out)}`,
       t2: (s0.fixed ? 'Aangepast · ' : '') + (group.length > 1 ? group.map((s) => nick(s.in)).join(', ') + ' erin'
-        : s0.shift && s0.shift.id in d.state.pos ? `${nick(s0.shift.id)} schuift door naar ${lineName(s0.out)}` : `${nick(s0.in)} gaat naar ${lineName(s0.out)}`),
+        : story.shift ? `${nick(story.shift)} ${story.shiftPos ? story.shiftPos.naar : 'schuift door'}` : story.inPos ? `${nick(s0.in)} ${story.inPos.op}` : ''),
       ring: countdown <= 0 ? 'nu' : M.fmt(countdown),
       late: late ? '−' + M.fmt(-countdown) : null,
       frac: Math.max(0, Math.min(1, (T - (match.plan ? match.plan.at : 0)) / Math.max(1, next.t - (match.plan ? match.plan.at : 0)))),
