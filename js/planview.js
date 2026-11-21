@@ -3,7 +3,7 @@
 import { html, useState, useMemo, useRef, useEffect } from '../vendor/preact-htm.js';
 import * as M from './match.js';
 import { LINE_NAMES } from './planner.js';
-import { Field, Icon, POS_COLORS, useDragSwap, accentFor } from './ui.js';
+import { Field, Icon, POS_COLORS, useDragSwap, BenchScroll, accentFor } from './ui.js';
 import { haptic } from './motion.js';
 
 const BENCH = '#DCE2EE';
@@ -49,6 +49,8 @@ function useScrub(ref, fns) {
     let st = null;
     const down = (e) => {
       if (cur.current.skipPills() && e.target.closest('[data-pid]')) return;
+      // een volle bank scrollt zelf opzij
+      if (e.target.closest('.scroll.ovf')) return;
       st = { x: e.clientX, y: e.clientY, f0: cur.current.get(), active: false };
     };
     const move = (e) => {
@@ -103,7 +105,10 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   // klikje bij elk wisselmoment dat je passeert (trillen op Android, klikgeluid op de iPhone)
   const lastI = useRef(i);
   useEffect(() => { if (lastI.current !== i) { lastI.current = i; haptic('select'); } }, [i]);
-  useDragSwap(zone, canEdit, (a, b) => onSwap && onSwap(a, b), (a, b) => 'Ruil met ' + M.nickOf(team, b));
+  const lines = c.lines || M.linesOf(match, team);
+  useDragSwap(zone, canEdit, (a, b) => onSwap && onSwap(a, b), (a, b) => (b.slice(0, 5) === 'line:'
+    ? (a in c.pos ? M.formationLabel(lines, c.pos[a], b.split(':')[1]) : null)
+    : 'Ruil met ' + M.nickOf(team, b)));
   useScrub(zone, { get: getF, set: setF, skipPills: () => editable && Math.round(getF()) === 0 });
 
   const timeOf = (x) => {
@@ -184,15 +189,15 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
     ${compact && html`<div class="fieldcap">${title}${i > 0 && c.kind === 'swap' ? html` · ${multi ? html`<b>${c.ins.map(nick).join(', ')}</b> erin` : html`<b>${nick(c.in)}</b> erin voor ${nick(c.out)}`}` : ''}</div>`}
     <div ref=${zone} class="scrubzone">
       <div class=${'fieldbox' + (live && i < nowIndex ? ' past' : '')}>
-        <${Field} slots=${c.slots} lines=${team.lines} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
+        <${Field} slots=${c.slots} lines=${lines} formable=${canEdit} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
           onTap=${() => {}} neon=${ch.in} dashed=${ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} />
       </div>
       <div class="benchrow">
         <span class="label">Bank</span>
-        <div class="scroll">
+        <${BenchScroll}>
           ${c.bench.map((id) => { const ac = accentFor(team)(id); return html`<button type="button" class=${'benchpill' + (ch.out.indexOf(id) !== -1 ? ' wasout' : '') + (ac ? ' acc' : '')} style=${ac ? '--acc:' + ac : ''} key=${id} data-pid=${id}>${nick(id)}${ch.out.indexOf(id) !== -1 ? html`<span class="t">eruit</span>` : ''}</button>`; })}
           ${!c.bench.length && html`<span class="small">niemand</span>`}
-        </div>
+        </${BenchScroll}>
       </div>
     </div>
     ${!compact && (i === 0

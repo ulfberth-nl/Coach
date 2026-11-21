@@ -3,6 +3,16 @@ import { planRest, initialState, LINES, lineStatus, isDisabled, placeIn } from '
 import { uid } from './store.js';
 
 export const periodLen = (team) => team.periodMin * 60;
+// Opstelling van deze wedstrijd (de coach kan hem per wedstrijd veranderen door te slepen); anders die van het team.
+export const linesOf = (match, team) => (match && match.lines) || team.lines;
+export const formationText = (lines) => `${lines.A || 0}-${lines.M || 0}-${lines.V || 0}`;
+// opstelling na het verplaatsen van één speler van linie 'from' naar 'to' (null als dat niet kan)
+export function formationAfter(lines, from, to) {
+  if (!from || !to || from === to || !((lines[from] || 0) > 1)) return null;
+  return { ...lines, [from]: lines[from] - 1, [to]: (lines[to] || 0) + 1 };
+}
+const TOWARD = { V: 'Naar voren', M: 'Naar het midden', A: 'Naar achteren' };
+export const formationLabel = (lines, from, to) => { const n = formationAfter(lines, from, to); return n ? `${TOWARD[to]} · ${formationText(n)}` : null; };
 export const matchEnd = (team) => team.periods * periodLen(team);
 
 export function playersMap(team) {
@@ -137,8 +147,13 @@ export function derive(match, team, T) {
       }
       st.pos = { ...ev.pos };
       st.bench = ev.bench.slice();
-      st.slots = ev.slots ? { ...ev.slots } : makeSlots(ev.pos, team.lines, players);
+      st.slots = ev.slots ? { ...ev.slots } : makeSlots(ev.pos, linesOf(match, team), players);
       first = false;
+    } else if (ev.type === 'formation') {
+      if (st.pos[ev.playerId]) {
+        st.slots = moveSlot(st.slots, ev.playerId, ev.from, ev.to, ev.lines, ev.at);
+        st.pos = { ...st.pos, [ev.playerId]: ev.to };
+      }
     } else if (ev.type === 'swap') {
       st.slots = slotSwap(st.slots, ev.out, ev.in, ev.shift);
       const newPos = { ...st.pos };
@@ -215,7 +230,7 @@ export function makeCtx(match, team, stand) {
   const r = effRules(match, team);
   return {
     players: playersMap(team),
-    lines: team.lines,
+    lines: linesOf(match, team),
     periodLen: periodLen(team),
     periods: team.periods,
     rules: { ...r, priority: match.priority || r.priority, turnsTarget: turnsTarget(team, match) },
@@ -319,6 +334,7 @@ export function createMatch(team, opts) {
     keeperId,
     priority: opts.priority || (opts.rules && opts.rules.priority) || team.rules.priority,
     rules: opts.rules || null,
+    lines: opts.lines || null,
     standMode: 'auto',
     manualStand: 'balans',
     clock: { period: 0, running: false, startedAt: 0, accum: 0 },
@@ -330,7 +346,7 @@ export function createMatch(team, opts) {
   };
   const ctx = makeCtx(match, team, 'balans');
   const st = initialState(fieldIds, ctx);
-  match.events.push({ id: uid(), type: 'lineup', t: 0, period: 0, pos: st.pos, bench: st.bench, slots: makeSlots(st.pos, team.lines, players) });
+  match.events.push({ id: uid(), type: 'lineup', t: 0, period: 0, pos: st.pos, bench: st.bench, slots: makeSlots(st.pos, linesOf(match, team), players) });
   replan(match, team);
   return match;
 }
@@ -365,7 +381,7 @@ export function swapInLineup(lu, a, b) {
 export function swapInStartLineup(match, team, a, b) {
   const ev = match.events[0];
   const players = playersMap(team);
-  const lu = swapInLineup({ pos: ev.pos, bench: ev.bench, slots: ev.slots || makeSlots(ev.pos, team.lines, players) }, a, b);
+  const lu = swapInLineup({ pos: ev.pos, bench: ev.bench, slots: ev.slots || makeSlots(ev.pos, linesOf(match, team), players) }, a, b);
   match.events[0] = { ...ev, ...lu };
   replan(match, team);
 }
@@ -442,7 +458,7 @@ export function adjustClock(match, team, delta) {
 export function applyLineup(match, team, lu) {
   const T = gameTime(match, team);
   const players = playersMap(team);
-  match.events.push({ id: uid(), type: 'lineup', t: T, period: match.clock.period, pos: lu.pos, bench: lu.bench, slots: lu.slots || makeSlots(lu.pos, team.lines, players) });
+  match.events.push({ id: uid(), type: 'lineup', t: T, period: match.clock.period, pos: lu.pos, bench: lu.bench, slots: lu.slots || makeSlots(lu.pos, linesOf(match, team), players) });
   match.firstAt = null;
   match.fixed = null;
   replan(match, team);
@@ -521,6 +537,50 @@ export function changeKeeper(match, team, to, mode) {
   replan(match, team);
 }
 
+// Plek in een linie aanpassen: speler weg uit zijn linie (de rest schuift aan), erbij in de nieuwe linie
+// (aan de kant waar hij vandaan kwam). Andere linies blijven zoals ze zijn.
+export function moveSlot(slots, id, from, to, lines, at = null) {
+  const ids = (l) => Object.keys(slots).filter((k) => k[0] === l).sort((a, b) => +a.slice(1) - +b.slice(1)).map((k) => slots[k]).filter(Boolean);
+  const src = ids(from);
+  const rest = src.filter((x) => x !== id);
+  const dst = ids(to).filter((x) => x !== id);
+  // op de plek waar de coach hem neerzette; anders aan de kant waar hij vandaan kwam
+  if (at != null) dst.splice(Math.max(0, Math.min(dst.length, at)), 0, id);
+  else if (src.indexOf(id) < (src.length - 1) / 2) dst.unshift(id);
+  else dst.push(id);
+  const out = {};
+  for (const l of LINES) {
+    const list = l === from ? rest : l === to ? dst : ids(l);
+    for (let i = 0; i < (lines[l] || 0); i++) out[l + i] = list[i] || null;
+  }
+  return out;
+}
+
+// Opstelling veranderen door een veldspeler naar een andere linie te slepen (bijv. een aanvaller naar het
+// middenveld: van 2-1-2 naar 2-2-1). Geldt voor deze wedstrijd; het plan rekent daarna opnieuw.
+export function changeFormation(match, team, id, to, at = null) {
+  const cur = linesOf(match, team);
+  if (!match.started) {
+    const ev = match.events[0];
+    const from = ev && ev.pos[id];
+    const lines = formationAfter(cur, from, to);
+    if (!lines) return null;
+    const slots = moveSlot(ev.slots || makeSlots(ev.pos, cur, playersMap(team)), id, from, to, lines, at);
+    match.events[0] = { ...ev, pos: { ...ev.pos, [id]: to }, slots };
+    match.lines = lines;
+    replan(match, team);
+    return lines;
+  }
+  const T = gameTime(match, team);
+  const from = derive(match, team, T).state.pos[id];
+  const lines = formationAfter(cur, from, to);
+  if (!lines) return null;
+  match.events.push({ id: uid(), type: 'formation', t: T, playerId: id, from, to, at, lines, prev: { ...cur } });
+  match.lines = lines;
+  replan(match, team);
+  return lines;
+}
+
 // Twee veldspelers ruilen van plek tijdens de wedstrijd.
 export function movePlayers(match, team, a, b) {
   match.events.push({ id: uid(), type: 'move', t: gameTime(match, team), a, b });
@@ -584,7 +644,7 @@ export function setScorer(match, eventId, scorer) {
   if (ev) ev.scorer = scorer || null;
 }
 
-const UNDOABLE = ['swap', 'goal', 'oppgoal', 'disable', 'enable', 'join', 'move', 'keeper'];
+const UNDOABLE = ['swap', 'goal', 'oppgoal', 'disable', 'enable', 'join', 'move', 'keeper', 'formation'];
 
 export function lastUndoable(match) {
   for (let i = match.events.length - 1; i >= 0; i--) {
@@ -601,6 +661,7 @@ export function undo(match, team) {
   match.events.splice(u.index, 1);
   if (u.ev.g) match.events = match.events.filter((e) => e.g !== u.ev.g);
   if (u.ev.type === 'join') match.present = match.present.filter((id) => id !== u.ev.playerId);
+  if (u.ev.type === 'formation') match.lines = u.ev.prev;
   replan(match, team);
   return u.ev;
 }
@@ -682,7 +743,7 @@ export function previewSwap(match, team, swap) {
 export function breakProposal(match, team) {
   const step = match.plan && match.plan.steps.find((s) => s.type === 'lineup');
   if (!step) return null;
-  return { pos: step.pos, bench: step.bench, slots: makeSlots(step.pos, team.lines, playersMap(team)) };
+  return { pos: step.pos, bench: step.bench, slots: makeSlots(step.pos, linesOf(match, team), playersMap(team)) };
 }
 
 export function summary(match, team) {
@@ -695,7 +756,17 @@ export function timeline(match, team) {
   const players = playersMap(team);
   const cards = [];
   let slots = null, pos = null, bench = null, keeper = match.keeperId || null;
+  // opstelling aan het begin: terugrekenen vanaf de huidige via de opstellingswijzigingen
+  let lines = linesOf(match, team);
+  for (let k = match.events.length - 1; k >= 0; k--) if (match.events[k].type === 'formation') lines = match.events[k].prev;
   for (const ev of match.events) {
+    if (ev.type === 'formation' && pos && pos[ev.playerId]) {
+      lines = ev.lines;
+      slots = moveSlot(slots, ev.playerId, ev.from, ev.to, ev.lines, ev.at);
+      pos = { ...pos, [ev.playerId]: ev.to };
+      if (cards.length) cards[cards.length - 1] = { ...cards[cards.length - 1], slots, pos, lines };
+      continue;
+    }
     if (ev.type === 'keeper' && pos) {
       const s = { pos, bench, slots, keeper };
       applyKeeperChange(s, ev);
@@ -704,9 +775,9 @@ export function timeline(match, team) {
       continue;
     }
     if (ev.type === 'lineup') {
-      slots = ev.slots ? { ...ev.slots } : makeSlots(ev.pos, team.lines, players);
+      slots = ev.slots ? { ...ev.slots } : makeSlots(ev.pos, lines, players);
       pos = { ...ev.pos }; bench = ev.bench.slice();
-      cards.push({ kind: 'lineup', t: ev.t, period: ev.period, slots, pos, bench, keeper, past: true });
+      cards.push({ kind: 'lineup', t: ev.t, period: ev.period, slots, pos, bench, keeper, lines, past: true });
     } else if (ev.type === 'swap' && slots) {
       slots = slotSwap(slots, ev.out, ev.in, ev.shift);
       const np = { ...pos }; delete np[ev.out];
@@ -715,7 +786,7 @@ export function timeline(match, team) {
       const prev = cards[cards.length - 1];
       if (ev.g && prev && prev.kind === 'swap' && prev.g === ev.g) {
         cards[cards.length - 1] = { ...prev, outs: prev.outs.concat([ev.out]), ins: prev.ins.concat([ev.in]), shift: prev.shift || ev.shift, slots, pos, bench };
-      } else cards.push({ kind: 'swap', t: ev.t, out: ev.out, in: ev.in, outs: [ev.out], ins: [ev.in], g: ev.g || null, shift: ev.shift, slots, pos, bench, keeper, past: true });
+      } else cards.push({ kind: 'swap', t: ev.t, out: ev.out, in: ev.in, outs: [ev.out], ins: [ev.in], g: ev.g || null, shift: ev.shift, slots, pos, bench, keeper, lines, past: true });
     } else if (ev.type === 'join' && bench) {
       bench = bench.concat([ev.playerId]);
     } else if (ev.type === 'move' && pos && pos[ev.a] && pos[ev.b]) {
@@ -729,16 +800,16 @@ export function timeline(match, team) {
   if (!match.finished) {
     for (const s of (match.plan ? match.plan.steps : [])) {
       if (s.type === 'lineup') {
-        slots = makeSlots(s.pos, team.lines, players);
+        slots = makeSlots(s.pos, lines, players);
         pos = { ...s.pos }; bench = s.bench.slice();
-        cards.push({ kind: 'lineup', t: s.t, period: s.period, slots, pos, bench, keeper, past: false });
+        cards.push({ kind: 'lineup', t: s.t, period: s.period, slots, pos, bench, keeper, lines, past: false });
       } else {
         slots = slotSwap(slots, s.out, s.in, s.shift);
         pos = { ...s.pos }; bench = bench.filter((x) => x !== s.in).concat([s.out]);
         const prev = cards[cards.length - 1];
         if (prev && !prev.past && prev.kind === 'swap' && prev.t === s.t) {
           cards[cards.length - 1] = { ...prev, outs: prev.outs.concat([s.out]), ins: prev.ins.concat([s.in]), shift: prev.shift || s.shift, slots, pos, bench };
-        } else cards.push({ kind: 'swap', t: s.t, out: s.out, in: s.in, outs: [s.out], ins: [s.in], shift: s.shift, slots, pos, bench, keeper, past: false });
+        } else cards.push({ kind: 'swap', t: s.t, out: s.out, in: s.in, outs: [s.out], ins: [s.in], shift: s.shift, slots, pos, bench, keeper, lines, past: false });
       }
     }
   }

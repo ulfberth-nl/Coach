@@ -526,7 +526,11 @@ export function Icon({ name, size = 22 }) {
 
 // ---------- het veld ----------
 // slots: { V0: id, M0: id, A0: id, ... }  aanval boven, eigen doel (keeper) onder
-export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false, picking = false, hot = null, hotKey = 0, ghosts = null, animate = false, accent = null, badges = null, cheer = null }) {
+// spelers die net op een nieuwe plek zijn neergezet door te slepen: de pil landt pas als de zwevende versie er is
+const landing = {};
+const LANE_NAMES = { V: 'voor', M: 'midden', A: 'achter' };
+
+export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false, picking = false, hot = null, hotKey = 0, ghosts = null, animate = false, accent = null, badges = null, cheer = null, formable = false }) {
   const rows = ['V', 'M', 'A'].filter((l) => (lines[l] || 0) > 0);
   // linies gelijk verdeeld tussen de bovenrand en de keeper (middelpunten in %)
   const START = 5, END = 78;
@@ -535,7 +539,10 @@ export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = []
   // wissel: wie eruit gaat zakt weg richting bank, wie erin komt stapt vanaf zijn zweefplek in; doorschuivers glijden
   const sk = JSON.stringify(slots);
   const mem = useRef(null);
-  if (!mem.current) mem.current = { sk, slots, enters: {}, exits: [], ever: {} };
+  const lk = JSON.stringify(lines);
+  if (!mem.current) mem.current = { sk, slots, enters: {}, exits: [], ever: {}, lk, reform: 0 };
+  // andere opstelling: iedereen schuift vlot naar zijn nieuwe plek
+  if (mem.current.lk !== lk) { mem.current.lk = lk; mem.current.reform = Date.now(); }
   if (mem.current.sk !== sk) {
     if (animate) {
       const p = mem.current.slots || {};
@@ -583,7 +590,7 @@ export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = []
     const pill = html`<span class=${'pill ' + pillKind(id) + (acc ? ' acc' : '')} style=${pillStyle + acc}>${name}</span>`;
     const ghost = g ? html`<span class=${'ghost ' + g.kind + (g.hot ? ' hot' : '') + (right ? ' right' : '')} aria-hidden="true"><b>${g.name}${g.dir ? html`<small>${g.dir}</small>` : ''}</b></span>` : null;
     // 'e' blijft staan zodat de binnenkom-animatie niet terugvalt op de pop-animatie
-    const cls = 'spot' + (hot && hot === id ? ' scored' : '') + (id && mem.current.ever[id] ? ' e' : '') + (right ? ' from-left' : '') + (g ? ' has-ghost' : '');
+    const cls = 'spot' + (hot && hot === id ? ' scored' : '') + (id && mem.current.ever[id] ? ' e' : '') + (right ? ' from-left' : '') + (g ? ' has-ghost' : '') + (id && landing[id] && now - landing[id] < 900 ? ' landing' : '');
     return html`<button type="button" class=${cls} key=${(id || key) + (hot === id ? ':' + hotKey : '')} data-pid=${id || ''} data-line=${key[0]}
       style=${`left:${left};top:${top};--ci:${key.slice(1)}` + (en ? `;--d:${(0.3 + en.i * 0.18).toFixed(2)}s` : '')} disabled=${!onTap || !id} onClick=${() => onTap && id && onTap(id)} aria-label=${name}>
       ${goalMark(id)}
@@ -596,10 +603,15 @@ export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = []
     </button>`;
   };
   const cheerCls = cheer ? ' cheer-' + cheer.line + (cheer.n % 2 ? ' ca' : ' cb') : '';
-  return html`<div class=${'field sz-' + size + (picking ? ' picking' : '') + cheerCls} style=${`height:${typeof height === 'number' ? height + 'px' : height}`}>
+  const reform = now - mem.current.reform < 1400;
+  const band = (END - START) / rows.length;
+  return html`<div class=${'field sz-' + size + (picking ? ' picking' : '') + cheerCls + (reform ? ' reform' : '')} style=${`height:${typeof height === 'number' ? height + 'px' : height}`}>
     <span class="lines"></span>
     <span class="arc top"></span>
     <span class="arc bottom"></span>
+    ${formable && rows.map((l, r) => html`<span class="lane" key=${'ln' + l} data-l=${l} style=${`top:${(START + r * band).toFixed(2)}%;height:${band.toFixed(2)}%;--r:${r}`} aria-hidden="true"><b>${LANE_NAMES[l]}</b></span>`)}
+    ${formable && rows.flatMap((l, r) => Array.from({ length: lines[l] + 1 }, (_, k) => html`<span class="addslot" key=${'ad' + l + k + ':' + lines[l]} data-pid=${'line:' + l + ':' + k} data-l=${l}
+      style=${`left:${(((k + 0.5) / (lines[l] + 1)) * 100).toFixed(2)}%;top:${tops[r]};--k:${k};--r:${r}`} aria-hidden="true"></span>`))}
     ${mem.current.exits.map((x) => html`<span class="spot exitspot" key=${'x' + x.id + x.t} style=${`left:${x.left};top:${x.top};--d:${(x.i * 0.18).toFixed(2)}s`} aria-hidden="true"><span class="pill" style=${pillStyle}>${x.name}</span></span>`)}
     ${rows.flatMap((l, r) => {
       const n = lines[l];
@@ -645,12 +657,20 @@ export function useDragSwap(ref, enabled, onSwap, hint) {
     if (!root || !enabled) return undefined;
     root.classList.add('draggable');
     let st = null;
+    let raf = 0;
     const centre = (el) => { const p = el.querySelector('.pill') || el; const r = p.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+    const isSlot = (id) => id.slice(0, 5) === 'line:';
     const down = (e) => {
       if (e.button > 0) return;
       const el = e.target.closest('[data-pid]');
-      if (!el || !el.dataset.pid || !root.contains(el)) return;
-      st = { id: el.dataset.pid, x: e.clientX, y: e.clientY, el, ghost: null, tip: null, over: null, targets: [] };
+      if (!el || !el.dataset.pid || isSlot(el.dataset.pid) || !root.contains(el)) return;
+      const sc = el.closest('.benchrow .scroll');
+      st = { id: el.dataset.pid, x: e.clientX, y: e.clientY, px: e.clientX, py: e.clientY, el, ghost: null, tip: null, over: null, targets: [], scroller: sc && sc.classList.contains('ovf') ? sc : null, dirty: false };
+    };
+    // doelen opnieuw opmeten (de bank kan tijdens het slepen scrollen)
+    const measure = () => {
+      for (const t of st.targets) Object.assign(t, centre(t.el));
+      st.dirty = false;
     };
     const begin = () => {
       cancelPress();
@@ -666,78 +686,181 @@ export function useDragSwap(ref, enabled, onSwap, hint) {
       st.tip = tip;
       st.from = centre(st.el);
       st.el.classList.add('drag-src');
-      // alle mogelijke doelen met hun middelpunt (het veld en de bank bewegen niet tijdens het slepen)
+      const onField = !!st.el.closest('.field');
+      root.classList.add('dragging');
+      if (onField) { root.classList.add('drag-field'); root.dataset.dragLine = st.el.dataset.line || ''; }
+      // alle mogelijke doelen: spelers, en (voor veldspelers) de lege plekken waarmee je de opstelling verandert
       st.targets = [...root.querySelectorAll('[data-pid]')].filter((t) => t.dataset.pid && t.dataset.pid !== st.id).map((t) => {
-        const label = hb.current ? hb.current(st.id, t.dataset.pid) : '';
-        return label === null ? null : { el: t, id: t.dataset.pid, label, ...centre(t) };
+        const slot = isSlot(t.dataset.pid);
+        const label = slot && !onField ? null : hb.current ? hb.current(st.id, t.dataset.pid) : '';
+        if (label === null) { if (slot) t.classList.add('off'); return null; }
+        return { el: t, id: t.dataset.pid, label, slot, line: slot ? t.dataset.l : null, k: slot ? +t.dataset.pid.split(':')[2] : 0, ...centre(t) };
       }).filter(Boolean);
       if (!reduced()) { try { g.animate([{ scale: '1' }, { scale: '1.15' }], { duration: T.small, easing: SPRING.play }); } catch (x) { /* oud toestel */ } }
       haptic('select');
     };
-    const move = (e) => {
-      if (!st) return;
-      if (!st.ghost) {
-        if (Math.hypot(e.clientX - st.x, e.clientY - st.y) < 8) return;
-        begin();
-      }
-      e.preventDefault();
+    // buren in de linie schuiven een stukje opzij om ruimte te maken voor de nieuwe plek
+    const nudge = (t) => {
+      root.querySelectorAll('.spot.nudge').forEach((n) => { n.classList.remove('nudge'); n.style.removeProperty('--nx'); });
+      if (t && t.slot) {
+        root.dataset.aimLine = t.line;
+        root.querySelectorAll(`.field .spot[data-line="${t.line}"]`).forEach((n) => {
+          const i = +(n.style.getPropertyValue('--ci') || 0);
+          n.classList.add('nudge');
+          n.style.setProperty('--nx', (i < t.k ? -12 : 12) + 'px');
+        });
+      } else delete root.dataset.aimLine;
+    };
+    const aim = () => {
+      if (st.dirty) measure();
       // mikpunt net boven het contactpunt van de vinger; dichtstbijzijnde doel binnen de straal
-      const ax = e.clientX, ay = e.clientY - 8;
+      const ax = st.px, ay = st.py - 8;
       let best = null, bd = MAGNET;
       for (const t of st.targets) { const dd = Math.hypot(t.x - ax, t.y - ay); if (dd < bd) { bd = dd; best = t; } }
-      st.ghost.style.left = e.clientX + 'px';
-      st.ghost.style.top = e.clientY + 'px';
-      st.tip.style.left = e.clientX + 'px';
-      st.tip.style.top = e.clientY + 'px';
       if (best !== st.over) {
         if (st.over) st.over.el.classList.remove('drop-target');
         if (best) { best.el.classList.add('drop-target'); haptic('select'); }
         st.tip.textContent = best ? best.label : '';
         st.tip.classList.toggle('on', !!(best && best.label));
+        st.tip.classList.toggle('form', !!(best && best.slot));
         st.ghost.classList.toggle('locked', !!best);
+        nudge(best);
         st.over = best;
       }
     };
-    const fly = (g, tip, to, ok) => {
+    // bij de rand van een lange bank: vanzelf doorscrollen zodat je iedereen bereikt
+    const edgeScroll = () => {
+      raf = 0;
+      if (!st || !st.ghost) return;
+      let v = 0;
+      for (const sc of root.querySelectorAll('.benchrow .scroll.ovf')) {
+        const r = sc.getBoundingClientRect();
+        if (st.py < r.top - 24 || st.py > r.bottom + 24) continue;
+        const EDGE = 48;
+        if (st.px < r.left + EDGE && sc.scrollLeft > 0) v = -Math.ceil(((r.left + EDGE - st.px) / EDGE) * 9);
+        else if (st.px > r.right - EDGE && sc.scrollLeft + sc.clientWidth < sc.scrollWidth - 1) v = Math.ceil(((st.px - (r.right - EDGE)) / EDGE) * 9);
+        if (v) { sc.scrollLeft += v; st.dirty = true; aim(); break; }
+      }
+      if (v) raf = requestAnimationFrame(edgeScroll);
+    };
+    const move = (e) => {
+      if (!st) return;
+      st.px = e.clientX; st.py = e.clientY;
+      if (!st.ghost) {
+        const dx = e.clientX - st.x, dy = e.clientY - st.y;
+        if (Math.hypot(dx, dy) < 8) return;
+        // op een lange bank: opzij vegen = scrollen, omhoog = slepen
+        if (st.scroller && Math.abs(dx) > Math.abs(dy)) { st = null; return; }
+        begin();
+      }
+      e.preventDefault();
+      st.ghost.style.left = e.clientX + 'px';
+      st.ghost.style.top = e.clientY + 'px';
+      st.tip.style.left = e.clientX + 'px';
+      st.tip.style.top = e.clientY + 'px';
+      aim();
+      if (!raf) raf = requestAnimationFrame(edgeScroll);
+    };
+    const fly = (g, tip, to, ok, land) => {
       tip.remove();
       if (reduced() || typeof g.animate !== 'function') { g.remove(); return; }
       const r = g.getBoundingClientRect();
       const dx = to.x - (r.left + r.width / 2), dy = to.y - (r.top + r.height / 2);
       try {
-        const a = g.animate([{ transform: 'none', opacity: 1 }, { transform: `translate(${dx}px, ${dy}px) scale(${ok ? 0.8 : 0.9})`, opacity: ok ? 0.2 : 0 }],
-          { duration: ok ? T.small : T.outScreen, easing: ok ? EASE_OUT : 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+        const a = land
+          // nieuwe plek: de zwevende pil zakt precies op zijn plek en geeft het stokje dan door aan de echte
+          ? g.animate([{ transform: 'none', opacity: 1 }, { transform: `translate(${dx}px, ${dy - 6}px) scale(.88)`, opacity: 1, offset: 0.78 }, { transform: `translate(${dx}px, ${dy - 6}px) scale(.88)`, opacity: 0 }],
+            { duration: T.screen, easing: EASE_OUT, fill: 'forwards' })
+          : g.animate([{ transform: 'none', opacity: 1 }, { transform: `translate(${dx}px, ${dy}px) scale(${ok ? 0.8 : 0.9})`, opacity: ok ? 0.2 : 0 }],
+            { duration: ok ? T.small : T.outScreen, easing: ok ? EASE_OUT : 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
         a.onfinish = () => g.remove();
       } catch (x) { g.remove(); }
     };
+    const clear = () => {
+      root.classList.remove('dragging', 'drag-field');
+      delete root.dataset.dragLine;
+      nudge(null);
+      root.querySelectorAll('.addslot.off').forEach((n) => n.classList.remove('off'));
+    };
     const up = () => {
       if (!st) return;
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
       if (st.ghost) {
         st.el.classList.remove('drag-src');
         const over = st.over;
         if (over) over.el.classList.remove('drop-target');
-        fly(st.ghost, st.tip, over || st.from, !!over);
+        clear();
+        let to = over || st.from;
+        if (over && over.slot) {
+          landing[st.id] = Date.now();
+          // precies waar de pil straks staat: plek k van de (één langere) linie, op de hoogte van de pil
+          const field = over.el.closest('.field');
+          const fr = field.getBoundingClientRect(), sr = st.el.getBoundingClientRect();
+          const n = field.querySelectorAll(`.spot[data-line="${over.line}"]`).length;
+          to = { x: fr.left + (fr.width * (over.k + 1)) / (n + 2), y: over.y + (st.from.y - (sr.top + sr.height / 2)) };
+        }
+        fly(st.ghost, st.tip, to, !!over, !!(over && over.slot));
         if (over) cb.current(st.id, over.id);
         root.dataset.justDragged = '1';
         setTimeout(() => { delete root.dataset.justDragged; }, 60);
       }
       st = null;
     };
-    // iPhone: tijdens slepen nooit de pagina laten scrollen
-    const noScroll = (e) => { if (st) e.preventDefault(); };
+    const rescroll = () => { if (st && st.ghost) st.dirty = true; };
+    // iPhone: tijdens het slepen nooit de pagina laten scrollen (daarvoor wel, zodat de bank kan scrollen)
+    const noScroll = (e) => { if (st && st.ghost) e.preventDefault(); };
     root.addEventListener('touchmove', noScroll, { passive: false });
     root.addEventListener('pointerdown', down);
+    root.addEventListener('scroll', rescroll, true);
     window.addEventListener('pointermove', move, { passive: false });
     window.addEventListener('pointerup', up);
     window.addEventListener('pointercancel', up);
     return () => {
+      if (raf) cancelAnimationFrame(raf);
       root.removeEventListener('touchmove', noScroll);
       root.classList.remove('draggable');
+      clear();
       root.removeEventListener('pointerdown', down);
+      root.removeEventListener('scroll', rescroll, true);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
     };
   }, [enabled]);
+}
+
+// Bankrij die opzij scrollt als hij te vol is: zachte randen, vastklikken per speler, en wie er
+// straks in moet schuift vanzelf in beeld.
+export function BenchScroll({ focus = null, children }) {
+  const ref = useRef(null);
+  const upd = () => {
+    const el = ref.current;
+    if (!el) return;
+    const ovf = el.scrollWidth > el.clientWidth + 2;
+    el.classList.toggle('ovf', ovf);
+    el.classList.toggle('at-start', !ovf || el.scrollLeft < 4);
+    el.classList.toggle('at-end', !ovf || el.scrollLeft + el.clientWidth > el.scrollWidth - 4);
+  };
+  useLayoutEffect(upd);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    el.addEventListener('scroll', upd, { passive: true });
+    let ro = null;
+    if (typeof ResizeObserver === 'function') { ro = new ResizeObserver(upd); ro.observe(el); }
+    return () => { el.removeEventListener('scroll', upd); if (ro) ro.disconnect(); };
+  }, []);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !focus || !el.classList.contains('ovf')) return;
+    const p = el.querySelector(`[data-pid="${focus}"]`);
+    if (!p) return;
+    const r = p.getBoundingClientRect(), b = el.getBoundingClientRect();
+    if (r.left >= b.left + 8 && r.right <= b.right - 8) return;
+    const left = el.scrollLeft + (r.left + r.width / 2) - (b.left + b.width / 2);
+    try { el.scrollTo({ left, behavior: reduced() ? 'auto' : 'smooth' }); } catch (x) { el.scrollLeft = left; }
+  }, [focus]);
+  return html`<div class="scroll" ref=${ref}>${children}</div>`;
 }
 export const justDragged = (ref) => !!(ref.current && ref.current.dataset.justDragged);
 

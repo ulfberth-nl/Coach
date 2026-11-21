@@ -64,7 +64,7 @@ async function run() {
   let keeperId = m.keeperId;
   if (!t.keeper) keeperId = null;
   else if (m.present.indexOf(keeperId) === -1) keeperId = suggestKeeper(t, m.present, keeperCounts(s, t));
-  const opts = { present: m.present, keeperId, priority: m.priority, opponent: m.opponent, date: m.date };
+  const opts = { present: m.present, keeperId, priority: m.priority, opponent: m.opponent, date: m.date, lines: m.lines || null };
   let res;
   try { res = await compute('concept', { team: t, tuneKey, opts }); } catch (e) { return; }
   if (my !== gen) return;
@@ -75,7 +75,7 @@ async function run() {
     if (i === -1) return;
     const cur = d.matches[i];
     // intussen iets veranderd (bijv. startopstelling gesleept)? dan niet overschrijven
-    if (cur.started || cur.present.join() !== m.present.join() || cur.priority !== m.priority || !same(cur.events, m.events)) return;
+    if (cur.started || cur.present.join() !== m.present.join() || cur.priority !== m.priority || !same(cur.lines, m.lines) || !same(cur.events, m.events)) return;
     const n = res.match;
     n.id = cur.id;
     n.setup = cur.setup || { present: false, keeper: false, opponent: false };
