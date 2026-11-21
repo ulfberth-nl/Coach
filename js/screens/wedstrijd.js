@@ -530,19 +530,59 @@ function LiveView({ match, team }) {
     else if (next) go('/plan');
   };
 
-  // ronde wisselknop in het eiland: de pijlen draaien een slag rond, dan gebeurt de wissel op het veld
+  // ronde wisselknop in het eiland: vasthouden tot de ring vol is, dan draaien de pijlen een slag rond en
+  // gebeurt de wissel op het veld. Kort tikken doet niets behalve uitleggen hoe het werkt.
   const [spinning, setSpinning] = useState(false);
   const [spinKey, setSpinKey] = useState(0);
+  const [holdHint, setHoldHint] = useState(0);
+  const holdRef = useRef(null);
+  const HOLD = 650;
+  const setHold = (el, v) => el && el.style.setProperty('--hold', v.toFixed(3));
+  const holdTick = () => {
+    const h = holdRef.current;
+    if (!h) return;
+    const p = Math.min(1, (performance.now() - h.t0) / HOLD);
+    setHold(h.el, p);
+    if (!h.half && p >= 0.5) { h.half = true; haptic('select'); }
+    if (p >= 1) { h.done = true; h.el.classList.remove('holding'); h.el.classList.add('held'); swapFromRing(); return; }
+    h.raf = requestAnimationFrame(holdTick);
+  };
+  const ringDown = (e) => {
+    if (e.button > 0 || spinning || !group.length) return;
+    const el = e.currentTarget;
+    holdRef.current = { el, t0: performance.now(), x: e.clientX, y: e.clientY, done: false, half: false, raf: 0 };
+    try { el.setPointerCapture(e.pointerId); } catch (x) { /* oud toestel */ }
+    el.classList.remove('held');
+    el.classList.add('holding');
+    setHoldHint(0);
+    holdRef.current.raf = requestAnimationFrame(holdTick);
+  };
+  const ringStop = (early) => {
+    const h = holdRef.current;
+    holdRef.current = null;
+    if (!h) return;
+    cancelAnimationFrame(h.raf);
+    h.el.classList.remove('holding');
+    if (h.done) return;
+    // te vroeg losgelaten: de ring loopt terug en zegt hoe het werkt
+    setHold(h.el, 0);
+    if (early) { setHoldHint(Date.now()); haptic('no'); }
+  };
+  const ringMove = (e) => { const h = holdRef.current; if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > 24) ringStop(false); };
+  useEffect(() => { if (!holdHint) return undefined; const t = setTimeout(() => setHoldHint(0), 2600); return () => clearTimeout(t); }, [holdHint]);
   const swapFromRing = () => {
     if (spinning || !group.length) return;
     const pairs = group.map((s) => ({ out: s.out, in: s.in, shift: s.shift }));
     setSpinning(true);
     setSpinKey((k) => k + 1);
-    haptic('select');
+    setPeek(false);
+    haptic('success');
     setTimeout(() => {
       mutate((m, t) => (pairs.length > 1 ? M.doSwapGroup(m, t, pairs) : M.doSwap(m, t, pairs[0].out, pairs[0].in, pairs[0].shift)));
       showAct(pairs.length > 1 ? { outs: pairs.map((p) => p.out), undos: 1 } : { out: pairs[0].out, undos: 1 });
       setSpinning(false);
+      const r = document.querySelector('.islandwrap > .i-ring');
+      if (r) { r.classList.remove('held'); r.style.setProperty('--hold', '0'); }
     }, reduced() ? 0 : 360);
   };
 
@@ -591,14 +631,56 @@ function LiveView({ match, team }) {
       ${isl.ring && html`<span class="i-ringspace" aria-hidden="true"></span>`}
     </button>
     ${isl.ring && html`<button type="button" class=${'i-ring' + (isl.swap ? ' swapbtn' : '') + (isl.swap && countdown <= 60 ? ' soon' : '') + (isl.swap && countdown <= 0 ? ' due' : '')}
-      style=${isl.breathe ? `--breathe:${isl.breathe.toFixed(2)}s` : ''} onClick=${isl.swap ? swapFromRing : openNext}
-      aria-label=${isl.swap ? 'Wissel nu: ' + group.map((s) => nick(s.in) + ' erin voor ' + nick(s.out)).join(', ') : isl.k}>
-      <svg viewBox="0 0 80 80" aria-hidden="true"><circle class="track" cx="40" cy="40" r="33" /><circle class="arc" cx="40" cy="40" r="33" stroke-dasharray=${C} stroke-dashoffset=${isl.full || countdown <= 0 ? 0 : (C * (isl.frac || 0)).toFixed(1)} /></svg>
+      style=${isl.breathe ? `--breathe:${isl.breathe.toFixed(2)}s` : ''}
+      onPointerDown=${isl.swap ? ringDown : undefined} onPointerUp=${isl.swap ? () => ringStop(true) : undefined} onPointerCancel=${isl.swap ? () => ringStop(false) : undefined} onPointerMove=${isl.swap ? ringMove : undefined}
+      onContextMenu=${(e) => e.preventDefault()}
+      onClick=${isl.swap ? (e) => { if (e.detail === 0) swapFromRing(); } : openNext}
+      aria-label=${isl.swap ? 'Houd vast om nu te wisselen: ' + group.map((s) => nick(s.in) + ' erin voor ' + nick(s.out)).join(', ') : isl.k}>
+      <svg viewBox="0 0 80 80" aria-hidden="true"><circle class="track" cx="40" cy="40" r="33" /><circle class="arc" cx="40" cy="40" r="33" stroke-dasharray=${C} stroke-dashoffset=${isl.full || countdown <= 0 ? 0 : (C * (isl.frac || 0)).toFixed(1)} />${isl.swap && html`<circle class="holdarc" cx="40" cy="40" r="33" stroke-dasharray=${C} />`}</svg>
       ${isl.swap
         ? html`<span class="i-lbl swaplbl"><span class="i-arrows" key=${'sp' + spinKey}><${Icon} name="swaparrows" size=${countdown <= 0 ? 30 : 22} /></span><span class="i-time">${isl.ring}</span></span>`
         : html`<span class="i-lbl">${isl.ring}</span>`}
     </button>`}
     ${isl.late && html`<span class="i-late">${isl.late}</span>`}
+    ${isl.swap && !spinning && (holdHint || countdown <= 60) && html`<span class=${'i-holdtip' + (holdHint ? ' nudge' : '')} key=${'ht' + holdHint} aria-hidden="true">${holdHint ? 'Houd vast om te wisselen' : 'houd vast'}</span>`}
+  </div>`;
+
+  // peek: het verhaal van de volgende wissel (en die daarna) schuift over het veld. Kort tikken = open/dicht,
+  // vasthouden = alleen zolang je vasthoudt.
+  const [peek, setPeek] = useState(false);
+  const peekRef = useRef(null);
+  const peekDown = (e) => { peekRef.current = { t: Date.now(), was: peek, hold: setTimeout(() => { setPeek(true); haptic('select'); peekRef.current && (peekRef.current.held = true); }, 280) }; };
+  const peekUp = () => {
+    const p = peekRef.current; peekRef.current = null;
+    if (!p) return;
+    clearTimeout(p.hold);
+    if (p.held) setPeek(false);
+    else { setPeek(!p.was); haptic('select'); }
+  };
+  const canPeek = !!next && !pending && !goal && !timeUp;
+  useEffect(() => { if (!canPeek && peek) setPeek(false); }, [canPeek]);
+  const lines = M.linesOf(match, team);
+  const peekStory = canPeek ? M.swapStory(d.state.slots, lines, group.map((s) => ({ out: s.out, in: s.in, shift: s.shift }))) : [];
+  let after = null;
+  if (canPeek && match.plan) {
+    const rest = match.plan.steps.slice(group.length);
+    if (rest[0] && rest[0].type === 'lineup') after = { lineup: true, t: rest[0].t };
+    else if (rest[0]) {
+      const g2 = rest.filter((s) => s.type === 'swap' && s.t === rest[0].t);
+      after = { t: rest[0].t, story: M.swapStory(M.slotsAfter(d.state.slots, group), lines, g2.map((s) => ({ out: s.out, in: s.in, shift: s.shift }))) };
+    }
+  }
+  const storyLine = (st, small) => html`<div class=${'pk-line' + (small ? ' small' : '')} key=${st.in + st.out}>
+    <span class="pk-main"><span class="chg in">↑ ${nick(st.in)}</span> erin voor <span class="chg out">↓ ${nick(st.out)}</span></span>
+    ${(st.shift || st.inPos) && html`<span class="pk-sub">${st.shift
+      ? html`<span class="chg sh">↔ ${nick(st.shift)}</span> ${st.shiftPos ? st.shiftPos.naar : 'schuift door'}${st.inPos ? html`<span class="pk-dim"> · ${nick(st.in)} ${st.inPos.op}</span>` : ''}`
+      : html`${nick(st.in)} ${st.inPos.op}`}</span>`}
+  </div>`;
+  const peekPanel = canPeek && html`<div class=${'peekpanel' + (peek ? ' open' : '')} aria-hidden=${!peek} role="status">
+    <span class="pk-when">Volgende wissel · ${counts.done + 1} van ${counts.total} · ${countdown > 0 ? 'over ' + M.fmt(countdown) : 'nu'}${next.fixed ? ' · vastgezet' : ''}</span>
+    ${peekStory.map((st) => storyLine(st, false))}
+    ${after && html`<span class="pk-when pk-after">Daarna · over ${M.fmt(Math.max(0, after.t - T))}</span>`}
+    ${after && (after.lineup ? html`<div class="pk-line small"><span class="pk-main">Rust: nieuwe opstelling</span></div>` : after.story.map((st) => storyLine(st, true)))}
   </div>`;
 
   // zwevende wisselspelers achter de plekken die gaan veranderen
@@ -664,6 +746,11 @@ function LiveView({ match, team }) {
           picking=${goal === 'scorer'} hot=${cele && cele.us ? cele.id : null} hotKey=${cele ? cele.key : 0}
           neon=${next && !pending && !goal && !timeUp ? group.map((s) => s.out) : []} sub=${(id) => M.fmt(d.state.played[id])}
           ghosts=${ghosts} animate accent=${accent} badges=${d.goals} cheer=${cheer} />
+        ${peekPanel}
+        ${canPeek && html`<button type="button" class=${'peekbtn' + (peek ? ' on' : '')} data-press="none" aria-pressed=${peek}
+          aria-label=${peek ? 'Verberg de volgende wissel in woorden' : 'Toon de volgende wissel in woorden'}
+          onPointerDown=${peekDown} onPointerUp=${peekUp} onPointerCancel=${peekUp} onContextMenu=${(e) => e.preventDefault()}
+          onClick=${(e) => { if (e.detail === 0) setPeek(!peek); }}><${Icon} name="story" size=${18} /><span>${peek ? 'Sluit' : 'Uitleg'}</span></button>`}
         ${!goal && !pending && html`<${FocusRail} stand=${shownStand} auto=${team.rules.autoStand && match.standMode !== 'manual'} canAuto=${!!team.rules.autoStand}
           onSet=${(v) => mutate((m, t) => M.setStand(m, t, 'manual', v))} onAuto=${(on) => mutate((m, t) => M.setStand(m, t, on ? 'auto' : 'manual', stand))} />`}
         ${act && html`<div class=${'actpill' + (act.top ? ' top' : '') + (act.out || act.outs ? ' wide' : '') + (act.label ? ' labeled' : '')} key=${'a' + act.key} role="status">

@@ -106,6 +106,13 @@ export function swapStory(slots, lines, pairs) {
   });
 }
 
+// Plekken na een rij wissels (voor het verhaal van het moment daarna).
+export function slotsAfter(slots, pairs) {
+  let cur = { ...slots };
+  for (const p of pairs) cur = slotSwap(cur, p.out, p.in, p.shift && slotOf(cur, p.shift.id) ? p.shift : null);
+  return cur;
+}
+
 export function slotSwap(slots, out, inn, shift) {
   const next = { ...slots };
   const outSlot = slotOf(next, out);
