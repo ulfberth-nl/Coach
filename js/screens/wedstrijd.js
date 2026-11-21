@@ -11,7 +11,7 @@ import { viewTransition, haptic, reduced, T as TEMPO } from '../motion.js';
 import { switchPlanMode } from './plan.js';
 import { Rooster } from './gameplan.js';
 import { mutate, undoAction, liveAct, SwapSheet, GroupSwapSheet, BenchSheet, GoalSheet, JoinSheet, KeeperSheet } from './live.js';
-import { Field, Neon, Roll, Sheet, Confirm, Seg, Stepper, Icon, accentFor, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, BenchScroll, beep, flash, unlockAudio, toast, go } from '../ui.js';
+import { Field, Neon, Roll, Sheet, CallStory, Confirm, Seg, Stepper, Icon, accentFor, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, BenchScroll, beep, flash, unlockAudio, toast, go } from '../ui.js';
 
 // slepen in de startopstelling: twee spelers ruilen, of een speler naar een lege plek in een andere linie
 // (dan verandert de opstelling voor deze wedstrijd). Het plan rekent daarna opnieuw.
@@ -695,45 +695,34 @@ function LiveView({ match, team }) {
   }, [floating, peek]);
   useEffect(() => {
     if (!peek) return undefined;
-    const away = (e) => { if (!e.target.closest('.islandwrap')) setPeek(false); };
+    // een tik buiten de lade sluit hem, en doet verder niets: geen wissel of keeperswissel eronder
+    const KINDS = ['pointerup', 'mouseup', 'touchend', 'click'];
+    let until = 0;
+    const eat = (ev) => { if (Date.now() < until) { ev.stopPropagation(); if (ev.cancelable) ev.preventDefault(); } };
+    const away = (e) => {
+      if (e.target.closest('.islandwrap')) return;
+      e.stopPropagation(); if (e.cancelable) e.preventDefault();
+      until = Date.now() + 700;
+      setPeek(false);
+    };
     document.addEventListener('pointerdown', away, true);
-    return () => document.removeEventListener('pointerdown', away, true);
+    for (const k of KINDS) document.addEventListener(k, eat, true);
+    return () => {
+      document.removeEventListener('pointerdown', away, true);
+      // de rest van deze tik nog even opeten, ook nu de lade al dicht is
+      setTimeout(() => { for (const k of KINDS) document.removeEventListener(k, eat, true); }, Math.max(0, until - Date.now()));
+    };
   }, [peek]);
   useEffect(() => { if (!canPeek && peek) setPeek(false); }, [canPeek]);
   const lines = M.linesOf(match, team);
-  const peekStory = canPeek ? M.swapStory(d.state.slots, lines, group.map((s) => ({ out: s.out, in: s.in, shift: s.shift }))) : [];
   // game plan: plekwissels die met dit moment meegaan
   const movesNow = next ? M.nextMoves(match, team) : [];
-  const peekMoves = canPeek && movesNow.length ? M.moveStory(M.slotsAfter(d.state.slots, group), lines, movesNow) : [];
-  let after = null;
-  if (canPeek && match.plan) {
-    const rest = match.plan.steps.filter((s) => s.type !== 'move' && group.indexOf(s) === -1);
-    if (rest[0] && rest[0].type === 'lineup') after = { lineup: true, t: rest[0].t };
-    else if (rest[0]) {
-      const g2 = rest.filter((s) => s.type === 'swap' && s.t === rest[0].t);
-      after = { t: rest[0].t, story: M.swapStory(M.slotsAfter(d.state.slots, group), lines, g2.map((s) => ({ out: s.out, in: s.in, shift: s.shift }))) };
-    }
-  }
-  const moveLine = (st) => (st.to ? html`<div class="pk-line" key=${'mv' + st.a}>
-    <span class="pk-main"><span class="chg sh">↔ ${nick(st.a)}</span> naar ${LNAME_LIVE[st.to]}</span>
-    <span class="pk-sub">Andere opstelling, zoals gepland</span>
-  </div>` : html`<div class="pk-line" key=${'mv' + st.a + st.b}>
-    <span class="pk-main"><span class="chg sh">↔ ${nick(st.a)}</span> en <span class="chg sh">${nick(st.b)}</span> ruilen van linie</span>
-    ${st.aPos && html`<span class="pk-sub">${nick(st.a)} ${st.aPos.naar} · ${nick(st.b)} ${st.bPos.naar}</span>`}
-  </div>`);
-  const storyLine = (st, small) => html`<div class=${'pk-line' + (small ? ' pk-next' : '')} key=${st.in + st.out}>
-    <span class="pk-main"><span class="chg in">↑ ${nick(st.in)}</span> erin voor <span class="chg out">↓ ${nick(st.out)}</span></span>
-    ${(st.shift || st.inPos) && html`<span class="pk-sub">${st.shift
-      ? html`<span class="chg sh">↔ ${nick(st.shift)}</span> ${st.shiftPos ? st.shiftPos.naar : 'schuift door'}${st.inPos ? html`<span class="pk-dim"> · ${nick(st.in)} ${st.inPos.op}</span>` : ''}`
-      : html`${nick(st.in)} ${st.inPos.op}`}</span>`}
-  </div>`;
+  // wat de coach roept: wie eruit, en per kind waar hij aan het eind staat
+  const call = canPeek ? M.callStory(d.state.slots, lines, group.map((s) => ({ out: s.out, in: s.in, shift: s.shift })), movesNow) : null;
   const drawer = canPeek && html`<div class=${'isl-drawer' + (peek ? ' open' : '')}>
-    <div class="dr-clip"><div class="dr-body" aria-hidden=${!peek} role="status"><div class="dr-in">
-      <span class="pk-when">Zo gaat de wissel${next.fixed && !next.own ? ' · vastgezet' : ''}</span>
-      ${peekStory.map((st) => storyLine(st, false))}
-      ${peekMoves.map(moveLine)}
-      ${after && html`<span class="pk-when pk-after">Daarna · over ${M.fmt(Math.max(0, after.t - T))}</span>`}
-      ${after && (after.lineup ? html`<div class="pk-line pk-next"><span class="pk-main">Rust: nieuwe opstelling</span></div>` : after.story.map((st) => storyLine(st, true)))}
+    <div class="dr-clip" onClick=${() => { if (peek) { setPeek(false); haptic('select'); } }}><div class="dr-body" aria-hidden=${!peek} role="status"><div class="dr-in">
+      ${next.fixed && !next.own && html`<span class="pk-when pk-pin">Vastgezet door jou</span>`}
+      <div class="pk-line"><${CallStory} call=${call} nick=${nick} /></div>
     </div></div></div>
     <button type="button" class="dr-grab" data-press="none" aria-expanded=${peek}
       aria-label=${peek ? 'Uitleg van de wissel sluiten' : 'Uitleg van de wissel tonen'}
@@ -768,14 +757,15 @@ function LiveView({ match, team }) {
     const n = counts.done + 1;
     const late = countdown < -0.5;
     const s0 = next;
-    const story = M.swapStory(d.state.slots, M.linesOf(match, team), [{ out: s0.out, in: s0.in, shift: s0.shift }])[0];
+    const said = (call || M.callStory(d.state.slots, lines, group.map((s) => ({ out: s.out, in: s.in, shift: s.shift })), movesNow)).tell;
     isl = {
       st: late ? 'hot late' : countdown <= 60 ? 'hot' : '',
       k: late ? `Te laat · wissel ${n}` : countdown <= 60 ? `Bijna · wissel ${n} van ${counts.total}` : `Volgende wissel · ${n} van ${counts.total}`,
       t1: group.length > 1 ? html`${group.length} spelers tegelijk` : html`<em>${nick(s0.in)}</em> erin voor ${nick(s0.out)}`,
+      // in dezelfde taal als de uitleg: waar wie erin komt staat, en wie van plek verandert
       t2: (s0.fixed && !s0.own ? 'Aangepast · ' : '') + (group.length > 1 ? group.map((s) => nick(s.in)).join(', ') + ' erin'
-        : story.shift ? `${nick(story.shift)} ${story.shiftPos ? story.shiftPos.naar : 'schuift door'}` : story.inPos ? `${nick(s0.in)} ${story.inPos.op}` : '') +
-        (movesNow.length ? ` · ${movesNow.length === 1 ? '1 plekwissel' : movesNow.length + ' plekwissels'}` : ''),
+        + (said.length > group.length ? ` · ${said.length - group.length} van plek` : '')
+        : said.slice(0, 2).map((x) => `${nick(x.id)} ${x.in ? (x.pos ? x.pos.kort : '') : x.pos ? x.pos.naar : 'schuift door'}`).join(' · ') + (said.length > 2 ? ` · +${said.length - 2}` : '')),
       ring: countdown <= 0 ? 'nu' : M.fmt(countdown),
       late: late ? '−' + M.fmt(-countdown) : null,
       frac: Math.max(0, Math.min(1, (T - (match.plan ? match.plan.at : 0)) / Math.max(1, next.t - (match.plan ? match.plan.at : 0)))),

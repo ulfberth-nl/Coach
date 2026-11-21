@@ -657,11 +657,14 @@ export const KRACHT_BG = 'linear-gradient(90deg, #1F3C88, #2B57C9 72%, #F5A524)'
 // - bij loslaten vliegt de speler naar het doel, of terug als er geen doel is.
 // hint(a, b) geeft die tekst, of null als b geen geldig doel is.
 const MAGNET = 78;
-export function useDragSwap(ref, enabled, onSwap, hint) {
+export function useDragSwap(ref, enabled, onSwap, hint, opts = {}) {
   const cb = useRef(onSwap);
   cb.current = onSwap;
   const hb = useRef(hint);
   hb.current = hint;
+  // benchSlots: ook een bankspeler mag op een lege plek (+) landen (game plan: blok invullen of een extra plek)
+  const ob = useRef(opts);
+  ob.current = opts;
   useEffect(() => {
     const root = ref.current;
     if (!root || !enabled) return undefined;
@@ -698,12 +701,13 @@ export function useDragSwap(ref, enabled, onSwap, hint) {
       st.from = centre(st.el);
       st.el.classList.add('drag-src');
       const onField = !!st.el.closest('.field');
+      const slotsToo = onField || !!ob.current.benchSlots;
       root.classList.add('dragging');
-      if (onField) { root.classList.add('drag-field'); root.dataset.dragLine = st.el.dataset.line || ''; }
+      if (slotsToo) { root.classList.add('drag-field'); root.dataset.dragLine = onField ? st.el.dataset.line || '' : ''; }
       // alle mogelijke doelen: spelers, en (voor veldspelers) de lege plekken waarmee je de opstelling verandert
       st.targets = [...root.querySelectorAll('[data-pid]')].filter((t) => t.dataset.pid && t.dataset.pid !== st.id).map((t) => {
         const slot = isSlot(t.dataset.pid);
-        const label = slot && !onField ? null : hb.current ? hb.current(st.id, t.dataset.pid) : '';
+        const label = slot && !slotsToo ? null : hb.current ? hb.current(st.id, t.dataset.pid) : '';
         if (label === null) { if (slot) t.classList.add('off'); return null; }
         return { el: t, id: t.dataset.pid, label, slot, line: slot ? t.dataset.l : null, k: slot ? +t.dataset.pid.split(':')[2] : 0, ...centre(t) };
       }).filter(Boolean);
@@ -1006,5 +1010,20 @@ export function ShieldColors({ name }) {
     <input type="color" class="swatch" aria-label="Kleur 1" value=${cols[0]} onInput=${(e) => set(0, e.target.value)} />
     <input type="color" class="swatch" aria-label="Kleur 2" value=${cols[1] || cols[0]} onInput=${(e) => set(1, e.target.value)} />
     ${own && html`<button type="button" class="link" onClick=${reset}>Standaard</button>`}
+  </div>`;
+}
+
+// Wat de coach roept bij een wissel: wie eruit, en per kind dat erin komt of van plek verandert één regel
+// met waar hij aan het eind staat (uit M.callStory). Zelfde taal in de lade van het live-scherm en in de planner.
+export function CallStory({ call, nick }) {
+  if (!call || (!call.out.length && !call.tell.length)) return null;
+  return html`<div class="call">
+    ${call.out.length > 0 && html`<span class="call-k">Roep eruit</span>
+      <span class="call-out">${call.out.map((id) => html`<span class="chg out" key=${id}>↓ ${nick(id)}</span>`)}</span>`}
+    ${call.tell.length > 0 && html`<span class="call-k">Zeg tegen</span>
+      <span class="call-list">${call.tell.map((x) => html`<span class="call-row" key=${x.id}>
+        <span class=${'chg ' + (x.in ? 'in' : 'sh')}>${x.in ? '↑' : '↔'} ${nick(x.id)}</span>
+        <span class="call-do">${x.in ? html`erin · <b>${x.pos ? x.pos.kort : 'op de vrije plek'}</b>` : html`${x.pos ? x.pos.naar : 'schuift door'}`}</span>
+      </span>`)}</span>`}
   </div>`;
 }

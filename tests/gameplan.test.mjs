@@ -223,3 +223,57 @@ console.log('gameplan formatie ok');
   assert.equal(mf.gameplan.src[fx[0].b], 'coach');
 }
 console.log('gameplan oplossingen ok');
+
+// ---------- wat de coach roept: eindplek per kind, tussenstappen weg ----------
+{
+  const lines = { V: 2, M: 1, A: 2 };
+  const slots = { V0: 'a1', V1: 'y1', M0: 'k1', A0: 'p1', A1: 'h1' };
+  const c = M.callStory(slots, lines, [{ out: 'a1', in: 'l1' }, { out: 'y1', in: 'x1' }], [{ a: 'h1', b: 'k1' }, { a: 'k1', b: 'x1' }]);
+  assert.deepEqual(c.out, ['a1', 'y1']);
+  const at = Object.fromEntries(c.tell.map((x) => [x.id, x.pos.kort]));
+  assert.equal(at.l1, 'linksvoor');
+  assert.equal(at.x1, 'rechtsachter', 'wie twee keer schuift, staat er één keer in met zijn eindplek');
+  assert.equal(at.k1, 'rechtsvoor');
+  assert.equal(at.h1, 'midden');
+  assert.equal(c.tell.length, 4);
+  assert.ok(c.tell[0].in && c.tell[1].in, 'erin eerst');
+  assert.equal(M.callStory(slots, lines, [], [{ a: 'h1', b: 'k1' }, { a: 'k1', b: 'h1' }]).tell.length, 0, 'terug op eigen plek = niets te zeggen');
+}
+
+// ---------- gevolgen, betere zetten en gratis verbeteringen ----------
+{
+  const pl = (id) => team.players.find((p) => p.id === id);
+  const mg = M.createMatch(team, { opponent: 'Winst', present: ids, keeperId, planMode: 'eigen' });
+  M.gpEnsure(mg, team, 4);
+  const fi = M.gpFieldIds(mg); const ln = M.linesOf(mg, team);
+  // twee spelers met een duidelijke kant, verkeerd om neergezet
+  const [va, aa] = fi.filter((id) => !['V', 'M', 'A'].includes(pl(id).main)).slice(0, 2);
+  pl(va).main = 'V'; pl(va).flex = true; pl(va).prefs = ['V'];
+  pl(aa).main = 'A'; pl(aa).flex = true; pl(aa).prefs = ['A'];
+  const rest = fi.filter((id) => id !== va && id !== aa);
+  const st0 = { [va]: 'A', [aa]: 'V' }; let q = 0;
+  const need = { V: (ln.V || 0) - 1, M: ln.M || 0, A: (ln.A || 0) - 1 };
+  for (const l of ['V', 'M', 'A']) for (let i = 0; i < need[l]; i++) st0[rest[q++]] = l;
+  for (let b = 0; b < 4; b++) M.gpSetBlock(mg, team, b, st0);
+  const wins = M.gpPureWins(mg, team, 9);
+  const w = wins.find((x) => [x.what.a, x.what.b].includes(va) && [x.what.a, x.what.b].includes(aa));
+  assert.ok(w && w.pure, 'de linieruil is gratis winst');
+  assert.equal(w.bs.length, M.gpBlocks(mg, team, 4).length, 'dezelfde ruil in alle blokken na elkaar is één voorstel');
+  const k0 = M.gpKracht(mg, team, M.gpStats(mg, team));
+  const before = M.gpStats(mg, team);
+  M.gpApplyFix(mg, team, w);
+  const after = M.gpStats(mg, team);
+  assert.ok(M.gpKracht(mg, team, after) > k0);
+  const cmp = M.gpCompare(mg, team, before, after);
+  assert.ok(cmp.pure && !cmp.worse.length, 'niets slechter, iets beter');
+  for (let b = 0; b < 4; b++) assert.equal(mg.gameplan.grid[b][va], 'V');
+  // betere zetten na een wijziging laten het blok van de coach staan
+  const benchKid = fi.find((id) => !(id in mg.gameplan.grid[1]));
+  const np = { ...mg.gameplan.grid[1] }; const outK = Object.keys(np)[0]; const lane = np[outK]; delete np[outK]; np[benchKid] = lane;
+  const st1 = M.gpStats(mg, team);
+  M.gpSetBlock(mg, team, 1, np, 'coach');
+  const imp = M.gpImprove(mg, team, { lock: [1], focus: [benchKid, outK], max: 3 });
+  assert.ok(imp.length <= 3 && imp.every((f) => f.b !== 1), 'het gewijzigde blok blijft van de coach');
+  assert.ok(M.gpCompare(mg, team, st1, M.gpStats(mg, team)).worse.length >= 0);
+}
+console.log('gameplan roepen en winst ok');

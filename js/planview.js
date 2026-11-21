@@ -3,7 +3,7 @@
 import { html, useState, useMemo, useRef, useEffect } from '../vendor/preact-htm.js';
 import * as M from './match.js';
 import { LINE_NAMES } from './planner.js';
-import { Field, Icon, Neon, POS_COLORS, useDragSwap, BenchScroll, accentFor } from './ui.js';
+import { Field, Icon, Neon, POS_COLORS, useDragSwap, BenchScroll, accentFor, CallStory } from './ui.js';
 import { haptic } from './motion.js';
 
 const BENCH = '#DCE2EE';
@@ -325,18 +325,13 @@ function NextCaption({ i, nx, c, lines, team, match, nick, canPlan, swapNo, tota
   if (match.finished) return null;
   if (!nx) return html`<div class="nextcap story"><span class="nc-when">Hierna</span><span class="nc-what">Geen wissels meer in deze wedstrijd.</span></div>`;
   if (nx.kind === 'lineup') return html`<div class="nextcap story"><span class="nc-when">${M.periodWord(team) === 'helft' ? 'Rust' : 'Pauze'} · ${label(nx.t)}</span><span class="nc-what">Nieuwe opstelling voor de ${M.periodLabel(team, nx.period)}</span></div>`;
-  const story = M.swapStory(c.slots, lines, nx.pairs || [{ out: nx.out, in: nx.in, shift: nx.shift }]);
+  const call = M.callStory(c.slots, lines, nx.pairs || [{ out: nx.out, in: nx.in, shift: nx.shift }], nx.moves || []);
   const when = until != null && isNow
     ? (until > 0 ? `over ${M.fmt(until)}` : until > -1 ? 'nu' : `${M.fmt(-until)} te laat`)
     : label(nx.t);
   return html`<div class=${'nextcap story' + (nx.pinned ? ' pinned' : '') + (until != null && isNow && until <= 60 ? ' soon' : '')} key=${'nc' + nx.t}>
     <span class="nc-when">${isNow ? (match.started ? 'Volgende wissel' : 'Eerste wissel') : 'Daarna'} · ${swapNo} van ${total} · ${when}</span>
-    <div class="nc-lines">${story.map((st) => html`<div class="nc-line" key=${st.in + st.out}>
-      <span class="nc-main"><span class="chg in">↑ ${nick(st.in)}</span> erin voor <span class="chg out">↓ ${nick(st.out)}</span></span>
-      <span class="nc-sub">${st.shift
-        ? html`<span class="chg sh">↔ ${nick(st.shift)}</span> ${st.shiftPos ? st.shiftPos.naar : 'schuift door'}${st.inPos ? html`<span class="nc-dim"> · ${nick(st.in)} ${st.inPos.op}</span>` : ''}`
-        : st.inPos ? html`${nick(st.in)} ${st.inPos.op}` : ''}</span>
-    </div>`)}</div>
+    <${CallStory} call=${call} nick=${nick} />
     ${nx.pinned
       ? html`<span class="nc-pin"><span class="pinbadge"><${Icon} name="pin" size=${14} />Vastgezet door jou</span><button type="button" class="linkbtn" onClick=${() => onUnpin && onUnpin(nx.t, swapNo)}>Losmaken</button></span>`
       : canPlan ? html`<span class="nc-hint">Sleep op het veld om het zelf te kiezen.</span>` : null}

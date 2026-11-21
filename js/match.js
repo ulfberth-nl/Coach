@@ -121,6 +121,36 @@ export function moveStory(slots, lines, moves) {
   });
 }
 
+// Wat de coach roept bij een wisselmoment: wie eruit, en per kind dat erin komt of van plek verandert
+// waar hij aan het eind staat. Tussenstappen vallen weg (schuift iemand twee keer, dan telt alleen zijn
+// eindplek) en wie op zijn eigen plek terugkomt, staat er niet in. Erin eerst, daarna van voor naar achter.
+export function callStory(slots, lines, pairs, moves = []) {
+  const before = { ...slots };
+  let cur = slotsAfter(slots, pairs);
+  const lineTo = {};
+  for (const mv of moves || []) {
+    if (mv.to) { lineTo[mv.a] = mv.to; continue; }
+    const sa = slotOf(cur, mv.a), sb = slotOf(cur, mv.b);
+    if (sa && sb) cur = { ...cur, [sa]: mv.b, [sb]: mv.a };
+  }
+  const ins = pairs.map((p) => p.in);
+  const ord = (k) => (k ? 'VMA'.indexOf(k[0]) * 100 + +k.slice(1) : 999);
+  const tell = [];
+  const seen = new Set();
+  for (const k of Object.keys(cur)) {
+    const id = cur[k];
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const isIn = ins.includes(id);
+    if (lineTo[id]) { tell.push({ id, in: isIn, pos: posName(lineTo[id], 0, 1), k: lineTo[id] + '0' }); continue; }
+    if (!isIn && slotOf(before, id) === k) continue;
+    tell.push({ id, in: isIn, pos: posName(k[0], +k.slice(1), lines[k[0]] || 0), k });
+  }
+  for (const id of Object.keys(lineTo)) if (!seen.has(id)) tell.push({ id, in: ins.includes(id), pos: posName(lineTo[id], 0, 1), k: lineTo[id] + '0' });
+  tell.sort((a, b) => (a.in === b.in ? (a.in ? ins.indexOf(a.id) - ins.indexOf(b.id) : ord(a.k) - ord(b.k)) : a.in ? -1 : 1));
+  return { out: pairs.map((p) => p.out), tell };
+}
+
 // Plekken na een rij wissels (voor het verhaal van het moment daarna).
 export function slotsAfter(slots, pairs) {
   let cur = { ...slots };
@@ -1862,7 +1892,8 @@ export function gpFixes(match, team, ins, max = 3) {
     const m2 = { ...match, gameplan: { ...gp, grid: gp.grid.map((x, i) => (i === b ? pos : x)) } };
     const st = gpStats(m2, team);
     const sc = gpPlanScore(m2, team, st);
-    if (sc < s0 - 1) opts.push({ b, pos, what, gain: s0 - sc, after: st, kracht: gpKracht(m2, team, st) });
+    const cmp = gpCompare(match, team, before, st);
+    if (sc < s0 - 1) opts.push({ b, pos, what, gain: s0 - sc, after: st, kracht: gpKracht(m2, team, st), pure: cmp.pure, cmp });
   };
   for (const bl of blocks) {
     const pos = gp.grid[bl.b];
@@ -1888,8 +1919,8 @@ export function gpFixes(match, team, ins, max = 3) {
       }
     }
   }
-  // de beste, en liefst verschillende blokken of spelers
-  opts.sort((a, b) => b.gain - a.gain);
+  // pure winst eerst, dan de grootste winst; liefst verschillende blokken of spelers
+  opts.sort((a, b) => (b.pure - a.pure) || (b.gain - a.gain));
   const out = [];
   for (const o of opts) {
     if (out.some((x) => x.b === o.b && x.what.out === o.what.out && x.what.in === o.what.in)) continue;
@@ -1899,9 +1930,120 @@ export function gpFixes(match, team, ins, max = 3) {
   }
   return out;
 }
+// Twee momentopnames van het game plan vergelijken: wat werd beter en wat slechter. 'Pure winst' = niets
+// slechter (speeltijdverschil, langst aan de kant, in hun kracht, en geen kind verder van zijn doel of vaker
+// buiten zijn kracht) en minstens één ding beter.
+export function gpCompare(match, team, a, b) {
+  const r = effRules(match, team);
+  const rule = r.maxBenchOn ? (r.maxBench || 10) * 60 : Infinity;
+  const over = (st) => (rule === Infinity ? 0 : Object.values(st.kids).reduce((s, k) => s + Math.max(0, k.maxRun - rule), 0));
+  const ka = gpKracht(match, team, a), kb = gpKracht(match, team, b);
+  const ids = Object.keys(b.kids).filter((id) => a.kids[id]);
+  const dist = (st, id) => Math.abs(st.kids[id].sec - st.target);
+  const worse = [], better = [];
+  const sa = a.max - a.min, sb = b.max - b.min;
+  if (sb > sa + 1) worse.push('time'); else if (sb < sa - 1) better.push('time');
+  const oa = over(a), ob = over(b);
+  if (b.maxBench > a.maxBench + 1 || ob > oa + 1) worse.push('bench'); else if (b.maxBench < a.maxBench - 1 || ob < oa - 1) better.push('bench');
+  if (kb < ka - 0.001) worse.push('kracht'); else if (kb > ka + 0.001) better.push('kracht');
+  const further = ids.filter((id) => dist(b, id) > dist(a, id) + 1);
+  const outMore = ids.filter((id) => b.kids[id].out > a.kids[id].out + 1);
+  if (further.length) worse.push('kids');
+  if (outMore.length) worse.push('kidKracht');
+  return { worse, better, pure: !worse.length && better.length > 0, further, outMore, ka, kb };
+}
+
+// Betere alternatieven na een wijziging: één wissel of linieruil in een ander blok (het blok dat de coach net
+// veranderde blijft van hem). Alleen zetten met de betrokken spelers, zodat het snel blijft. Pure winst eerst.
+export function gpImprove(match, team, { lock = [], focus = null, max = 3 } = {}) {
+  const gp = match.gameplan;
+  if (!gp || !gp.base) return [];
+  const blocks = gpBlocks(match, team, gp.n);
+  const ids = gpFieldIds(match);
+  const before = gpStats(match, team);
+  const s0 = gpPlanScore(match, team, before);
+  const want = (x) => !focus || focus.indexOf(x) !== -1;
+  const opts = [];
+  const tryPos = (b, pos, what) => {
+    const m2 = { ...match, gameplan: { ...gp, grid: gp.grid.map((x, i) => (i === b ? pos : x)) } };
+    const st = gpStats(m2, team);
+    const sc = gpPlanScore(m2, team, st);
+    const cmp = gpCompare(match, team, before, st);
+    if (sc < s0 - 1 || cmp.pure) opts.push({ b, pos, what, gain: s0 - sc, after: st, kracht: gpKracht(m2, team, st), pure: cmp.pure, cmp });
+  };
+  for (const bl of blocks) {
+    if (lock.indexOf(bl.b) !== -1) continue;
+    const pos = gp.grid[bl.b];
+    if (!gpComplete(match, team, pos)) continue;
+    const field = Object.keys(pos);
+    const bench = ids.filter((id) => !(id in pos));
+    for (const X of field) for (const Y of bench) {
+      if (!want(X) && !want(Y)) continue;
+      const np = { ...pos }; delete np[X]; np[Y] = pos[X];
+      tryPos(bl.b, np, { kind: 'swap', in: Y, out: X, lane: pos[X] });
+    }
+    for (let i = 0; i < field.length; i++) for (let j = i + 1; j < field.length; j++) {
+      const X = field[i], Z = field[j];
+      if (pos[X] === pos[Z] || (!want(X) && !want(Z))) continue;
+      tryPos(bl.b, { ...pos, [X]: pos[Z], [Z]: pos[X] }, { kind: 'move', a: X, b: Z, to: pos[Z] });
+    }
+  }
+  opts.sort((a, b) => (b.pure - a.pure) || (b.gain - a.gain));
+  const out = [];
+  for (const o of opts) {
+    if (out.some((x) => x.b === o.b && x.what.out === o.what.out && x.what.in === o.what.in && x.what.a === o.what.a)) continue;
+    if (out.filter((x) => x.b === o.b).length >= 2) continue;
+    out.push({ ...o, before, beforeKracht: gpKracht(match, team, before), block: blocks[o.b] });
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+// Gratis verbeteringen: twee spelers in hetzelfde blok ruilen van linie en geen van beiden speelt daardoor
+// minder in zijn kracht, minstens één juist meer. De minuten en de bank blijven gelijk: alleen winst.
+export function gpPureWins(match, team, max = 3) {
+  const gp = match.gameplan;
+  if (!gp || !gp.base) return [];
+  const players = playersMap(team);
+  const blocks = gpBlocks(match, team, gp.n);
+  const now = match.started ? gameTime(match, team) : -1;
+  const found = [];
+  for (const bl of blocks) {
+    if (bl.t1 <= now) continue;
+    const pos = gp.grid[bl.b];
+    if (!gpComplete(match, team, pos)) continue;
+    const field = Object.keys(pos);
+    for (let i = 0; i < field.length; i++) for (let j = i + 1; j < field.length; j++) {
+      const X = field[i], Z = field[j];
+      if (pos[X] === pos[Z]) continue;
+      const dx = FIT[fitOf(players[X], pos[Z])] - FIT[fitOf(players[X], pos[X])];
+      const dz = FIT[fitOf(players[Z], pos[X])] - FIT[fitOf(players[Z], pos[Z])];
+      if (dx < 0 || dz < 0 || dx + dz <= 0) continue;
+      found.push({ b: bl.b, block: bl, pos: { ...pos, [X]: pos[Z], [Z]: pos[X] }, what: { kind: 'move', a: X, b: Z, to: pos[Z] }, gain: (dx + dz) * bl.len, pure: true });
+    }
+  }
+  // dezelfde ruil in blokken na elkaar (bijv. de basisopstelling die doorloopt) is één voorstel voor al die blokken
+  const groups = [];
+  for (const f of found) {
+    const key = [f.what.a, f.what.b, gp.grid[f.b][f.what.a], gp.grid[f.b][f.what.b]].join('|');
+    const g = groups.find((x) => x.key === key && x.bs[x.bs.length - 1] === f.b - 1);
+    if (g) { g.bs.push(f.b); g.poses[f.b] = f.pos; g.gain += f.gain; g.blockEnd = f.block; }
+    else groups.push({ ...f, key, bs: [f.b], poses: { [f.b]: f.pos }, blockEnd: f.block });
+  }
+  groups.sort((a, b) => b.gain - a.gain);
+  // per speler één voorstel per blok
+  const out = [];
+  for (const f of groups) {
+    if (out.some((x) => x.bs.some((b) => f.bs.indexOf(b) !== -1) && (x.what.a === f.what.a || x.what.b === f.what.b || x.what.a === f.what.b || x.what.b === f.what.a))) continue;
+    out.push(f);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
 export function gpApplyFix(match, team, fix) {
   if (!match.gameplan) return;
-  match.gameplan.grid[fix.b] = { ...fix.pos };
-  match.gameplan.src[fix.b] = 'coach';
+  const poses = fix.poses || { [fix.b]: fix.pos };
+  for (const b in poses) { match.gameplan.grid[b] = { ...poses[b] }; match.gameplan.src[b] = 'coach'; }
   gpSync(match, team);
 }
