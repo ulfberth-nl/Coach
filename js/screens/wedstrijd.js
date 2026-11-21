@@ -1029,7 +1029,8 @@ function PlanChoice({ match, team, swaps, perMoment }) {
       go('/plan');
     }
   };
-  const stdLine = swaps ? `${swaps} ${perMoment > 1 ? 'momenten' : 'wissels'} · ${M.mins(plan.fair.minPlayed)}–${M.mins(plan.fair.maxPlayed)} min p.p.` : 'Geen wissels nodig';
+  const stdRange = M.mins(plan.fair.minPlayed) === M.mins(plan.fair.maxPlayed) ? `${M.mins(plan.fair.minPlayed)}` : `${M.mins(plan.fair.minPlayed)}–${M.mins(plan.fair.maxPlayed)}`;
+  const stdLine = swaps ? `${swaps} ${perMoment > 1 ? 'momenten' : 'wissels'} · ${stdRange} min p.p.` : 'Geen wissels nodig';
   return html`<section class="pchoice">
     <div class="pc-head"><span class="pc-q">Hoe wissel je deze wedstrijd?</span>
       <button type="button" class="pc-info" onClick=${() => setSheet('uitleg')}>Uitleg</button></div>

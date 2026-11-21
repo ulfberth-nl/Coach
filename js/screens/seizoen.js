@@ -262,8 +262,9 @@ export function Seizoen({ state }) {
     </section>
 
     <section class="card" style="gap:2px">
-      <div class="between"><span class="h2">Spelers</span><span class="small">gem. min · goals · keeper</span></div>
-      ${players.map((p) => {
+      <div class="between"><span class="h2">Spelers</span>${results.length > 0 && html`<span class="small">gem. min · goals · keeper</span>`}</div>
+      ${!results.length && html`<span class="sub">Na de eerste wedstrijd zie je hier per kind de speeltijd, posities, goals en keepbeurten.</span>`}
+      ${results.length > 0 && players.map((p) => {
         const d = data.per[p.id] || { matches: 0, sec: 0, goals: 0, keeper: 0, lt: { A: 0, M: 0, V: 0 } };
         const avg = d.matches ? d.sec / d.matches : 0;
         const tot = d.lt.A + d.lt.M + d.lt.V || 1;
@@ -279,7 +280,7 @@ export function Seizoen({ state }) {
           <span class=${'pchip k' + (d.keeper ? ' on' : '')}>${d.keeper}</span>
         </div>`;
       })}
-      <div class="legend" style="margin-top:6px"><span><i style="background:var(--pos-A)"></i>Achter</span><span><i style="background:var(--pos-M)"></i>Midden</span><span><i style="background:var(--pos-V)"></i>Voor</span></div>
+      ${results.length > 0 && html`<div class="legend" style="margin-top:6px"><span><i style="background:var(--pos-A)"></i>Achter</span><span><i style="background:var(--pos-M)"></i>Midden</span><span><i style="background:var(--pos-V)"></i>Voor</span></div>`}
     </section>
 
     ${edit && html`<${ScheduleSheet} team=${team} matches=${state.matches} entry=${edit} onClose=${() => setEdit(null)} />`}

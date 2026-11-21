@@ -52,6 +52,7 @@ Klaarzetten en spelen gebeuren op hetzelfde scherm, dat altijd in één beeld pa
 - **Agenda-bestand (.ics):** alle wedstrijden of één wedstrijd, op de telefoon gemaakt, om in de agenda te zetten of te delen.
 - Het Wedstrijd-scherm zet automatisch de eerstvolgende wedstrijd uit het programma klaar. Via het affiche zie je de wedstrijd die het dichtst bij ligt; tik erop voor een lijst met de andere wedstrijden.
 - **Programma en uitslagen:** in Seizoen staat het programma op datum (dichtstbij eerst) en daaronder de uitslagen; tik een uitslag open voor doelpunten, speeltijd en posities. Lange lijsten tonen eerst 4 met *Laat meer zien…*.
+- **Lege staat:** zonder gespeelde wedstrijden zegt het spelersblok in Seizoen in één zin wat je er straks ziet.
 - **Seizoenen:** elke wedstrijd hoort bij een seizoen (aug–jul). Bovenin Seizoen kies je een eerder seizoen als archief, met uitslagen, minuten, posities en doelpunten.
 
 ## Tijdens de wedstrijd
@@ -135,6 +136,8 @@ Het pincodescherm is donker met ronde glazen toetsen; bij een fout schudden de b
 De pincode houdt meekijkers buiten, maar is geen echte beveiliging: de gegevens staan op de telefoon zelf.
 
 ## Gegevens en back-up
+
+- **Laatste back-up:** bij Team → Gegevens staat wanneer je de laatste back-up maakte (oranje als het nooit gebeurde of langer dan 14 dagen geleden is).
 
 De app maakt geen verbinding met andere diensten: geen koppelingen, geen analytics, geen lettertypes of scripts van buitenaf. Alleen de bestanden van de app zelf worden (één keer) geladen en daarna bewaard voor gebruik zonder bereik.
 

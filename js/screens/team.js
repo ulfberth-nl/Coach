@@ -8,7 +8,7 @@ import { PROFILES, PROFILE_ORDER, profileOf, cachedTune, rememberTune, consequen
 import { compute } from '../compute.js';
 import { scheduleRefresh } from '../refresh.js';
 
-export const APP_VERSION = '0.24.0';
+export const APP_VERSION = '0.24.1';
 
 // regels die het wisselprofiel bepaalt; zet je er zelf een, dan wordt het profiel 'Eigen'
 const TUNED = ['marge', 'equalTime', 'evenOften', 'maxBenchOn', 'maxBench', 'minInterval', 'turnsPerPeriod', 'priority', 'strongBias'];
@@ -169,7 +169,12 @@ export function Team({ state }) {
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    update((d) => { d.lastBackupAt = Date.now(); });
   };
+  // wanneer was de laatste back-up (alles staat alleen op deze telefoon)
+  const bk = state.lastBackupAt ? Math.floor((Date.now() - state.lastBackupAt) / 864e5) : null;
+  const bkText = bk == null ? 'Nog nooit een back-up gemaakt' : bk === 0 ? 'Laatste back-up: vandaag' : bk === 1 ? 'Laatste back-up: gisteren' : `Laatste back-up: ${bk} dagen geleden`;
+  const bkWarn = (bk == null || bk > 14) && state.matches.some((m) => m.finished);
   const upload = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -311,6 +316,7 @@ export function Team({ state }) {
     <section class="card">
       <span class="h2">Gegevens</span>
       <span class="small">Alles staat nu alleen op deze telefoon. Maak af en toe een back-up, bijvoorbeeld naar je bestanden of mail.</span>
+      <span class=${'bk-when' + (bkWarn ? ' warn' : '')}>${bkText}</span>
       <button type="button" class="btn plain block" onClick=${download}>Back-up maken</button>
       <label class="btn plain block" style="cursor:pointer">Back-up terugzetten<input type="file" accept="application/json,.json" class="sr" onChange=${upload} /></label>
       ${state.teams.length > 1 && html`<button type="button" class="btn danger block" onClick=${() => setConfirm({ title: 'Team ' + team.name + ' verwijderen?', text: 'De spelers en wedstrijden van dit team worden ook verwijderd.', yes: 'Verwijderen', danger: true, run: () => update((d) => {

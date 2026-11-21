@@ -2165,3 +2165,5 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 .benchrow .benchpill, .benchrow .neon { animation: benchFade .3s ease .16s both; }
 @keyframes benchFade { from { opacity: 0; scale: .94; } }
 .reduce .field .pill.marked, .reduce .scrubzone .field .spot, .reduce .benchrow .benchpill, .reduce .benchrow .neon { animation: none !important; }
+.bk-when { font-size: 13px; font-weight: 800; color: var(--muted); }
+.bk-when.warn { color: #B45309; }
