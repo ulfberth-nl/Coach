@@ -91,7 +91,7 @@ Klaarzetten en spelen gebeuren op hetzelfde scherm, dat altijd in één beeld pa
 - **Wie erin:** wie het minst gespeeld heeft. **Wie eruit:** wie het minst vaak gewisseld is en het langst staat; bij gelijke keuze iemand met vergelijkbare speelkracht, zodat de linies in balans blijven.
 - **Plek op het veld:** de nieuwe speler neemt de plek over. Als de balans (eerst speelkracht, dan voorkeurspositie) daar duidelijk beter van wordt, schuift één speler door.
 - **Opstellingsstand:** Verdedigen, Balans of Aanvallen, automatisch op de stand (in te stellen per team). Het midden blijft altijd sterk.
-- **Rust:** de volgende helft begint met een nieuwe opstelling (gratis moment om meerdere kinderen te wisselen).
+- **Rust:** iedereen staat aan de kant en je begint opnieuw, dus de app laat één opstelling zien (geen zwevers). Bovenin kies je *Aanbevolen* (standaard: wie het minst speelde begint, met één zin uitleg), *Als start* (zoals de start van de vorige periode) of *Als eind* (zoals je eindigde). Wie niet meer inzetbaar is, wordt vervangen door wie het minst speelde, en dat staat erbij. Sleep spelers om te ruilen of naar een lege plek voor een andere opstelling (die geldt daarna voor de rest van de wedstrijd); dan staat er *Eigen opstelling*. Tik op de keeper om een andere keeper te kiezen. Op de bank staat hoeveel minuten iedereen speelde. *Start 2e helft* (of tik op de klok) zet de opstelling vast en start de klok.
 - **Live bijsturen:** een andere wissel, "1 min later", een snelle wissel bij een blessure, een speler laten rusten of later laten aansluiten. Het plan rekent de rest van de wedstrijd opnieuw uit; een goal verschuift het volgende moment niet.
 
 ### Wisselprofielen

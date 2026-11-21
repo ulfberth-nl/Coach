@@ -1368,3 +1368,24 @@ html.plsticky-on .toast { bottom: calc(92px + var(--safe-b)) !important; }
 .islandwrap.drawer-open { z-index: 30; }
 .dr-in .pk-line.pk-next .pk-main { color: inherit; opacity: .85; }
 .dr-in .pk-line.pk-next .pk-sub { opacity: .7; }
+
+/* ================= v0.19: rust — één opstelling, opnieuw beginnen ================= */
+.restpanel { position: relative; z-index: 2; flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; padding: 12px 12px 12px 14px; border-radius: 24px; background: var(--navy); color: #fff;
+  box-shadow: 0 12px 30px -14px rgba(13,27,69,.6); animation: restIn var(--t-screen) var(--spring-soft) both; }
+@keyframes restIn { from { opacity: 0; translate: 0 -8px; scale: .98; } }
+.rp-head { display: flex; align-items: center; gap: 8px; }
+.rp-k { flex: 1 1 auto; min-width: 0; font-size: 12px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; color: var(--orange); display: inline-flex; align-items: center; gap: 8px; }
+.rp-form { padding: 2px 8px; border-radius: 99px; background: rgba(255,255,255,.12); color: #fff; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+.rp-start { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px 0 12px; border: none; border-radius: 99px; background: var(--orange); color: var(--ink); font: 900 14.5px/1 Nunito, sans-serif;
+  box-shadow: 0 6px 16px -4px rgba(245,165,36,.6); animation: startGlow 2.2s ease-in-out .6s infinite; }
+@keyframes startGlow { 0%, 100% { box-shadow: 0 6px 16px -4px rgba(245,165,36,.6), 0 0 0 0 rgba(245,165,36,0); } 50% { box-shadow: 0 6px 16px -4px rgba(245,165,36,.6), 0 0 0 6px rgba(245,165,36,.25); } }
+.rp-seg .seg { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.14); }
+.rp-seg .seg button { color: rgba(255,255,255,.85); height: 36px; font-size: 13.5px; }
+.rp-seg .seg button.on { color: var(--navy); }
+.rp-seg .seg .seg-ind { background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
+.rp-seg.none .seg .seg-ind { opacity: 0; }
+.rp-why { font-size: 13.5px; font-weight: 700; color: rgba(255,255,255,.85); line-height: 1.35; animation: capIn var(--t-screen) var(--spring-soft) both; }
+.fieldbox.restmode .field .spot { transition: left .5s var(--spring-soft), top .5s var(--spring-soft); transition-delay: 0s; }
+.reduce .restpanel, .reduce .rp-start, .reduce .rp-why { animation: none; }
+.rp-k { font-size: 13px; }
+.rp-form { white-space: nowrap; font-size: 12.5px; animation: pop .35s var(--spring-play) both; }

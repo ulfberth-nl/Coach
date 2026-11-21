@@ -539,7 +539,11 @@ export function adjustClock(match, team, delta) {
 export function applyLineup(match, team, lu) {
   const T = gameTime(match, team);
   const players = playersMap(team);
-  match.events.push({ id: uid(), type: 'lineup', t: T, period: match.clock.period, pos: lu.pos, bench: lu.bench, slots: lu.slots || makeSlots(lu.pos, linesOf(match, team), players) });
+  const cur = linesOf(match, team);
+  const ev = { id: uid(), type: 'lineup', t: T, period: match.clock.period, pos: lu.pos, bench: lu.bench, slots: lu.slots || makeSlots(lu.pos, lu.lines || cur, players) };
+  // andere opstelling in de rust (bijv. 2-2-1): geldt vanaf nu voor de rest van de wedstrijd
+  if (lu.lines && formationText(lu.lines) !== formationText(cur)) { ev.lines = { ...lu.lines }; ev.prevLines = { ...cur }; match.lines = { ...lu.lines }; }
+  match.events.push(ev);
   match.firstAt = null;
   match.fixed = null;
   replan(match, team);
@@ -828,6 +832,44 @@ export function previewSwap(match, team, swap) {
   };
 }
 
+// Opstellingen voor de rust (iedereen staat aan de kant, je begint opnieuw): aanbevolen (het plan), of zoals
+// de start of het eind van de vorige periode. Wie niet meer kan (klaar, keeper geworden) wordt vervangen door
+// wie het minst speelde; dat staat in 'repl'.
+const linesFromSlots = (slots) => { const l = { A: 0, M: 0, V: 0 }; for (const k in slots) if (slots[k]) l[k[0]]++; return l; };
+export function breakOptions(match, team) {
+  const T = gameTime(match, team);
+  const st = derive(match, team, T).state;
+  const keeper = st.keeper;
+  const pool = Object.keys(st.pos).concat(st.bench).filter((id) => id !== keeper && st.disabled[id] !== 'wedstrijd');
+  const fix = (lu) => {
+    if (!lu) return null;
+    const src = lu.slots || makeSlots(lu.pos, linesOf(match, team), playersMap(team));
+    const inUse = new Set(Object.values(src).filter(Boolean));
+    const spare = pool.filter((id) => !inUse.has(id)).sort((a, b) => (st.played[a] || 0) - (st.played[b] || 0));
+    const slots = {}, used = new Set(), repl = [];
+    for (const k of Object.keys(src)) {
+      let id = src[k];
+      if (!id) continue;
+      if (pool.indexOf(id) === -1 || used.has(id)) { const r = spare.shift(); if (r) repl.push({ out: id, in: r }); id = r; }
+      if (id) { slots[k] = id; used.add(id); }
+    }
+    const pos = {};
+    for (const k in slots) pos[slots[k]] = k[0];
+    return { pos, slots, bench: pool.filter((id) => !used.has(id)), lines: linesFromSlots(slots), repl };
+  };
+  const p = match.clock.period;
+  const prevStart = match.events.filter((e) => e.type === 'lineup' && (e.period || 0) === p - 1).pop() || match.events.find((e) => e.type === 'lineup');
+  const prop = breakProposal(match, team);
+  const eind = fix({ pos: st.pos, slots: st.slots });
+  return {
+    aanbevolen: prop ? { ...fix(prop), repl: [] } : eind,
+    start: fix(prevStart),
+    eind,
+    played: st.played,
+    keeper
+  };
+}
+
 export function breakProposal(match, team) {
   const step = match.plan && match.plan.steps.find((s) => s.type === 'lineup');
   if (!step) return null;
@@ -846,7 +888,11 @@ export function timeline(match, team) {
   let slots = null, pos = null, bench = null, keeper = match.keeperId || null;
   // opstelling aan het begin: terugrekenen vanaf de huidige via de opstellingswijzigingen
   let lines = linesOf(match, team);
-  for (let k = match.events.length - 1; k >= 0; k--) if (match.events[k].type === 'formation') lines = match.events[k].prev;
+  for (let k = match.events.length - 1; k >= 0; k--) {
+    const e = match.events[k];
+    if (e.type === 'formation') lines = e.prev;
+    else if (e.type === 'lineup' && e.prevLines) lines = e.prevLines;
+  }
   for (const ev of match.events) {
     if (ev.type === 'formation' && pos && pos[ev.playerId]) {
       lines = ev.lines;
@@ -863,6 +909,7 @@ export function timeline(match, team) {
       continue;
     }
     if (ev.type === 'lineup') {
+      if (ev.lines) lines = ev.lines;
       slots = ev.slots ? { ...ev.slots } : makeSlots(ev.pos, lines, players);
       pos = { ...ev.pos }; bench = ev.bench.slice();
       cards.push({ kind: 'lineup', t: ev.t, period: ev.period, slots, pos, bench, keeper, lines, past: true });
