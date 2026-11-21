@@ -1153,3 +1153,87 @@ html[data-vt="start"]::view-transition-old(tabbar) { animation: vtSink var(--t-o
 /* tijdens het slepen van een speler stapt de focusbalk even opzij */
 .focus { transition: opacity var(--t-small) ease; }
 .dragging .focus { opacity: 0; pointer-events: none; }
+
+/* ================= planner (stap 2): groot veld, nu en straks ================= */
+.linkbtn { background: none; border: none; padding: 6px 4px; font: inherit; font-size: 14px; font-weight: 800; color: var(--blue); text-decoration: underline; text-underline-offset: 3px; }
+.planner { gap: 10px; padding-bottom: calc(96px + var(--safe-b)); }
+.planner:not(.is-live) { padding-bottom: calc(20px + var(--safe-b)); }
+.plbar .h2 { text-align: left; padding-left: 4px; }
+.miniscore { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: var(--navy); color: #fff; font: 800 14px/1 Inter, sans-serif; box-shadow: 0 6px 16px rgba(13,27,69,.25); }
+.miniscore .dot { width: 8px; height: 8px; border-radius: 99px; background: var(--orange); }
+.miniscore.run .dot { background: var(--green-live); animation: breathe 2s ease-in-out infinite; }
+.miniscore .sep { width: 1px; height: 14px; margin: 0; background: rgba(255,255,255,.3); }
+.plcard { padding: 10px 10px 12px; }
+.planner .planview .fieldbox { position: relative; }
+.tonow { border: none; background: var(--blue-1, #E8EEFB); color: var(--blue); font: 800 12px/1 Nunito, sans-serif; padding: 6px 10px; border-radius: 999px; margin-top: 2px; animation: pop .35s var(--spring-play) both; }
+
+/* speldjes op de tijdlijn */
+.tl-dot.pinned { border-color: var(--orange); }
+.tl-pin { position: absolute; top: 10px; width: 20px; height: 20px; margin-left: -10px; display: grid; place-items: center; border-radius: 99px; background: var(--orange); color: var(--ink); box-shadow: 0 3px 8px rgba(245,165,36,.45); pointer-events: none; animation: pinDrop .55s var(--spring-play) both; transition: left .5s var(--spring); }
+.tl-pin svg { stroke-width: 2.6; }
+@keyframes pinDrop { 0% { opacity: 0; translate: 0 -14px; scale: .6; } 60% { opacity: 1; } 100% { opacity: 1; translate: 0 0; scale: 1; } }
+
+/* spieken: het volgende moment op ware grootte */
+.peeklabel { position: absolute; left: 50%; top: 10px; z-index: 8; translate: -50% 0; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: rgba(255,255,255,.95); color: var(--ink); font-size: 13px; font-weight: 900; box-shadow: 0 8px 20px rgba(0,0,0,.25); animation: pop .3s var(--spring-play) both; pointer-events: none; }
+.fieldbox.peeking > .field { box-shadow: inset 0 0 0 3px rgba(255,255,255,.55); }
+
+/* zwevers in de planner: vastgezet = oranje randje */
+.ghost.pinned b { box-shadow: 0 0 0 2px var(--orange), 0 8px 18px -6px rgba(0,0,0,.45); }
+
+/* wat er bij het volgende moment gebeurt */
+.nextcap { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border-radius: 16px; background: var(--bg, #F5F7FB); border: 1px solid var(--line); animation: capIn var(--t-screen) var(--spring-soft) both; }
+.nextcap.pinned { border-color: rgba(245,165,36,.6); background: #FFF8EC; }
+@keyframes capIn { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
+.nc-when { font-size: 12px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; color: var(--blue); }
+.nc-what { font-size: 15px; font-weight: 800; color: var(--ink); line-height: 1.35; }
+.nc-hint { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.nc-pin { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pinbadge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px 4px 7px; border-radius: 999px; background: var(--orange); color: var(--ink); font-size: 12.5px; font-weight: 900; animation: pinDrop .55s var(--spring-play) both; }
+
+.plset { gap: 10px; }
+.warncard { border: 2px solid #F0C2B4; background: #FFF6F2; gap: 6px; animation: capIn var(--t-screen) var(--spring-soft) both; }
+
+/* gevolgen */
+.gevolgen { gap: 8px; }
+.gv-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.gv-k { font-size: 14px; font-weight: 800; color: var(--muted); flex: 0 0 auto; }
+.gv-v { font-size: 14px; font-weight: 700; color: var(--ink); text-align: right; display: inline-flex; flex-wrap: wrap; justify-content: flex-end; align-items: baseline; gap: 4px 8px; }
+.gv-lines { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.gv-line { padding: 4px 10px; border-radius: 999px; background: #E9F7EF; color: #11703A; font-size: 13px; font-weight: 900; text-transform: capitalize; transition: background var(--t-small) ease, color var(--t-small) ease; }
+.gv-line.light { background: #FFF1DC; color: #8A5300; }
+.gv-sub { margin-top: -4px; }
+.gv-delta { padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 900; animation: pop .4s var(--spring-play) both; }
+.gv-delta.up { background: #FFF1DC; color: #8A5300; }
+.gv-delta.down { background: #E9F7EF; color: #11703A; }
+.gv-verdict { padding: 8px 12px; border-radius: 12px; font-size: 13.5px; font-weight: 800; animation: capIn var(--t-screen) var(--spring-soft) both; }
+.gv-verdict.ok { background: #E9F7EF; color: #11703A; }
+.gv-verdict.warn { background: #FFF1DC; color: #8A5300; }
+
+/* vaste balk onderin: wissel nu */
+.plsticky { position: fixed; left: 12px; right: 12px; bottom: calc(10px + var(--safe-b)); z-index: 20; display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 16px; border-radius: 22px; background: var(--navy); color: #fff; box-shadow: 0 14px 34px rgba(13,27,69,.4); animation: stickyIn var(--t-screen) var(--spring-soft) both; }
+@keyframes stickyIn { from { translate: 0 120%; } to { translate: 0 0; } }
+.plsticky .ps-txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.plsticky .ps-txt b { font-size: 15px; font-weight: 900; display: inline-flex; gap: 4px; align-items: baseline; }
+.plsticky .ps-txt span { font-size: 12.5px; font-weight: 700; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plsticky .ps-txt.soon b { color: var(--orange); }
+.plsticky .ps-txt.due b { color: #FF9C8A; }
+.plsticky .btn { min-height: 46px; padding: 0 16px; flex: 0 0 auto; }
+.plsticky .btn.plain { background: rgba(255,255,255,.12); color: #fff; border: none; padding: 0 12px; }
+.plsticky .btn.primary { background: var(--orange); color: var(--ink); }
+.plsticky:has(.due) { animation: stickyIn var(--t-screen) var(--spring-soft) both, dueGlow 1.2s ease-in-out .5s infinite; }
+@keyframes dueGlow { 0%, 100% { box-shadow: 0 14px 34px rgba(13,27,69,.4), 0 0 0 0 rgba(245,165,36,.0); } 50% { box-shadow: 0 14px 34px rgba(13,27,69,.4), 0 0 0 6px rgba(245,165,36,.45); } }
+.reduce .tl-pin, .reduce .pinbadge, .reduce .nextcap, .reduce .gv-verdict, .reduce .plsticky, .reduce .peeklabel { animation: none !important; }
+.miniscore .ms-v { font: 800 14px/1 Inter, sans-serif; font-variant-numeric: tabular-nums; }
+.gevolgen { display: flex; flex-direction: column; gap: 7px; padding: 10px 12px; border-radius: 16px; border: 1px solid var(--line); }
+.gv-top { align-items: center; }
+.gv-line { text-transform: none; }
+.nextcap .chg { white-space: nowrap; display: inline-block; }
+.peeklabel { top: -12px; }
+.plsticky .ps-txt b { white-space: nowrap; }
+html.plsticky-on .toast { bottom: calc(92px + var(--safe-b)) !important; }
+.plsticky .ps-txt b { overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.plsticky .btn.plain { min-width: 52px; font-size: 16px; }
+.gv-top { flex-direction: column; align-items: stretch; gap: 6px; }
+.gv-top .gv-lines { justify-content: flex-start; }
+.nc-what.multi { display: flex; flex-direction: column; gap: 3px; }
+.nc-pair { display: inline; }

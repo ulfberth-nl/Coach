@@ -518,7 +518,9 @@ export function Icon({ name, size = 22 }) {
     clock: 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2',
     up2: 'M7 12l5-5 5 5M7 18l5-5 5 5',
     down2: 'M7 6l5 5 5-5M7 12l5 5 5-5',
-    even: 'M6 9.5h12M6 14.5h12'
+    even: 'M6 9.5h12M6 14.5h12',
+    pin: 'M9 3.5h6l-1 5.5 3.5 3.5h-11L10 9zM12 12.5V21',
+    eye: 'M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12zM12 9.3a2.7 2.7 0 100 5.4 2.7 2.7 0 000-5.4z'
   };
   const filled = name === 'play' || name === 'pause';
   return html`<svg width=${size} height=${size} viewBox="0 0 24 24" fill=${filled ? 'currentColor' : 'none'} stroke=${filled ? 'none' : 'currentColor'} stroke-width=${name === 'more' ? 3.6 : 2.2} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${paths[name]} /></svg>`;
@@ -842,6 +844,22 @@ export function BenchScroll({ focus = null, children }) {
     el.classList.toggle('at-end', !ovf || el.scrollLeft + el.clientWidth > el.scrollWidth - 4);
   };
   useLayoutEffect(upd);
+  // spelers die op de bank van plek veranderen glijden naar hun nieuwe plek (FLIP)
+  const at = useRef({});
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const now = {};
+    for (const n of el.querySelectorAll('[data-pid]')) {
+      const x = n.getBoundingClientRect().left + el.scrollLeft;
+      now[n.dataset.pid] = x;
+      const was = at.current[n.dataset.pid];
+      if (was != null && Math.abs(was - x) > 1 && !reduced() && typeof n.animate === 'function') {
+        try { n.animate([{ translate: `${was - x}px 0` }, { translate: '0 0' }], { duration: T.screen, easing: SPRING.soft }); } catch (e) { /* oud toestel */ }
+      }
+    }
+    at.current = now;
+  });
   useEffect(() => {
     const el = ref.current;
     if (!el) return undefined;

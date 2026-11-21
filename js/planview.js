@@ -18,7 +18,7 @@ export function changes(cards, i) {
   };
 }
 
-function useAnimatedF(initial, maxF) {
+export function useAnimatedF(initial, maxF) {
   const [f, setFState] = useState(initial);
   const fr = useRef(initial);
   const raf = useRef(0);
@@ -40,7 +40,7 @@ function useAnimatedF(initial, maxF) {
 }
 
 // horizontaal vegen verandert f; pillen blijven sleepbaar als dat aan staat
-function useScrub(ref, fns) {
+export function useScrub(ref, fns) {
   const cur = useRef(fns);
   cur.current = fns;
   useEffect(() => {
@@ -55,6 +55,8 @@ function useScrub(ref, fns) {
     };
     const move = (e) => {
       if (!st) return;
+      // spieken (vinger stil op het veld) of slepen van een speler: dan niet door de momenten vegen
+      if (el.dataset.peek || el.classList.contains('dragging')) { st = null; return; }
       const dx = e.clientX - st.x;
       if (!st.active) {
         if (Math.abs(dx) < 8 || Math.abs(dx) < Math.abs(e.clientY - st.y)) return;
@@ -88,7 +90,32 @@ function useScrub(ref, fns) {
   }, []);
 }
 
-export function PlanView({ match, team, editable = false, onSwap, initialIndex = 0, nowIndex = -1, compact = false, liveT = null, onSwapNow = null }) {
+// Wie er bij het volgende moment verandert, als zwevers achter de spelers (zelfde taal als live).
+const LORD = { V: 0, M: 1, A: 2 };
+export function ghostsFor(next, pos, nick) {
+  const g = {};
+  if (!next || next.kind !== 'swap') return g;
+  for (const p of next.pairs || [{ out: next.out, in: next.in, shift: next.shift }]) {
+    const extra = next.pinned ? ' pinned' : '';
+    if (p.shift && p.shift.id in pos) {
+      const from = pos[p.shift.id], to = p.shift.to;
+      g[p.out] = { name: nick(p.shift.id), kind: 'shift' + extra, dir: LORD[to] < LORD[from] ? '↑' : LORD[to] > LORD[from] ? '↓' : '↔' };
+      g[p.shift.id] = { name: nick(p.in), kind: 'in' + extra };
+    } else g[p.out] = { name: nick(p.in), kind: 'in' + extra };
+  }
+  return g;
+}
+
+// Paren van een moment na slepen in de planner: het nieuwe paar komt erbij, paren met dezelfde spelers vervallen.
+export function pairsAfterDrag(next, out, inn, perMoment) {
+  const cur = (next && next.pairs) || [];
+  let list = cur.filter((p) => p.out !== out && p.in !== inn && p.out !== inn && p.in !== out).map((p) => ({ out: p.out, in: p.in }));
+  list.push({ out, in: inn });
+  while (list.length > Math.max(1, perMoment)) list.shift();
+  return list;
+}
+
+export function PlanView({ match, team, editable = false, onSwap, initialIndex = 0, nowIndex = -1, compact = false, liveT = null, onSwapNow = null, planner = false, onPin = null, onUnpin = null, onIndex = null, children = null }) {
   const nick = (id) => M.nickOf(team, id);
   const END = M.matchEnd(team);
   const L = M.periodLen(team);
@@ -101,15 +128,51 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   const i = Math.max(0, Math.min(cards.length - 1, Math.round(f)));
   const c = cards[i];
   const ch = changes(cards, i);
-  const canEdit = editable && i === 0;
+  const canEdit = !planner && editable && i === 0;
+  // planner: het volgende moment (achtergrond) plan je door op de voorgrond te slepen
+  const nx = i + 1 < cards.length ? cards[i + 1] : null;
+  const canPlan = planner && !!onPin && !match.finished && nx && nx.kind === 'swap' && !nx.past && i >= Math.max(0, nowIndex);
+  const [peek, setPeek] = useState(false);
   // klikje bij elk wisselmoment dat je passeert (trillen op Android, klikgeluid op de iPhone)
   const lastI = useRef(i);
-  useEffect(() => { if (lastI.current !== i) { lastI.current = i; haptic('select'); } }, [i]);
+  useEffect(() => { if (lastI.current !== i) { lastI.current = i; haptic('select'); setPeek(false); } if (onIndex) onIndex(i); }, [i]);
   const lines = c.lines || M.linesOf(match, team);
-  useDragSwap(zone, canEdit, (a, b) => onSwap && onSwap(a, b), (a, b) => (b.slice(0, 5) === 'line:'
+  const swapNoOf = (card) => cards.filter((x) => x.kind === 'swap' && x.t <= card.t).length;
+  const perMoment = M.effRules(match, team).perMoment || 1;
+  const planHint = (a, b) => {
+    if (b.slice(0, 5) === 'line:') return null;
+    const aF = a in c.pos, bF = b in c.pos;
+    if (aF === bF) return null;
+    const out = aF ? a : b, inn = aF ? b : a;
+    return `${M.nickOf(team, inn)} erin voor ${M.nickOf(team, out)} · wissel ${swapNoOf(nx)}`;
+  };
+  const planDrop = (a, b) => {
+    const aF = a in c.pos;
+    const out = aF ? a : b, inn = aF ? b : a;
+    onPin(nx.t, pairsAfterDrag(nx, out, inn, perMoment), swapNoOf(nx));
+  };
+  useDragSwap(zone, canEdit || canPlan, (a, b) => (canPlan ? planDrop(a, b) : onSwap && onSwap(a, b)), (a, b) => (canPlan ? planHint(a, b) : b.slice(0, 5) === 'line:'
     ? (a in c.pos ? M.formationLabel(lines, c.pos[a], b.split(':')[1]) : null)
     : 'Ruil met ' + M.nickOf(team, b)));
-  useScrub(zone, { get: getF, set: setF, skipPills: () => editable && Math.round(getF()) === 0 });
+  useScrub(zone, { get: getF, set: setF, skipPills: () => (editable && Math.round(getF()) === 0) || canPlan });
+  // spieken: vinger stil op een leeg stuk veld = het volgende moment op ware grootte
+  useEffect(() => {
+    const el = zone.current;
+    if (!el || !planner) return undefined;
+    let tm = 0, sx = 0, sy = 0;
+    const stop = () => { clearTimeout(tm); tm = 0; if (el.dataset.peek) { delete el.dataset.peek; setPeek(false); } };
+    const down = (e) => {
+      if (e.target.closest('[data-pid], .keeperspot, .benchrow')) return;
+      sx = e.clientX; sy = e.clientY;
+      tm = setTimeout(() => { el.dataset.peek = '1'; setPeek(true); haptic('select'); }, 380);
+    };
+    const move = (e) => { if (tm && !el.dataset.peek && Math.hypot(e.clientX - sx, e.clientY - sy) > 10) { clearTimeout(tm); tm = 0; } };
+    el.addEventListener('pointerdown', down);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
+    return () => { stop(); el.removeEventListener('pointerdown', down); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', stop); window.removeEventListener('pointercancel', stop); };
+  }, [planner]);
 
   const timeOf = (x) => {
     const k = Math.max(0, Math.min(cards.length - 1, Math.floor(x)));
@@ -170,43 +233,52 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
     <div class="tl" ref=${track} aria-label="Tijdlijn">
       <span class="tl-line"></span>
       ${cards.map((cc, k) => (k > 0 && cc.kind === 'lineup' ? html`<span class="tl-break" style=${`left:${dotPct(k - 0.5)}%`}><b>${team.periods === 2 ? 'rust' : 'pauze'}</b></span>` : null))}
-      ${cards.map((cc, k) => html`<span class=${'tl-dot' + (k < i ? ' past' : k === i ? ' cur' : '') + (cc.kind === 'lineup' ? ' lu' : '')} style=${`left:${dotPct(k)}%`}></span>`)}
+      ${cards.map((cc, k) => html`<span class=${'tl-dot' + (k < i ? ' past' : k === i ? ' cur' : '') + (cc.kind === 'lineup' ? ' lu' : '') + (cc.pinned ? ' pinned' : '')} style=${`left:${dotPct(k)}%`}></span>`)}
+      ${cards.map((cc, k) => (cc.pinned && !cc.past ? html`<span class="tl-pin" key=${'pin' + cc.t} style=${`left:${dotPct(k)}%`} aria-label="Vastgezet"><${Icon} name="pin" size=${13} /></span>` : null))}
       ${live && html`<span class="tl-now" style=${`left:${nowPct}%`}></span>`}
       <span class="tl-head" style=${`left:${headPct}%`}><span class="tl-time" style=${`transform:translateX(-${headPct}%)`}>${pillText}</span></span>
     </div>
     ${!compact && html`<div class="between">
       <button type="button" class="iconbtn" aria-label="Vorige" onClick=${() => setF(i - 1, true)} disabled=${i === 0}><span style="transform:rotate(180deg);display:inline-flex"><${Icon} name="chev" /></span></button>
       <div class="col" style="gap:0;align-items:center">
-        <span class="h2">${title}</span>
-        <span class="small">${label(c.t)}${status ? ' · ' + status : ''}</span>
+        <span class="h2">${planner && live && i === nowIndex ? 'Nu' : title}</span>
+        ${planner && live && i !== nowIndex
+          ? html`<button type="button" class="tonow" onClick=${() => setF(nowIndex, true)}>${label(c.t)} · terug naar nu</button>`
+          : html`<span class="small">${label(c.t)}${status && !(planner && i === nowIndex) ? ' · ' + status : ''}</span>`}
       </div>
       <button type="button" class="iconbtn" aria-label="Volgende" onClick=${() => setF(i + 1, true)} disabled=${i === cards.length - 1}><${Icon} name="chev" /></button>
     </div>`}
-    ${!compact && isNext && html`<div class="planlive">
+    ${!compact && !planner && isNext && html`<div class="planlive">
       <span class="col grow" style="gap:0;min-width:0"><b>${until > 0 ? 'Over ' + M.fmt(until) : 'Nu wisselen'}</b><span class="small" style="color:var(--ink)">${swapText}</span></span>
       <button type="button" class="btn primary" style="min-height:44px;padding:0 16px" onClick=${onSwapNow}>Nu wisselen</button>
     </div>`}
     ${compact && html`<div class="fieldcap">${title}${i > 0 && c.kind === 'swap' ? html` · ${multi ? html`<b>${c.ins.map(nick).join(', ')}</b> erin` : html`<b>${nick(c.in)}</b> erin voor ${nick(c.out)}`}` : ''}</div>`}
     <div ref=${zone} class="scrubzone">
-      <div class=${'fieldbox' + (live && i < nowIndex ? ' past' : '')}>
-        <${Field} slots=${c.slots} lines=${lines} formable=${canEdit} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
-          onTap=${() => {}} neon=${ch.in} dashed=${ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} />
+      <div class=${'fieldbox' + (live && i < nowIndex ? ' past' : '') + (peek ? ' peeking' : '')}>
+        ${peek && nx
+          ? html`<${Field} slots=${nx.slots} lines=${nx.lines || lines} keeperId=${nx.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
+              onTap=${() => {}} neon=${changes(cards, i + 1).in} accent=${accentFor(team)} />`
+          : html`<${Field} slots=${c.slots} lines=${lines} formable=${canEdit} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
+              onTap=${() => {}} neon=${planner ? [] : ch.in} dashed=${!planner && ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} ghosts=${planner && !peek ? ghostsFor(nx, c.pos, nick) : null} />`}
+        ${planner && peek && nx && html`<span class="peeklabel" role="status"><${Icon} name="eye" size=${15} />${nx.kind === 'lineup' ? 'Opstelling ' + M.periodLabel(team, nx.period) : 'Na wissel ' + swapNoOf(nx)}</span>`}
       </div>
       <div class="benchrow">
         <span class="label">Bank</span>
         <${BenchScroll}>
-          ${c.bench.map((id) => { const ac = accentFor(team)(id); return html`<button type="button" class=${'benchpill' + (ch.out.indexOf(id) !== -1 ? ' wasout' : '') + (ac ? ' acc' : '')} style=${ac ? '--acc:' + ac : ''} key=${id} data-pid=${id}>${nick(id)}${ch.out.indexOf(id) !== -1 ? html`<span class="t">eruit</span>` : ''}</button>`; })}
+          ${(peek && nx ? nx.bench : c.bench).map((id) => { const ac = accentFor(team)(id); const wo = !planner && ch.out.indexOf(id) !== -1; return html`<button type="button" class=${'benchpill' + (wo ? ' wasout' : '') + (ac ? ' acc' : '')} style=${ac ? '--acc:' + ac : ''} key=${id} data-pid=${id}>${nick(id)}${wo ? html`<span class="t">eruit</span>` : ''}</button>`; })}
           ${!c.bench.length && html`<span class="small">niemand</span>`}
         </${BenchScroll}>
       </div>
     </div>
-    ${!compact && (i === 0
+    ${!compact && planner && html`<${NextCaption} cards=${cards} i=${i} nx=${nx} team=${team} match=${match} nick=${nick} canPlan=${canPlan} swapNo=${nx ? swapNoOf(nx) : 0} label=${label} onUnpin=${onUnpin} />`}
+    ${children}
+    ${!compact && !planner && (i === 0
       ? html`<span class="sub">${editable ? 'Sleep een speler naar een andere plek of naar de bank om te ruilen. Het plan rekent meteen mee.' : 'Startopstelling.'}</span>`
       : c.kind === 'lineup'
         ? html`<span class="sub" style="color:var(--ink)"><span class="chg in">Erin: ${ch.in.map(nick).join(', ') || '—'}</span> <span class="chg out">Eruit: ${ch.out.map(nick).join(', ') || '—'}</span></span>`
         : multi ? html`<span class="sub" style="color:var(--ink)"><span class="chg in">↑ ${c.ins.map(nick).join(', ')}</span> erin voor <span class="chg out">↓ ${c.outs.map(nick).join(', ')}</span></span>`
         : html`<span class="sub" style="color:var(--ink)"><span class="chg in">↑ ${nick(c.in)}</span> erin voor <span class="chg out">↓ ${nick(c.out)}</span>${c.shift ? html`<br /><span class="chg sh">↔ ${nick(c.shift.id)}</span> schuift naar ${LINE_NAMES[c.shift.to]}` : ''}</span>`)}
-    ${!compact && html`<span class="small">Veeg over het veld of sleep het oranje bolletje.</span>`}
+    ${!compact && !planner && html`<span class="small">Veeg over het veld of sleep het oranje bolletje.</span>`}
 
     ${!compact && html`<div class="rooster card" style="box-shadow:none;border:1px solid var(--line);gap:0;padding:0">
       <button type="button" class="between" style="background:none;border:none;min-height:48px;padding:0 12px;width:100%" aria-expanded=${roster ? 'true' : 'false'} onClick=${() => setRoster(!roster)}>
@@ -230,5 +302,20 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
         </div>
       </div></div>
     </div>`}
+  </div>`;
+}
+
+// Planner: wat er bij het volgende moment gebeurt, met speldje (vastgezet door jou) of 'de app kiest'.
+function NextCaption({ cards, i, nx, team, match, nick, canPlan, swapNo, label, onUnpin }) {
+  if (match.finished) return null;
+  if (!nx) return html`<div class="nextcap"><span class="nc-what">Geen wissels meer in deze wedstrijd.</span></div>`;
+  if (nx.kind === 'lineup') return html`<div class="nextcap"><span class="nc-when">${M.periodWord(team) === 'helft' ? 'Rust' : 'Pauze'} · ${label(nx.t)}</span><span class="nc-what">Nieuwe opstelling voor de ${M.periodLabel(team, nx.period)}</span></div>`;
+  const pairs = nx.pairs || [{ out: nx.out, in: nx.in, shift: nx.shift }];
+  return html`<div class=${'nextcap' + (nx.pinned ? ' pinned' : '')} key=${'nc' + nx.t}>
+    <span class="nc-when">${i === 0 && !match.started ? 'Eerste wissel' : 'Daarna'} · wissel ${swapNo} · ${label(nx.t)}</span>
+    <span class=${'nc-what' + (pairs.length > 1 ? ' multi' : '')}>${pairs.map((p) => html`<span class="nc-pair"><span class="chg in">↑ ${nick(p.in)}</span> voor <span class="chg out">↓ ${nick(p.out)}</span>${p.shift ? html` <span class="chg sh">↔ ${nick(p.shift.id)}</span> naar ${LINE_NAMES[p.shift.to]}` : ''}</span>`)}</span>
+    ${nx.pinned
+      ? html`<span class="nc-pin"><span class="pinbadge"><${Icon} name="pin" size=${14} />Vastgezet door jou</span><button type="button" class="linkbtn" onClick=${() => onUnpin && onUnpin(nx.t, swapNo)}>Losmaken</button></span>`
+      : canPlan ? html`<span class="nc-hint">De app kiest dit. Sleep een speler om het zelf te bepalen.</span>` : null}
   </div>`;
 }

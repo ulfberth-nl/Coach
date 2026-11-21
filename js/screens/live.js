@@ -18,6 +18,8 @@ export function mutate(fn) {
 }
 
 const UNDO_TEXT = { swap: 'wissel', goal: 'goal', oppgoal: 'tegengoal', disable: 'uitschakelen', enable: 'weer inzetbaar', join: 'later gekomen', move: 'plekken ruilen', keeper: 'keeperwissel', formation: 'opstelling' };
+// actie die het live-scherm na terugkomen als pil toont (bijv. 'Wissel nu' in de planner)
+export const liveAct = { next: null };
 export const undoAction = { label: 'Ongedaan', run: () => { const ev = mutate((m, t) => M.undo(m, t)); if (ev) toast('Ongedaan: ' + UNDO_TEXT[ev.type]); } };
 
 // ---------- wissel: schets bovenin (tik een tegel om te kiezen), knoppen in vaste balk ----------

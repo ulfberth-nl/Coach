@@ -1,5 +1,5 @@
 // Wedstrijdlogica: klok, gebeurtenissen, afgeleide stand en (her)planning.
-import { planRest, initialState, LINES, lineStatus, isDisabled, placeIn } from './planner.js';
+import { planRest, planPinned, initialState, LINES, lineStatus, isDisabled, placeIn } from './planner.js';
 import { uid } from './store.js';
 
 export const periodLen = (team) => team.periodMin * 60;
@@ -216,8 +216,20 @@ export function currentStand(match, team, score) {
 
 // Regels die voor deze wedstrijd gelden: de teamregels, aangevuld met wat het wisselprofiel
 // voor de spelers van deze wedstrijd heeft uitgerekend (match.rules).
+// Eerlijkheid voor deze wedstrijd (planner): strenger of ruimer dan het profiel van het team.
+export const FAIR_ADJ = {
+  strenger: (r) => ({ equalTime: true, marge: Math.max(2, (r.marge || 5) - 2), maxBenchOn: true, maxBench: Math.max(6, (r.maxBench || 10) - 2) }),
+  ruimer: (r) => ({ marge: (r.marge || 5) + 3, maxBench: (r.maxBench || 10) + 4, turnsSlack: 1 })
+};
 export function effRules(match, team) {
-  return match && match.rules ? { ...team.rules, ...match.rules } : team.rules;
+  const r = match && match.rules ? { ...team.rules, ...match.rules } : team.rules;
+  const adj = match && FAIR_ADJ[match.fairness];
+  return adj ? { ...r, ...adj(r) } : r;
+}
+
+export function setFairness(match, team, v) {
+  match.fairness = FAIR_ADJ[v] ? v : null;
+  replan(match, team);
 }
 
 // Aantal keer gewisseld per kind voor de hele wedstrijd (null = de app kiest zelf).
@@ -233,7 +245,7 @@ export function makeCtx(match, team, stand) {
     lines: linesOf(match, team),
     periodLen: periodLen(team),
     periods: team.periods,
-    rules: { ...r, priority: match.priority || r.priority, turnsTarget: turnsTarget(team, match) },
+    rules: { ...r, priority: match.priority || r.priority, turnsTarget: turnsTarget(team, match), turnsSlack: r.turnsSlack || 0 },
     stand
   };
 }
@@ -256,6 +268,46 @@ function planAnchor(match, team, T) {
   return Math.min(anchor, T);
 }
 
+// Vastgezette momenten die nog gelden (vanaf het ankerpunt tot het einde), op tijd.
+function activePins(match, anchor, end) {
+  const list = (match.pins || []).map((p) => ({ ...p, pairs: p.pairs.slice() }));
+  const fx = match.fixed;
+  if (fx && !list.some((p) => p.t === fx.t)) list.push({ t: fx.t, pairs: fx.pairs || [{ out: fx.out, in: fx.in }], after: fx.after });
+  return list.filter((p) => p.t >= anchor && p.t < end - 1 && p.pairs && p.pairs.length).sort((a, b) => a.t - b.t);
+}
+
+// Een moment vastzetten (speldje): op tijd t gebeuren precies deze wissels. Vervangt een speldje op dat moment.
+export function pinMoment(match, team, t, pairs, after = 'terug') {
+  const list = (match.pins || []).filter((p) => p.t !== t);
+  if (match.fixed && match.fixed.t === t) match.fixed = null;
+  list.push({ t, pairs: pairs.map((p) => ({ out: p.out, in: p.in })), after });
+  match.pins = list.sort((a, b) => a.t - b.t);
+  match.firstAt = null;
+  replan(match, team);
+}
+
+// Speldje weghalen: de app kiest op dat moment weer zelf.
+export function unpinMoment(match, team, t) {
+  match.pins = (match.pins || []).filter((p) => p.t !== t);
+  if (match.fixed && match.fixed.t === t) match.fixed = null;
+  replan(match, team);
+}
+
+export const isPinned = (match, t) => (match.pins || []).some((p) => p.t === t) || !!(match.fixed && match.fixed.t === t);
+
+// Na een uitgevoerde wissel: speldjes die nu aan de beurt (of voorbij) zijn vervallen; deed de coach de wissel
+// van het eerstvolgende speldje alvast, dan is dat paar gebeurd.
+function consumePins(match, T, pairs) {
+  if (!match.pins || !match.pins.length) return;
+  let list = match.pins.filter((p) => p.t > T + 0.5).sort((a, b) => a.t - b.t);
+  if (list.length) {
+    const done = new Set(pairs.map((p) => p.out + '>' + p.in));
+    const rest = list[0].pairs.filter((p) => !done.has(p.out + '>' + p.in));
+    if (rest.length !== list[0].pairs.length) list = rest.length ? [{ ...list[0], pairs: rest }].concat(list.slice(1)) : list.slice(1);
+  }
+  match.pins = list;
+}
+
 export function replan(match, team, ms = Date.now()) {
   const T = gameTime(match, team, ms);
   const d = derive(match, team, T);
@@ -267,35 +319,24 @@ export function replan(match, team, ms = Date.now()) {
   ctx.lineupPending = lineupPending(match, team);
   ctx.firstAt = match.firstAt && match.firstAt > anchor ? match.firstAt : null;
   ctx.excludeFair = d.late;
-  // bewaarde (aangepaste) wissel: die gebeurt op het geplande moment, daarna rekent de app verder
-  const fx = match.fixed;
-  const L = periodLen(team);
-  const pairs = fx ? (fx.pairs || [{ out: fx.out, in: fx.in }]) : [];
-  const outs = pairs.map((p) => p.out), ins = pairs.map((p) => p.in);
-  const fixedOk = fx && pairs.length && !ctx.lineupPending && fx.t >= anchor && fx.t < (Math.floor(anchor / L) + 1) * L - 1 &&
-    outs.every((id) => id in st.pos) && ins.every((id) => st.bench.indexOf(id) !== -1 && !st.disabled[id]) &&
-    new Set(outs.concat(ins)).size === outs.length + ins.length;
-  if (fx && !fixedOk) match.fixed = null;
+  // speldjes: momenten die de coach heeft vastgezet (ook de 'bewaarde wissel'); de rest rekent de app zelf
+  const pins = activePins(match, anchor, matchEnd(team));
   const plan = (c) => {
-    if (!fixedOk) return planRest(st, c, anchor);
-    const s2 = JSON.parse(JSON.stringify(st));
-    for (const id of Object.keys(s2.pos)) s2.played[id] = (s2.played[id] || 0) + (fx.t - anchor);
-    const steps = [];
-    for (const pr of pairs) {
-      const placed = placeIn(s2.pos, pr.out, pr.in, playersMap(team), stand);
-      s2.pos = placed.pos;
-      s2.bench = s2.bench.filter((id) => id !== pr.in).concat([pr.out]);
-      s2.since[pr.out] = fx.t; s2.since[pr.in] = fx.t;
-      s2.turns[pr.out] = (s2.turns[pr.out] || 0) + 1;
-      steps.push({ type: 'swap', t: fx.t, out: pr.out, in: pr.in, line: placed.line, shift: placed.shift, pos: { ...placed.pos }, fixed: true, after: fx.after || 'terug' });
-    }
-    const rest = planRest(s2, { ...c, firstAt: null }, fx.t);
-    return { ...rest, steps: steps.concat(rest.steps) };
+    const free = planRest(st, c, anchor);
+    if (!pins.length) return free;
+    const grid = free.steps.filter((x) => x.type === 'swap').map((x) => x.t);
+    return { ...planPinned(st, c, anchor, pins, grid), free };
   };
   let r = plan(ctx);
   const swapsOf = (x) => x.steps.filter((s) => s.type === 'swap').length;
+  // met speldjes: past de rest niet meer precies binnen de regels, dan mag het verschil 1 beurt zijn in plaats
+  // van ineens veel meer wissels
+  if (pins.length && (!r.ok || swapsOf(r) > swapsOf(r.free) + 1)) {
+    const r2 = plan({ ...ctx, rules: { ...ctx.rules, turnsSlack: 1 } });
+    if ((r2.ok && !r.ok) || swapsOf(r2) < swapsOf(r)) r = { ...r2, relaxed: true };
+  }
   if (!match.started) {
-    match.baseline = swapsOf(r);
+    match.baseline = swapsOf(r.free || r);
   } else if (match.baseline != null) {
     // na een afwijking (extra of vroege wissel) niet ineens veel meer wissels: dan mag het verschil 1 beurt zijn
     const end = matchEnd(team);
@@ -312,6 +353,7 @@ export function replan(match, team, ms = Date.now()) {
     ok: r.ok,
     why: r.why || [],
     relaxed: !!r.relaxed,
+    broken: r.broken || [],
     fair: r.fair,
     finalPlayed: r.final.played,
     finalTurns: r.final.turns
@@ -335,8 +377,11 @@ export function createMatch(team, opts) {
     priority: opts.priority || (opts.rules && opts.rules.priority) || team.rules.priority,
     rules: opts.rules || null,
     lines: opts.lines || null,
-    standMode: 'auto',
-    manualStand: 'balans',
+    // speldjes, eerlijkheid en focus voor deze wedstrijd blijven staan als de app de wedstrijd opnieuw opbouwt
+    pins: opts.pins ? opts.pins.map((p) => ({ ...p, pairs: p.pairs.slice() })) : [],
+    fairness: opts.fairness || null,
+    standMode: opts.standMode || 'auto',
+    manualStand: opts.manualStand || 'balans',
     clock: { period: 0, running: false, startedAt: 0, accum: 0 },
     started: false,
     finished: false,
@@ -471,6 +516,7 @@ export function doSwap(match, team, out, inn, shift) {
   match.events.push({ id: uid(), type: 'swap', t: T, out, in: inn, line, shift: shift || null });
   match.firstAt = null;
   match.fixed = null;
+  consumePins(match, T, [{ out, in: inn }]);
   replan(match, team);
 }
 
@@ -492,6 +538,7 @@ export function doSwapGroup(match, team, pairs) {
   }
   match.firstAt = null;
   match.fixed = null;
+  consumePins(match, T, pairs);
   replan(match, team);
 }
 
@@ -517,10 +564,8 @@ export function fixSwap(match, team, out, inn, after = 'terug') {
 export function fixGroup(match, team, pairs, after = 'terug') {
   const next = nextSwap(match, team);
   if (!next) return false;
-  match.fixed = { t: next.t, pairs: pairs.map((p) => ({ out: p.out, in: p.in })), after };
-  match.firstAt = null;
-  replan(match, team);
-  return !!match.fixed;
+  pinMoment(match, team, next.t, pairs, after);
+  return isPinned(match, next.t);
 }
 
 export function changeKeeper(match, team, to, mode) {
@@ -588,13 +633,20 @@ export function movePlayers(match, team, a, b) {
 }
 
 export function clearFixed(match, team) {
+  const next = nextSwap(match, team);
   match.fixed = null;
+  if (next) match.pins = (match.pins || []).filter((p) => p.t !== next.t);
   replan(match, team);
 }
 
 export function delay(match, team, sec = 60) {
-  if (match.fixed) match.fixed = { ...match.fixed, t: gameTime(match, team) + sec };
-  else match.firstAt = gameTime(match, team) + sec;
+  const next = nextSwap(match, team);
+  const T = gameTime(match, team);
+  if (next && isPinned(match, next.t)) {
+    // het vastgezette moment schuift mee
+    if (match.fixed && match.fixed.t === next.t) match.fixed = { ...match.fixed, t: T + sec };
+    match.pins = (match.pins || []).map((p) => (p.t === next.t ? { ...p, t: T + sec } : p)).sort((a, b) => a.t - b.t);
+  } else match.firstAt = T + sec;
   replan(match, team);
 }
 
@@ -785,8 +837,8 @@ export function timeline(match, team) {
       pos = np; bench = bench.filter((x) => x !== ev.in).concat([ev.out]);
       const prev = cards[cards.length - 1];
       if (ev.g && prev && prev.kind === 'swap' && prev.g === ev.g) {
-        cards[cards.length - 1] = { ...prev, outs: prev.outs.concat([ev.out]), ins: prev.ins.concat([ev.in]), shift: prev.shift || ev.shift, slots, pos, bench };
-      } else cards.push({ kind: 'swap', t: ev.t, out: ev.out, in: ev.in, outs: [ev.out], ins: [ev.in], g: ev.g || null, shift: ev.shift, slots, pos, bench, keeper, lines, past: true });
+        cards[cards.length - 1] = { ...prev, outs: prev.outs.concat([ev.out]), ins: prev.ins.concat([ev.in]), pairs: prev.pairs.concat([{ out: ev.out, in: ev.in, shift: ev.shift || null }]), shift: prev.shift || ev.shift, slots, pos, bench };
+      } else cards.push({ kind: 'swap', t: ev.t, out: ev.out, in: ev.in, outs: [ev.out], ins: [ev.in], pairs: [{ out: ev.out, in: ev.in, shift: ev.shift || null }], g: ev.g || null, shift: ev.shift, slots, pos, bench, keeper, lines, past: true });
     } else if (ev.type === 'join' && bench) {
       bench = bench.concat([ev.playerId]);
     } else if (ev.type === 'move' && pos && pos[ev.a] && pos[ev.b]) {
@@ -808,8 +860,8 @@ export function timeline(match, team) {
         pos = { ...s.pos }; bench = bench.filter((x) => x !== s.in).concat([s.out]);
         const prev = cards[cards.length - 1];
         if (prev && !prev.past && prev.kind === 'swap' && prev.t === s.t) {
-          cards[cards.length - 1] = { ...prev, outs: prev.outs.concat([s.out]), ins: prev.ins.concat([s.in]), shift: prev.shift || s.shift, slots, pos, bench };
-        } else cards.push({ kind: 'swap', t: s.t, out: s.out, in: s.in, outs: [s.out], ins: [s.in], shift: s.shift, slots, pos, bench, keeper, lines, past: false });
+          cards[cards.length - 1] = { ...prev, outs: prev.outs.concat([s.out]), ins: prev.ins.concat([s.in]), pairs: prev.pairs.concat([{ out: s.out, in: s.in, shift: s.shift || null }]), shift: prev.shift || s.shift, slots, pos, bench, pinned: prev.pinned || !!s.pinned };
+        } else cards.push({ kind: 'swap', t: s.t, out: s.out, in: s.in, outs: [s.out], ins: [s.in], pairs: [{ out: s.out, in: s.in, shift: s.shift || null }], shift: s.shift, slots, pos, bench, keeper, lines, past: false, pinned: !!s.pinned });
       }
     }
   }
