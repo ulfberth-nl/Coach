@@ -505,6 +505,137 @@ function pinnedRun(start, ctx, T, pins, grid, rhythm) {
   return { ...rest, fair, steps: steps.concat(rest.steps), broken };
 }
 
+const fastPlayers = (players) => {
+  const fast = {};
+  for (const id in players) { const p = players[id]; fast[id] = { kracht: p.kracht, fp: fieldPrefs(p), main: p.main || null, flex: p.flex !== false }; }
+  return fast;
+};
+
+// Eigen plan van de coach: precies zijn wissels (speldjes) en zijn opstelling per periode, verder niets.
+// Kan iets niet meer (iemand is klaar of staat al in het veld), dan slaat de app het over en meldt het in 'broken'.
+// Een geplande opstelling waarin iemand niet meer kan, krijgt wie het minst speelde op die plek.
+export function planOwn(start, ctx, T, pins, lineups) {
+  const fast = fastPlayers(ctx.players);
+  const fctx = { ...ctx, players: fast };
+  const { periodLen, periods } = ctx;
+  const end = periods * periodLen;
+  const state = cloneState(start);
+  const steps = [];
+  const broken = [];
+  let now = T;
+  let p = Math.min(periods - 1, Math.floor(T / periodLen));
+  const lineupAt = (t, period) => {
+    advance(state, now, t);
+    now = t;
+    const lu = lineups && lineups[period];
+    if (!lu) return;
+    const all = Object.keys(state.pos).concat(state.bench);
+    const ok = (id) => all.indexOf(id) !== -1 && !isDisabled(state, id, t, fctx);
+    const want = Object.keys(lu.pos);
+    const spare = all.filter((id) => ok(id) && !(id in lu.pos)).sort((a, b) => (state.played[a] || 0) - (state.played[b] || 0));
+    const pos = {};
+    for (const id of want) {
+      if (ok(id)) pos[id] = lu.pos[id];
+      else { const r = spare.shift(); if (r) { pos[r] = lu.pos[id]; broken.push({ t, lineup: true, out: id, in: r }); } }
+    }
+    const bench = all.filter((id) => !(id in pos));
+    // de plekken zoals de coach ze neerzette (links/rechts), als er niemand vervangen hoefde te worden
+    const same = lu.slots && Object.keys(pos).length === want.length && want.every((id) => id in pos);
+    steps.push({ type: 'lineup', t, pos, bench, period, own: true, ...(same ? { slots: { ...lu.slots } } : {}) });
+    applyLineup(state, { pos, bench }, t);
+  };
+  if (ctx.lineupPending && T === p * periodLen && p > 0) lineupAt(T, p);
+  const sorted = pins.slice().sort((a, b) => a.t - b.t);
+  for (const pin of sorted) {
+    if (pin.t < T || pin.t >= end) continue;
+    while (Math.floor(pin.t / periodLen) > p) { p++; lineupAt(p * periodLen, p); }
+    advance(state, now, pin.t);
+    now = pin.t;
+    const used = new Set();
+    for (const pr of pin.pairs) {
+      const ok = pr.out in state.pos && state.bench.indexOf(pr.in) !== -1 && !isDisabled(state, pr.in, pin.t, fctx) && !used.has(pr.out) && !used.has(pr.in);
+      if (!ok) { broken.push({ t: pin.t, out: pr.out, in: pr.in }); continue; }
+      // de coach bepaalt de plek: erin op de plek van wie eruit gaat, of met zijn doorschuiver
+      const pos = { ...state.pos };
+      const spot = pos[pr.out];
+      delete pos[pr.out];
+      let shift = null;
+      if (pr.shift && pr.shift.id in pos && pr.shift.id !== pr.in) { pos[pr.in] = pos[pr.shift.id]; pos[pr.shift.id] = spot; shift = { id: pr.shift.id, to: spot }; }
+      else pos[pr.in] = spot;
+      const sw = { out: pr.out, in: pr.in, line: pos[pr.in], shift, pos };
+      steps.push({ type: 'swap', t: pin.t, ...sw, pos: { ...pos }, fixed: true, own: true, after: pin.after || 'terug' });
+      applySwap(state, sw, pin.t);
+      used.add(pr.out); used.add(pr.in);
+    }
+  }
+  while (p < periods - 1) { p++; lineupAt(p * periodLen, p); }
+  advance(state, now, end);
+  for (const id of state.bench) noteStint(state, id, end);
+  const ids = Object.keys(start.pos).concat(start.bench);
+  const moments = new Set(steps.filter((x) => x.type === 'swap').map((x) => x.t)).size;
+  return { steps, final: state, m: moments, ...assess(state, ctx, ids, moments), broken };
+}
+
+// Situatie volgens het plan op tijd t (voor het plannen en adviseren): gespeelde tijd, beurten, wie waar staat.
+export function stateAt(start, T, steps, t, inclusive = false) {
+  const state = cloneState(start);
+  let now = T;
+  for (const s of steps) {
+    if (s.t > t || (!inclusive && s.t === t)) break;
+    advance(state, now, s.t);
+    now = s.t;
+    if (s.type === 'lineup') applyLineup(state, { pos: s.pos, bench: s.bench }, s.t);
+    else applySwap(state, s, s.t);
+  }
+  advance(state, now, t);
+  return state;
+}
+
+// Advies op verzoek (eigen plan). Met 'out': wie het beste erin kan (plek, voorkeur, kracht en wie het minst
+// speelde), eventueel met een doorschuiver. Met 'inn': wie er het beste uit kan. Zonder beide: de beste hele wissel.
+export function advise(state, ctx, t, out = null, inn = null, exclude = []) {
+  const players = fastPlayers(ctx.players);
+  const stand = ctx.stand || 'balans';
+  const ex = new Set(exclude);
+  const eligible = state.bench.filter((id) => !ex.has(id) && !isDisabled(state, id, t, { ...ctx, players }));
+  const field = Object.keys(state.pos).filter((id) => !ex.has(id));
+  if (!eligible.length || !field.length) return null;
+  if (!out && !inn) {
+    const sw = chooseSwap(state, { ...ctx, players }, t, 180);
+    // wissel op een moment waar al iets gebeurt: geen spelers die daar al wisselen
+    if (!sw || ex.has(sw.out) || ex.has(sw.in) || (sw.shift && ex.has(sw.shift.id))) {
+      const longest = field.slice().sort((a, b) => (state.since[a] || 0) - (state.since[b] || 0))[0];
+      return advise(state, ctx, t, longest, null, exclude);
+    }
+    const minP = Math.min(...eligible.map((id) => state.played[id] || 0));
+    return { out: sw.out, in: sw.in, shift: sw.shift, why: (state.played[sw.in] || 0) <= minP + 1 ? 'speelde het minst' : 'past het best' };
+  }
+  const minPlayed = Math.min(...eligible.map((id) => state.played[id] || 0));
+  let best = null;
+  if (out) {
+    for (const c of eligible) {
+      const placed = placeIn(state.pos, out, c, players, stand);
+      const sc = lineupScore(placed.pos, players, stand) + ((state.played[c] || 0) - minPlayed) / 60 * 1.6 + (placed.shift ? 1 : 0);
+      if (!best || sc < best.sc) best = { sc, out, in: c, shift: placed.shift };
+    }
+  } else {
+    const maxOn = Math.max(...field.map((id) => t - (state.since[id] || 0)));
+    for (const c of field) {
+      const placed = placeIn(state.pos, c, inn, players, stand);
+      const sc = lineupScore(placed.pos, players, stand) + (maxOn - (t - (state.since[c] || 0))) / 60 * 1.6 + (placed.shift ? 1 : 0);
+      if (!best || sc < best.sc) best = { sc, out: c, in: inn, shift: placed.shift };
+    }
+  }
+  if (!best) return null;
+  const p = players[best.in];
+  const spot = best.shift ? state.pos[best.shift.id] : state.pos[best.out];
+  const fits = p && (p.main === spot || (p.fp && p.fp.indexOf(spot) !== -1));
+  const why = out
+    ? ((state.played[best.in] || 0) <= minPlayed + 1 ? (fits ? 'speelde het minst en past op die plek' : 'speelde het minst') : fits ? 'past het best op die plek' : 'houdt de ploeg het best in balans')
+    : 'stond het langst en houdt de ploeg in balans';
+  return { out: best.out, in: best.in, shift: best.shift, why };
+}
+
 // Startsituatie voor een nieuwe wedstrijd: de sterkste spelers beginnen (de bank komt er snel in).
 export function initialState(fieldIds, ctx) {
   const F = Object.values(ctx.lines).reduce((a, b) => a + b, 0);

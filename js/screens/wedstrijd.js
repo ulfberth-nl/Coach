@@ -8,6 +8,7 @@ import { nextScheduled, todayISO } from './seizoen.js';
 import { matchRules } from '../profiles.js';
 import { scheduleRefresh } from '../refresh.js';
 import { viewTransition, haptic, reduced, T as TEMPO } from '../motion.js';
+import { switchPlanMode } from './plan.js';
 import { mutate, undoAction, liveAct, SwapSheet, GroupSwapSheet, BenchSheet, GoalSheet, JoinSheet, KeeperSheet } from './live.js';
 import { Field, Neon, Roll, Sheet, Confirm, Seg, Stepper, Icon, accentFor, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, BenchScroll, beep, flash, unlockAudio, toast, go } from '../ui.js';
 
@@ -78,7 +79,7 @@ export function rebuildConcept(d, changes = {}) {
   else if (present.indexOf(keeperId) === -1) keeperId = suggestKeeper(t, present, keeperCounts(d, t));
   // eigen opstelling (gesleept) blijft staan, behalve als de coach om een nieuw voorstel vraagt
   const lines = changes.resetLines ? null : m.lines || null;
-  const keep = changes.resetLines ? {} : { pins: m.pins, fairness: m.fairness, standMode: m.standMode, manualStand: m.manualStand };
+  const keep = changes.resetLines ? { planMode: m.planMode } : { pins: m.pins, fairness: m.fairness, standMode: m.standMode, manualStand: m.manualStand, planMode: m.planMode, periodLineups: m.periodLineups, ownStash: m.ownStash };
   const n = M.createMatch(t, { present, keeperId, priority: changes.priority || m.priority, opponent: m.opponent, date: m.date, lines, rules: matchRules(t, present, keeperId), ...keep });
   n.id = m.id;
   n.setup = m.setup || { present: false, keeper: false, opponent: false };
@@ -171,7 +172,9 @@ function PrepView({ state, match, team }) {
       ? html`<div class="card" style="flex:1 1 auto;justify-content:center;text-align:center"><span class="h2">Te weinig spelers</span><span class="sub">Je hebt ${F} veldspelers nodig${team.keeper ? ' plus een keeper' : ''}. Tik op "spelers".</span></div>`
       : html`
         <button type="button" class="planline" onClick=${() => go('/plan')}>
-          <span>${swaps ? `${swaps} ${perMoment > 1 ? 'momenten (tot ' + perMoment + ' tegelijk)' : 'wissels'} · ~${String(every).replace('.', ',')} min · ${M.mins(plan.fair.minPlayed)}–${M.mins(plan.fair.maxPlayed)} min p.p. · ${plan.fair.minTurns === plan.fair.maxTurns ? plan.fair.minTurns + '×' : plan.fair.minTurns + '–' + plan.fair.maxTurns + '×'}` : 'Geen wissels nodig'}</span>
+          ${M.isOwn(match, team)
+            ? html`<span><b class="pl-own">Jouw plan</b> · ${swaps ? `${swaps} ${swaps === 1 ? 'wissel' : 'wissels'} · ${M.mins(plan.fair.minPlayed)}–${M.mins(plan.fair.maxPlayed)} min p.p.` : 'nog geen wissels gepland'}</span>`
+            : html`<span>${swaps ? `${swaps} ${perMoment > 1 ? 'momenten (tot ' + perMoment + ' tegelijk)' : 'wissels'} · ~${String(every).replace('.', ',')} min · ${M.mins(plan.fair.minPlayed)}–${M.mins(plan.fair.maxPlayed)} min p.p. · ${plan.fair.minTurns === plan.fair.maxTurns ? plan.fair.minTurns + '×' : plan.fair.minTurns + '–' + plan.fair.maxTurns + '×'}` : 'Geen wissels nodig'}</span>`}
           ${!plan.ok && html`<span class="warnicon" title=${(plan.why || []).map((w) => WHY_TEXT[w]).join(', ')}>!</span>`}
           <${Icon} name="chev" size=${16} />
         </button>
@@ -712,7 +715,7 @@ function LiveView({ match, team }) {
       st: late ? 'hot late' : countdown <= 60 ? 'hot' : '',
       k: late ? `Te laat · wissel ${n}` : countdown <= 60 ? `Bijna · wissel ${n} van ${counts.total}` : `Volgende wissel · ${n} van ${counts.total}`,
       t1: group.length > 1 ? html`${group.length} spelers tegelijk` : html`<em>${nick(s0.in)}</em> erin voor ${nick(s0.out)}`,
-      t2: (s0.fixed ? 'Aangepast · ' : '') + (group.length > 1 ? group.map((s) => nick(s.in)).join(', ') + ' erin'
+      t2: (s0.fixed && !s0.own ? 'Aangepast · ' : '') + (group.length > 1 ? group.map((s) => nick(s.in)).join(', ') + ' erin'
         : story.shift ? `${nick(story.shift)} ${story.shiftPos ? story.shiftPos.naar : 'schuift door'}` : story.inPos ? `${nick(s0.in)} ${story.inPos.op}` : ''),
       ring: countdown <= 0 ? 'nu' : M.fmt(countdown),
       late: late ? '−' + M.fmt(-countdown) : null,
@@ -731,8 +734,13 @@ function LiveView({ match, team }) {
     const comingIn = Object.keys(restLu.pos).filter((id) => !(id in cur));
     const list = (ids) => ids.map(nick).join(ids.length > 2 ? ', ' : ' en ').replace(/, ([^,]*)$/, ' en $1');
     const repl = (restLu.repl || []).map((r) => `${nick(r.in)} voor ${nick(r.out)}`).join(', ');
+    const own = restOpts && restOpts.own;
     const why = rest.kind === 'eigen'
       ? 'Eigen opstelling. Kies hierboven om opnieuw te beginnen.'
+      : rest.kind === 'advies'
+        ? (comingIn.length ? `Advies: ${list(comingIn)} ${comingIn.length > 1 ? 'beginnen, zij speelden' : 'begint, speelde'} het minst.` : 'Advies: dezelfde spelers, op hun beste plek.')
+      : rest.kind === 'aanbevolen' && own
+        ? (restOpts.planned ? 'Zoals je had gepland.' : `Je had niets gepland: zoals het eind van de ${prevLabel}.`)
       : rest.kind === 'aanbevolen'
         ? (comingIn.length ? `${list(comingIn)} ${comingIn.length > 1 ? 'beginnen: zij speelden' : 'begint: speelde'} het minst.` : 'Dezelfde spelers als aan het eind, op hun beste plek.')
         : `Zoals ${rest.kind === 'start' ? 'de start' : 'het eind'} van de ${prevLabel}.${repl ? ' ' + repl + ' (niet meer inzetbaar).' : ''}`;
@@ -741,9 +749,12 @@ function LiveView({ match, team }) {
         <span class="rp-k">${M.periodWord(team) === 'helft' ? 'Rust' : 'Pauze'}<span class="rp-form" key=${M.formationText(restLu.lines)}>${M.formationText(restLu.lines)}</span></span>
         <button type="button" class="rp-start" onClick=${startRest}><${Icon} name="play" size=${16} />Start ${M.periodLabel(team, match.clock.period)}</button>
       </div>
-      <div class=${'rp-seg' + (rest.kind === 'eigen' ? ' none' : '')}>
-        <${Seg} label="Opstelling na de rust" value=${rest.kind} onChange=${pickRest}
-          options=${[['aanbevolen', 'Aanbevolen'], ['start', 'Als start'], ['eind', 'Als eind']]} />
+      <div class="rp-row">
+        <div class=${'rp-seg' + (rest.kind === 'eigen' || rest.kind === 'advies' ? ' none' : '')}>
+          <${Seg} label="Opstelling na de rust" value=${rest.kind} onChange=${pickRest}
+            options=${[['aanbevolen', own ? 'Jouw plan' : 'Aanbevolen'], ['start', 'Als start'], ['eind', 'Als eind']]} />
+        </div>
+        ${own && html`<button type="button" class=${'rp-advise' + (rest.kind === 'advies' ? ' on' : '')} aria-pressed=${rest.kind === 'advies' ? 'true' : 'false'} onClick=${() => { haptic('select'); pickRest('advies'); }}><${Icon} name="spark" size=${16} />Advies</button>`}
       </div>
       <span class="rp-why" key=${rest.kind + ':' + comingIn.join()}>${why}</span>
     </div>`;
@@ -917,7 +928,9 @@ function GameMenu({ match, team, live, onClose, onSheet }) {
     </div>`}
     ${!live && html`<div class="col"><span class="label">Voorrang deze wedstrijd</span>
       <${Seg} label="Voorrang" value=${match.priority} onChange=${(v) => update((d) => rebuildConcept(d, { priority: v }))} options=${[['eerlijk', 'Eerlijkheid'], ['bezetting', 'Beste bezetting']]} /></div>`}
-    ${item('Wedstrijdplan', 'Alle wissels en het rooster per kind', () => go('/plan'))}
+    <div class="col"><span class="label">Wie maakt het plan</span>
+      <${Seg} label="Wie maakt het plan" value=${M.isOwn(match, team) ? 'eigen' : 'app'} onChange=${(v) => { switchPlanMode(v); onClose(); go('/plan'); }} options=${[['app', 'De app'], ['eigen', 'Ikzelf']]} /></div>
+    ${item(M.isOwn(match, team) ? 'Jouw plan' : 'Wedstrijdplan', M.isOwn(match, team) ? 'Opstelling en wissels per periode' : 'Alle wissels en het rooster per kind', () => go('/plan'))}
     ${live && item('Einde ' + M.periodLabel(team, match.clock.period), null, () => onSheet('end'))}
     ${live && item('Stand aanpassen', 'Doelpunten per speler en tegengoals', () => onSheet('score'))}
     ${live && item('Wedstrijdgegevens', 'Tegenstander, tijd, veld', () => onSheet('opp'))}
