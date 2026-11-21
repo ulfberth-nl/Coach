@@ -1389,3 +1389,75 @@ html.plsticky-on .toast { bottom: calc(92px + var(--safe-b)) !important; }
 .reduce .restpanel, .reduce .rp-start, .reduce .rp-why { animation: none; }
 .rp-k { font-size: 13px; }
 .rp-form { white-space: nowrap; font-size: 12.5px; animation: pop .35s var(--spring-play) both; }
+
+/* ---------- eigen plan (de coach plant zelf; advies op verzoek) ---------- */
+.planner.own { --ok: #16A34A; --ok-ink: #0E6B31; }
+.ownempty { gap: 10px; animation: capIn var(--t-screen) var(--spring-soft) both; }
+.ownempty .choice { min-height: 68px; padding: 10px 14px; }
+.ownempty .choice b { font-size: 16px; font-weight: 900; }
+.owntabs { padding: 0 2px; }
+.ownplan { gap: 10px; }
+.ownsteps { display: flex; align-items: center; gap: 6px; }
+.ostep { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 0 12px 0 6px; border-radius: 99px; border: 1px solid var(--line); background: #fff; font: 800 14.5px/1 Nunito, sans-serif; color: var(--muted); transition: background var(--t-small) ease, color var(--t-small) ease, border-color var(--t-small) ease; }
+.ostep b { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 99px; background: var(--line-3); color: var(--muted); font-size: 14px; font-weight: 900; transition: background var(--t-small) ease, color var(--t-small) ease; }
+.ostep.on { border-color: var(--blue); background: var(--blue-tint); color: var(--blue-ink); }
+.ostep.on b { background: var(--blue); color: #fff; animation: pop .35s var(--spring-play) both; }
+.ostep-line { flex: 1 1 auto; height: 2px; min-width: 12px; border-radius: 2px; background: var(--line); }
+.ocount { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 99px; background: var(--orange); color: var(--ink); font-size: 12px; font-weight: 900; display: inline-grid; place-items: center; }
+.luopts { display: flex; flex-wrap: wrap; gap: 6px; }
+.luopts .chip { min-height: 38px; padding: 0 12px; font-size: 13.5px; display: inline-flex; align-items: center; gap: 6px; }
+.lutext { color: var(--ink); font-weight: 700; animation: capIn var(--t-screen) var(--spring-soft) both; }
+.otl-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.otl-when { display: flex; flex-direction: column; align-items: center; gap: 0; }
+.otl-when b { font-size: 26px; line-height: 1.05; font-weight: 900; }
+.otl.tl { height: 44px; margin: -4px 12px 2px; }
+.otl .tl-line { top: 20px; }
+.otl .tl-dot { top: 17px; }
+.otl .tl-head { top: 11px; transition: left .18s var(--ease-out); }
+.otl .tl-now { top: 22px; }
+.otl .tl-now::after { display: none; }
+.otl-past { position: absolute; left: 0; top: 20px; height: 4px; border-radius: 999px; background: var(--line-2); }
+.tl-dot.own { background: var(--blue-2); border-color: #fff; box-shadow: 0 0 0 1.5px var(--blue-2); }
+.tl-dot.own.past { background: var(--line-2); box-shadow: 0 0 0 1.5px var(--line-2); }
+.tl-dot.own.cur { transform: scale(1.5); }
+.nextcap.advice { border-color: rgba(22,163,74,.45); background: #F0FBF4; }
+.nextcap.advice .nc-when { color: var(--ok-ink); }
+.nextcap.sel { border-color: rgba(245,165,36,.6); background: var(--orange-soft); }
+.nextcap.own .nc-when { color: var(--blue); }
+.nc-why { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 800; color: var(--ok-ink); }
+.adv-act { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.nextcap.advice { position: relative; padding-right: 52px; }
+.adv-x { position: absolute; top: 6px; right: 6px; width: 40px; height: 40px; background: #fff; border: 1px solid var(--line-2); }
+.adv-act { margin-right: -40px; }
+.adv-act .btn { min-height: 48px; min-width: 0; padding: 0 14px; }
+.adv-edit { flex: 0 1 auto; }
+.adv-edit.on { background: var(--blue); color: #fff; }
+.btn.ok { flex: 1 1 auto; background: var(--ok); color: #fff; font-weight: 900; box-shadow: 0 8px 18px -6px rgba(22,163,74,.55); animation: okIn var(--t-screen) var(--spring-play) both; }
+@keyframes okIn { from { scale: .9; opacity: 0; } }
+.mom-act { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mom-move { display: inline-flex; gap: 6px; }
+.mom-move .chip { min-height: 36px; padding: 0 10px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.benchdrop { flex: 0 0 auto; }
+.benchdrop .pill { display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; border-radius: 999px; border: 1.5px dashed rgba(22,163,74,.7); background: #F0FBF4; color: var(--ok-ink, #0E6B31); font-size: 13px; font-weight: 900; white-space: nowrap; transition: scale var(--t-small) var(--spring-play), background var(--t-small) ease; }
+.dragging .benchdrop .pill { background: #DCF5E5; animation: dropBreathe 1.3s ease-in-out infinite; }
+@keyframes dropBreathe { 0%, 100% { box-shadow: 0 0 0 0 rgba(22,163,74,.0); } 50% { box-shadow: 0 0 0 6px rgba(22,163,74,.18); } }
+.benchdrop.drop-target .pill { outline: 3px solid var(--ok, #16A34A); outline-offset: 2px; scale: 1.12; }
+.benchpill.sel { border-color: var(--orange); background: var(--orange-tint); box-shadow: 0 0 0 2px var(--orange); }
+.fieldbox.previewing .field { box-shadow: inset 0 0 0 3px rgba(74,222,128,.55); }
+.scrubzone.editing .fieldbox .field { box-shadow: inset 0 0 0 3px rgba(255,255,255,.65); }
+.ownbar { display: flex; gap: 8px; }
+.ownbar .btn { min-height: 48px; }
+.ownbar .advbtn { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: #F0FBF4; color: var(--ok-ink); border: 1px solid rgba(22,163,74,.4); }
+.ownbar .advbtn svg { flex: 0 0 auto; }
+.ownnext { margin-top: 2px; }
+.ownnext .btn { min-height: 52px; }
+.pl-own { color: var(--blue); font-weight: 900; }
+.rp-row { display: flex; align-items: center; gap: 6px; }
+.rp-row .rp-seg { flex: 1 1 auto; min-width: 0; }
+.rp-advise { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; height: 46px; padding: 0 10px; border-radius: 16px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.1); color: #fff; font: 900 13px/1 Nunito, sans-serif; }
+.rp-advise.on { background: #fff; color: var(--navy); }
+.reduce .ostep.on b, .reduce .btn.ok, .reduce .lutext, .reduce .ownempty, .reduce .dragging .benchdrop .pill { animation: none; }
+/* eigen plan: er staat meer boven het veld (stappen, tijdlijn, verhaal); het veld blijft groot genoeg voor 11 */
+.planner.own .plcard .fieldbox { height: clamp(333px, calc(100dvh - 430px), 640px); }
+.planner.own .ownplan { scroll-margin-top: 8px; }
+.planner.own .otl-nav, .planner.own .luopts, .planner.own .lutext { scroll-margin-top: 10px; }

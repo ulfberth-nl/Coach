@@ -1,5 +1,5 @@
 // Wedstrijdlogica: klok, gebeurtenissen, afgeleide stand en (her)planning.
-import { planRest, planPinned, initialState, LINES, lineStatus, isDisabled, placeIn } from './planner.js';
+import { planRest, planPinned, planOwn, stateAt, advise, breakLineup, initialState, LINES, lineStatus, isDisabled, placeIn } from './planner.js';
 import { uid } from './store.js';
 
 export const periodLen = (team) => team.periodMin * 60;
@@ -288,8 +288,9 @@ export function makeCtx(match, team, stand) {
 
 export function lineupPending(match, team) {
   const p = match.clock.period;
+  // eigen plan: na de rust kiest de coach altijd de opstelling (zijn plan, of zoals start of eind)
   return !match.finished && p > 0 && !match.clock.running && match.clock.accum === 0 &&
-    !!team.rules.newLineupAtBreak && !match.events.some((e) => e.type === 'lineup' && e.period === p);
+    (!!team.rules.newLineupAtBreak || isOwn(match, team)) && !match.events.some((e) => e.type === 'lineup' && e.period === p);
 }
 
 // Ankerpunt van het plan: de laatste wissel of opstelling in deze periode. Zo verschuift het plan niet bij een goal.
@@ -316,7 +317,7 @@ function activePins(match, anchor, end) {
 export function pinMoment(match, team, t, pairs, after = 'terug') {
   const list = (match.pins || []).filter((p) => p.t !== t);
   if (match.fixed && match.fixed.t === t) match.fixed = null;
-  list.push({ t, pairs: pairs.map((p) => ({ out: p.out, in: p.in })), after });
+  list.push({ t, pairs: pairs.map((p) => ({ out: p.out, in: p.in, ...(p.shift ? { shift: { id: p.shift.id, to: p.shift.to } } : {}) })), after });
   match.pins = list.sort((a, b) => a.t - b.t);
   match.firstAt = null;
   replan(match, team);
@@ -357,6 +358,12 @@ export function replan(match, team, ms = Date.now()) {
   ctx.excludeFair = d.late;
   // speldjes: momenten die de coach heeft vastgezet (ook de 'bewaarde wissel'); de rest rekent de app zelf
   const pins = activePins(match, anchor, matchEnd(team));
+  // eigen plan: precies wat de coach plande (wissels en opstellingen per periode), geen advies
+  if (isOwn(match, team)) {
+    const r = planOwn(st, ctx, anchor, pins, match.periodLineups || {});
+    match.plan = { at: anchor, stand, own: true, steps: r.steps, ok: r.ok, why: r.why || [], relaxed: false, broken: r.broken || [], fair: r.fair, finalPlayed: r.final.played, finalTurns: r.final.turns };
+    return match;
+  }
   const plan = (c) => {
     const free = planRest(st, c, anchor);
     if (!pins.length) return free;
@@ -397,6 +404,146 @@ export function replan(match, team, ms = Date.now()) {
   return match;
 }
 
+// ---------- eigen plan (de coach plant zelf, advies alleen op verzoek) ----------
+export const isOwn = (match, team) => (match && match.planMode ? match.planMode : team && team.rules && team.rules.planMode) === 'eigen';
+
+// Wie maakt het plan voor deze wedstrijd: 'app' of 'eigen'. Bij overstappen naar eigen kan het plan van de app
+// als begin dienen (seed): de wissels worden speldjes, de opstellingen per periode die van de app.
+export function setPlanMode(match, team, mode, seed = false) {
+  const was = isOwn(match, team);
+  // terug naar de app: jouw plan blijft bewaard voor als je weer zelf gaat plannen
+  if (mode !== 'eigen' && was) {
+    match.ownStash = { pins: match.pins || [], periodLineups: match.periodLineups || null };
+    match.pins = [];
+    match.periodLineups = null;
+  } else if (mode === 'eigen' && !was && match.ownStash && (match.ownStash.pins.length || match.ownStash.periodLineups) && !seed) {
+    match.pins = match.ownStash.pins.filter((p) => !match.started || p.t > gameTime(match, team));
+    match.periodLineups = match.ownStash.periodLineups;
+    match.ownStash = null;
+    match.planMode = mode;
+    replan(match, team);
+    return;
+  }
+  if (mode === 'eigen' && seed && match.plan) {
+    const T = gameTime(match, team);
+    const byT = {};
+    for (const s of match.plan.steps) {
+      if (s.t < T) continue;
+      if (s.type === 'swap') (byT[s.t] = byT[s.t] || []).push({ out: s.out, in: s.in, shift: s.shift || null });
+      else if (s.type === 'lineup' && s.period > 0) {
+        match.periodLineups = { ...(match.periodLineups || {}), [s.period]: { pos: { ...s.pos }, bench: s.bench.slice(), slots: makeSlots(s.pos, linesOf(match, team), playersMap(team)) } };
+      }
+    }
+    match.pins = Object.keys(byT).map((t) => ({ t: +t, pairs: byT[t], after: 'terug' })).sort((a, b) => a.t - b.t);
+    match.ownStash = null;
+  }
+  match.planMode = mode;
+  replan(match, team);
+}
+
+// Opstelling voor het begin van periode p in het eigen plan (p = 0: de startopstelling van de wedstrijd).
+export function setPeriodLineup(match, team, p, lu) {
+  if (p === 0 && !match.started) {
+    const ev = match.events[0];
+    match.events[0] = { ...ev, pos: { ...lu.pos }, bench: lu.bench.slice(), slots: { ...lu.slots } };
+    // bewaard, zodat hij blijft staan als de app de wedstrijd opnieuw opbouwt
+    if (isOwn(match, team)) match.periodLineups = { ...(match.periodLineups || {}), 0: { pos: { ...lu.pos }, bench: lu.bench.slice(), slots: { ...lu.slots } } };
+  } else {
+    match.periodLineups = { ...(match.periodLineups || {}), [p]: { pos: { ...lu.pos }, bench: lu.bench.slice(), slots: { ...lu.slots } } };
+  }
+  replan(match, team);
+}
+
+export function clearPeriodLineup(match, team, p) {
+  if (!match.periodLineups) return;
+  const next = { ...match.periodLineups };
+  delete next[p];
+  match.periodLineups = next;
+  replan(match, team);
+}
+
+// Startpunt om vooruit te plannen: nu (lopende wedstrijd) of de aftrap.
+function planStart(match, team) {
+  const T = match.started ? gameTime(match, team) : 0;
+  const d = derive(match, team, T);
+  const anchor = match.plan && match.plan.at != null ? Math.min(match.plan.at, T) : T;
+  const st = d.state;
+  if (T > anchor) for (const id of Object.keys(st.pos)) st.played[id] -= T - anchor;
+  return { st, anchor, T };
+}
+
+// Situatie volgens het plan op tijd t (inclusive = wissels op t al gedaan), met gespeelde tijd per kind.
+export function planStateAt(match, team, t, inclusive = false) {
+  const { st, anchor } = planStart(match, team);
+  return stateAt(st, anchor, (match.plan && match.plan.steps) || [], t, inclusive);
+}
+
+// Advies op verzoek: wie erin voor 'out', wie eruit voor 'inn', of de beste hele wissel op tijd t.
+// Staat er op t al een wissel (exclude: wie daar al wisselt), dan advies voor een extra wissel na die wissel.
+export function adviseAt(match, team, t, out = null, inn = null, exclude = []) {
+  const state = planStateAt(match, team, t, exclude.length > 0);
+  const ctx = makeCtx(match, team, match.plan ? match.plan.stand : 'balans');
+  return advise(state, ctx, t, out, inn, exclude);
+}
+
+// Opstelling die de app zou adviseren aan het begin van periode p (volgens het plan tot dan).
+export function adviseLineup(match, team, p) {
+  const t = p * periodLen(team);
+  const state = planStateAt(match, team, t, false);
+  const ctx = makeCtx(match, team, match.plan ? match.plan.stand : 'balans');
+  const lu = breakLineup(state, ctx, t, null);
+  return { pos: lu.pos, bench: lu.bench, slots: makeSlots(lu.pos, linesOf(match, team), playersMap(team)) };
+}
+
+// Opstellingen om uit te kiezen bij het begin van periode p in het eigen plan.
+export function periodOptions(match, team, p) {
+  const L = periodLen(team);
+  const players = playersMap(team);
+  const lines = linesOf(match, team);
+  const steps = (match.plan && match.plan.steps) || [];
+  const startOf = (q) => {
+    if (q === 0) { const ev = match.events[0]; return { pos: ev.pos, bench: ev.bench, slots: ev.slots || makeSlots(ev.pos, lines, players) }; }
+    const ev = match.events.find((e) => e.type === 'lineup' && e.period === q);
+    if (ev) return { pos: ev.pos, bench: ev.bench, slots: ev.slots || makeSlots(ev.pos, lines, players) };
+    const s = steps.find((x) => x.type === 'lineup' && x.period === q);
+    if (s) return { pos: s.pos, bench: s.bench, slots: s.slots ? { ...s.slots } : makeSlots(s.pos, lines, players), own: !!s.own };
+    return null;
+  };
+  // het eind van de vorige periode: de situatie vlak voor de rust
+  const endPrev = p > 0 ? planStateAt(match, team, p * L - 0.5, true) : null;
+  const sameKeeper = (lu) => lu;
+  return {
+    current: startOf(p),
+    start: p > 0 ? sameKeeper(startOf(p - 1)) : null,
+    eind: endPrev ? { pos: { ...endPrev.pos }, bench: endPrev.bench.slice(), slots: makeSlots(endPrev.pos, lines, players) } : null,
+    advies: adviseLineup(match, team, p)
+  };
+}
+
+// Vul de rest van deze periode aan: de app plant de wissels na 'fromT' tot de rust, als speldjes.
+export function ownFillPeriod(match, team, fromT) {
+  const L = periodLen(team);
+  const end = Math.min(matchEnd(team), (Math.floor(fromT / L) + 1) * L);
+  const state = planStateAt(match, team, fromT, true);
+  const ctx = makeCtx(match, team, match.plan ? match.plan.stand : 'balans');
+  ctx.lineupPending = false;
+  ctx.firstAt = null;
+  const r = planRest(state, ctx, fromT);
+  const have = new Set((match.pins || []).map((p) => p.t));
+  const byT = {};
+  for (const s of r.steps) if (s.type === 'swap' && s.t > fromT + 1 && s.t < end - 1 && !have.has(s.t)) (byT[s.t] = byT[s.t] || []).push({ out: s.out, in: s.in, shift: s.shift || null });
+  const add = Object.keys(byT).map((t) => ({ t: +t, pairs: byT[t], after: 'terug' }));
+  match.pins = (match.pins || []).concat(add).sort((a, b) => a.t - b.t);
+  replan(match, team);
+  return add.length;
+}
+
+// Een gepland moment verschuiven in de tijd.
+export function moveMoment(match, team, t, toT) {
+  match.pins = (match.pins || []).map((p) => (p.t === t ? { ...p, t: toT } : p)).sort((a, b) => a.t - b.t);
+  replan(match, team);
+}
+
 // ---------- wedstrijd aanmaken ----------
 export function createMatch(team, opts) {
   const players = playersMap(team);
@@ -416,6 +563,9 @@ export function createMatch(team, opts) {
     // speldjes, eerlijkheid en focus voor deze wedstrijd blijven staan als de app de wedstrijd opnieuw opbouwt
     pins: opts.pins ? opts.pins.map((p) => ({ ...p, pairs: p.pairs.slice() })) : [],
     fairness: opts.fairness || null,
+    planMode: opts.planMode || null,
+    periodLineups: opts.periodLineups ? JSON.parse(JSON.stringify(opts.periodLineups)) : null,
+    ownStash: opts.ownStash ? JSON.parse(JSON.stringify(opts.ownStash)) : null,
     standMode: opts.standMode || 'auto',
     manualStand: opts.manualStand || 'balans',
     clock: { period: 0, running: false, startedAt: 0, accum: 0 },
@@ -427,7 +577,14 @@ export function createMatch(team, opts) {
   };
   const ctx = makeCtx(match, team, 'balans');
   const st = initialState(fieldIds, ctx);
-  match.events.push({ id: uid(), type: 'lineup', t: 0, period: 0, pos: st.pos, bench: st.bench, slots: makeSlots(st.pos, linesOf(match, team), players) });
+  // eigen plan: de startopstelling van de coach blijft staan zolang hij nog klopt (zelfde spelers en opstelling)
+  const own0 = isOwn(match, team) && match.periodLineups && match.periodLineups[0];
+  const lines = linesOf(match, team);
+  const F = Object.values(lines).reduce((a, b) => a + b, 0);
+  const fits = own0 && Object.keys(own0.pos).length === F && Object.keys(own0.pos).every((id) => fieldIds.indexOf(id) !== -1) &&
+    Object.keys(own0.slots || {}).every((k) => +k.slice(1) < (lines[k[0]] || 0)) && LINES.every((l) => Object.keys(own0.pos).filter((id) => own0.pos[id] === l).length === (lines[l] || 0));
+  if (fits) match.events.push({ id: uid(), type: 'lineup', t: 0, period: 0, pos: { ...own0.pos }, bench: fieldIds.filter((id) => !(id in own0.pos)), slots: { ...own0.slots } });
+  else match.events.push({ id: uid(), type: 'lineup', t: 0, period: 0, pos: st.pos, bench: st.bench, slots: makeSlots(st.pos, lines, players) });
   replan(match, team);
   return match;
 }
@@ -464,6 +621,8 @@ export function swapInStartLineup(match, team, a, b) {
   const players = playersMap(team);
   const lu = swapInLineup({ pos: ev.pos, bench: ev.bench, slots: ev.slots || makeSlots(ev.pos, linesOf(match, team), players) }, a, b);
   match.events[0] = { ...ev, ...lu };
+  // eigen plan: de startopstelling hoort bij jouw plan en blijft staan als de app de wedstrijd opnieuw opbouwt
+  if (isOwn(match, team)) match.periodLineups = { ...(match.periodLineups || {}), 0: { pos: { ...lu.pos }, bench: lu.bench.slice(), slots: { ...lu.slots } } };
   replan(match, team);
 }
 
@@ -653,6 +812,13 @@ export function changeFormation(match, team, id, to, at = null) {
     const slots = moveSlot(ev.slots || makeSlots(ev.pos, cur, playersMap(team)), id, from, to, lines, at);
     match.events[0] = { ...ev, pos: { ...ev.pos, [id]: to }, slots };
     match.lines = lines;
+    // eigen plan: de start volgt mee; geplande opstellingen met de oude verdeling vervallen (zoals eind vorige)
+    if (isOwn(match, team) && match.periodLineups) {
+      const fit = (lu) => LINES.every((l) => Object.values(lu.pos).filter((x) => x === l).length === (lines[l] || 0));
+      const next = { 0: { pos: { ...match.events[0].pos }, bench: match.events[0].bench.slice(), slots: { ...slots } } };
+      for (const k of Object.keys(match.periodLineups)) if (+k > 0 && fit(match.periodLineups[k])) next[k] = match.periodLineups[k];
+      match.periodLineups = next;
+    }
     replan(match, team);
     return lines;
   }
@@ -861,19 +1027,24 @@ export function breakOptions(match, team) {
   const prevStart = match.events.filter((e) => e.type === 'lineup' && (e.period || 0) === p - 1).pop() || match.events.find((e) => e.type === 'lineup');
   const prop = breakProposal(match, team);
   const eind = fix({ pos: st.pos, slots: st.slots });
+  const own = isOwn(match, team);
   return {
     aanbevolen: prop ? { ...fix(prop), repl: [] } : eind,
     start: fix(prevStart),
     eind,
+    // eigen plan: advies alleen op verzoek; 'planned' = de coach had deze opstelling zelf gepland
+    advies: own ? fix(adviseLineup(match, team, p)) : null,
+    planned: own && !!prop,
+    own,
     played: st.played,
     keeper
   };
 }
 
 export function breakProposal(match, team) {
-  const step = match.plan && match.plan.steps.find((s) => s.type === 'lineup');
+  const step = match.plan && match.plan.steps.find((s) => s.type === 'lineup' && (s.period == null || s.period === match.clock.period));
   if (!step) return null;
-  return { pos: step.pos, bench: step.bench, slots: makeSlots(step.pos, linesOf(match, team), playersMap(team)) };
+  return { pos: step.pos, bench: step.bench, slots: step.slots ? { ...step.slots } : makeSlots(step.pos, linesOf(match, team), playersMap(team)) };
 }
 
 export function summary(match, team) {
@@ -935,9 +1106,9 @@ export function timeline(match, team) {
   if (!match.finished) {
     for (const s of (match.plan ? match.plan.steps : [])) {
       if (s.type === 'lineup') {
-        slots = makeSlots(s.pos, lines, players);
+        slots = s.slots ? { ...s.slots } : makeSlots(s.pos, lines, players);
         pos = { ...s.pos }; bench = s.bench.slice();
-        cards.push({ kind: 'lineup', t: s.t, period: s.period, slots, pos, bench, keeper, lines, past: false });
+        cards.push({ kind: 'lineup', t: s.t, period: s.period, slots, pos, bench, keeper, lines, past: false, own: !!s.own });
       } else {
         slots = slotSwap(slots, s.out, s.in, s.shift);
         pos = { ...s.pos }; bench = bench.filter((x) => x !== s.in).concat([s.out]);

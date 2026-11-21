@@ -522,7 +522,10 @@ export function Icon({ name, size = 22 }) {
     pin: 'M9 3.5h6l-1 5.5 3.5 3.5h-11L10 9zM12 12.5V21',
     story: 'M5 7h14M5 12h14M5 17h9',
     swaparrows: 'M19.5 11A7.5 7.5 0 0 0 6.2 6.6L4.5 8.3M4.5 3.8v4.5H9M4.5 13a7.5 7.5 0 0 0 13.3 4.4l1.7-1.7M19.5 20.2v-4.5H15',
-    eye: 'M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12zM12 9.3a2.7 2.7 0 100 5.4 2.7 2.7 0 000-5.4z'
+    eye: 'M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12zM12 9.3a2.7 2.7 0 100 5.4 2.7 2.7 0 000-5.4z',
+    check: 'M5 12.5l4.5 4.5L19 7',
+    edit: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
+    spark: 'M12 3.5l1.9 5.2 5.6 1.8-5.6 1.8L12 17.5l-1.9-5.2-5.6-1.8 5.6-1.8zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z'
   };
   const filled = name === 'play' || name === 'pause';
   return html`<svg width=${size} height=${size} viewBox="0 0 24 24" fill=${filled ? 'currentColor' : 'none'} stroke=${filled ? 'none' : 'currentColor'} stroke-width=${name === 'more' ? 3.6 : 2.2} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${paths[name]} /></svg>`;
@@ -667,7 +670,8 @@ export function useDragSwap(ref, enabled, onSwap, hint) {
     const down = (e) => {
       if (e.button > 0) return;
       const el = e.target.closest('[data-pid]');
-      if (!el || !el.dataset.pid || isSlot(el.dataset.pid) || !root.contains(el)) return;
+      // lege plekken en vakken (zone:…) zijn alleen een doel, je pakt ze niet op
+      if (!el || !el.dataset.pid || isSlot(el.dataset.pid) || el.dataset.pid.slice(0, 5) === 'zone:' || !root.contains(el)) return;
       const sc = el.closest('.benchrow .scroll');
       st = { id: el.dataset.pid, x: e.clientX, y: e.clientY, px: e.clientX, py: e.clientY, el, ghost: null, tip: null, over: null, targets: [], scroller: sc && sc.classList.contains('ovf') ? sc : null, dirty: false };
     };

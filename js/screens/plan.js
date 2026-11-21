@@ -8,13 +8,86 @@ import { PlanView } from '../planview.js';
 import { lineStatus } from '../planner.js';
 import { WHY_TEXT } from './home.js';
 import { mutate, liveAct } from './live.js';
+import { OwnPlanner } from './ownplan.js';
 import { Icon, Seg, Switch, toast, useNow, useWakeLock, beep, flash, go } from '../ui.js';
+import { haptic } from '../motion.js';
+
+// Wie maakt het plan voor deze wedstrijd: de app, of de coach zelf (eigen plan, advies op verzoek). Terug naar de
+// app bewaart je eigen plan; zelf plannen begint met je bewaarde plan, of anders met dat van de app.
+export function switchPlanMode(mode) {
+  const back = mutate((m, t) => {
+    const stash = !!(m.ownStash && (m.ownStash.pins.length || m.ownStash.periodLineups));
+    M.setPlanMode(m, t, mode, mode === 'eigen' && !stash);
+    return stash;
+  });
+  haptic('success');
+  toast(mode === 'eigen' ? (back ? 'Je eigen plan is terug' : 'Je plant nu zelf. Het plan van de app staat klaar om aan te passen.') : 'De app maakt het plan weer. Jouw plan blijft bewaard.');
+}
 
 export function Plan({ state }) {
   const match = currentMatch(state);
   if (!match) return html`<main class="screen"><div class="empty"><p>Er is geen wedstrijd klaargezet.</p><a class="btn primary" href="#/">Wedstrijd klaarzetten</a></div></main>`;
   const team = state.teams.find((t) => t.id === match.teamId);
+  // eigen plan: de coach plant zelf per periode, advies alleen op verzoek
+  if (M.isOwn(match, team)) return html`<${OwnPlanner} match=${match} team=${team} />`;
   return html`<${Planner} match=${match} team=${team} />`;
+}
+
+// Klein scorebord rechtsboven (klok en stand) tijdens de wedstrijd.
+export function MiniScore({ match, team }) {
+  const live = match.started && !match.finished;
+  const running = live && match.clock.running;
+  const now = useNow(running ? 1000 : 5000);
+  if (!live) return null;
+  const d = M.derive(match, team, M.gameTime(match, team, now));
+  const el = M.elapsedInPeriod(match, now);
+  return html`<span class=${'miniscore' + (running ? ' run' : '')} aria-label=${'Klok ' + M.fmt(el) + ', stand ' + d.score.us + ' tegen ' + d.score.them}>
+    <i class="dot"></i><span class="ms-v">${M.fmt(Math.min(el, M.periodLen(team)))}</span><span class="sep"></span><span class="ms-v">${d.score.us}:${d.score.them}</span>
+  </span>`;
+}
+
+// Vaste balk onderin tijdens de wedstrijd: het volgende moment met aftellen, +1′ en Wissel nu (de wissel zelf
+// gebeurt in het live-scherm, zodat je hem ziet). Met piep en knipperen bij de wissel, en het scherm blijft aan.
+export function NextBar({ match, team, cards }) {
+  const live = match.started && !match.finished;
+  const running = live && match.clock.running;
+  const now = useNow(running ? 1000 : 5000);
+  useWakeLock(live);
+  const T = live ? M.gameTime(match, team, now) : null;
+  const pending = live && M.lineupPending(match, team);
+  const next = live && !pending ? M.nextSwap(match, team) : null;
+  const group = live && !pending ? M.nextGroup(match, team) : [];
+  const countdown = next ? next.t - T : null;
+  const alerted = useRef({});
+  useEffect(() => {
+    if (!running || !next) return;
+    const key = next.t + ':' + next.out + ':' + next.in;
+    if (countdown <= 60 && countdown > 1 && !alerted.current[key + 'a']) { alerted.current[key + 'a'] = 1; beep(1, 660); }
+    if (countdown <= 0 && !alerted.current[key + 'b']) { alerted.current[key + 'b'] = 1; beep(3); flash(); }
+  }, [Math.floor(T || 0)]);
+  const sticky = live && !!(next || pending);
+  useEffect(() => { document.documentElement.classList.toggle('plsticky-on', sticky); return () => document.documentElement.classList.remove('plsticky-on'); }, [sticky]);
+  if (!sticky) return null;
+  const nick = (id) => M.nickOf(team, id);
+  const nextNo = next ? cards.filter((c) => c.kind === 'swap' && c.t <= next.t).length : 0;
+  const swapNow = () => {
+    const pairs = group.map((s) => ({ out: s.out, in: s.in, shift: s.shift }));
+    if (!pairs.length) return;
+    liveAct.run = { pairs };
+    go('/');
+  };
+  const later = () => { mutate((m, t) => M.delay(m, t, 60)); toast('Wissel 1 minuut later'); };
+  return html`<div class="plsticky">
+    ${pending
+      ? html`<span class="ps-txt"><b>Rust</b><span>Zet de opstelling klaar in het wedstrijdscherm.</span></span>
+        <a class="btn primary" href="#/">Naar de wedstrijd</a>`
+      : html`<span class=${'ps-txt' + (countdown <= 0 ? ' due' : countdown <= 60 ? ' soon' : '')}>
+          <b>Wissel ${nextNo} · ${countdown > 0 ? M.fmt(countdown) : 'nu!'}</b>
+          <span>${group.map((s) => nick(s.in)).join(', ')} erin${group.length === 1 ? ' voor ' + nick(group[0].out) : ''}${next.pinned && !match.plan.own ? ' · vastgezet' : ''}</span>
+        </span>
+        <button type="button" class="btn plain" onClick=${later} aria-label="1 minuut later">+1′</button>
+        <button type="button" class="btn primary" onClick=${swapNow}>Wissel nu</button>`}
+  </div>`;
 }
 
 const CAP = { V: 'Voor', M: 'Midden', A: 'Achter' };
@@ -32,16 +105,10 @@ function Planner({ match, team }) {
   const live = match.started && !match.finished;
   const running = live && match.clock.running;
   const now = useNow(running ? 1000 : live ? 5000 : 60000);
-  useWakeLock(live);
   const T = live ? M.gameTime(match, team, now) : null;
-  const d = live ? M.derive(match, team, T) : null;
   const [idx, setIdx] = useState(Math.max(0, nowIndex));
   // eerlijkheid zoals hij was vóór je laatste aanpassing (om het verschil te tonen)
   const [before, setBefore] = useState(null);
-  const pending = live && M.lineupPending(match, team);
-  const next = live && !pending ? M.nextSwap(match, team) : null;
-  const group = live && !pending ? M.nextGroup(match, team) : [];
-  const countdown = next ? next.t - T : null;
   const stand = match.plan ? match.plan.stand : 'balans';
   const auto = !!team.rules.autoStand && match.standMode !== 'manual';
   const remember = () => setBefore({ fair: match.plan.fair, ok: match.plan.ok, key: Date.now() });
@@ -60,41 +127,15 @@ function Planner({ match, team }) {
   const setAuto = (on) => later2(() => { remember(); mutate((m, tt) => M.setStand(m, tt, on ? 'auto' : 'manual', stand)); });
   const setFair = (v) => later2(() => { remember(); mutate((m, tt) => M.setFairness(m, tt, v === 'team' ? null : v)); });
 
-  // wissel nu (het eerstvolgende moment), daarna terug naar het live-scherm met de ongedaan-pil
-  const swapNow = () => {
-    const pairs = group.map((s) => ({ out: s.out, in: s.in, shift: s.shift }));
-    if (!pairs.length) return;
-    // de wissel zelf gebeurt in het live-scherm, zodat je de animatie ziet
-    liveAct.run = { pairs };
-    go('/');
-  };
-  const later = () => { mutate((m, t) => M.delay(m, t, 60)); toast('Wissel 1 minuut later'); };
-
-  // signaal bij de wissel, ook als je in de planner zit
-  const alerted = useRef({});
-  useEffect(() => {
-    if (!running || !next) return;
-    const key = next.t + ':' + next.out + ':' + next.in;
-    if (countdown <= 60 && countdown > 1 && !alerted.current[key + 'a']) { alerted.current[key + 'a'] = 1; beep(1, 660); }
-    if (countdown <= 0 && !alerted.current[key + 'b']) { alerted.current[key + 'b'] = 1; beep(3); flash(); }
-  }, [Math.floor(T || 0)]);
-
   const broken = (match.plan && match.plan.broken) || [];
   const swapNo = (t) => cards.filter((c) => c.kind === 'swap' && c.t <= t).length;
   const nick = (id) => M.nickOf(team, id);
-  const el = live ? M.elapsedInPeriod(match, now) : 0;
-  const nextNo = next ? swapNo(next.t) : 0;
-  // meldingen boven de vaste wisselbalk
-  const sticky = live && !!(next || pending);
-  useEffect(() => { document.documentElement.classList.toggle('plsticky-on', sticky); return () => document.documentElement.classList.remove('plsticky-on'); }, [sticky]);
 
   return html`<main class=${'screen planner' + (live ? ' is-live' : '')}>
     <div class="topbar plbar">
       <a class="iconbtn" href="#/" aria-label="Terug"><${Icon} name="back" /></a>
       <span class="h2 grow">Planner</span>
-      ${live && html`<span class=${'miniscore' + (running ? ' run' : '')} aria-label=${'Klok ' + M.fmt(el) + ', stand ' + d.score.us + ' tegen ' + d.score.them}>
-        <i class="dot"></i><span class="ms-v">${M.fmt(Math.min(el, M.periodLen(team)))}</span><span class="sep"></span><span class="ms-v">${d.score.us}:${d.score.them}</span>
-      </span>`}
+      <${MiniScore} match=${match} team=${team} />
     </div>
 
     <section class="card plcard">
@@ -115,6 +156,7 @@ function Planner({ match, team }) {
 
     <section class="card plset">
       <span class="label">Voor deze wedstrijd</span>
+      <${Seg} label="Wie maakt het plan" value="app" options=${[['app', 'De app'], ['eigen', 'Ikzelf']]} onChange=${(v) => v === 'eigen' && switchPlanMode('eigen')} />
       <${Seg} label="Focus" value=${stand} options=${FOCUS_OPTS} onChange=${setFocus} />
       ${team.rules.autoStand && html`<div class="between"><span class="sub">Focus volgt de stand</span><${Switch} on=${auto} onChange=${setAuto} label="Focus volgt de stand" /></div>`}
       <${Seg} label="Eerlijkheid" value=${match.fairness || 'team'} options=${FAIR_OPTS} onChange=${setFair} />
@@ -122,22 +164,12 @@ function Planner({ match, team }) {
     </section>
 
 
-    ${live && (next || pending) && html`<div class="plsticky">
-      ${pending
-        ? html`<span class="ps-txt"><b>Rust</b><span>Zet de opstelling klaar in het wedstrijdscherm.</span></span>
-          <a class="btn primary" href="#/">Naar de wedstrijd</a>`
-        : html`<span class=${'ps-txt' + (countdown <= 0 ? ' due' : countdown <= 60 ? ' soon' : '')}>
-            <b>Wissel ${nextNo} · ${countdown > 0 ? M.fmt(countdown) : 'nu!'}</b>
-            <span>${group.map((s) => nick(s.in)).join(', ')} erin${group.length === 1 ? ' voor ' + nick(group[0].out) : ''}${next.pinned ? ' · vastgezet' : ''}</span>
-          </span>
-          <button type="button" class="btn plain" onClick=${later} aria-label="1 minuut later">+1′</button>
-          <button type="button" class="btn primary" onClick=${swapNow}>Wissel nu</button>`}
-    </div>`}
+    <${NextBar} match=${match} team=${team} cards=${cards} />
   </main>`;
 }
 
 // Gevolgen onder het veld: balans per linie (zonder namen of cijfers) en eerlijkheid over de hele wedstrijd.
-function Gevolgen({ match, team, card, before }) {
+export function Gevolgen({ match, team, card, before }) {
   const plan = match.plan;
   if (!plan || !card) return null;
   const players = {};

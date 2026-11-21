@@ -8,7 +8,7 @@ import { PROFILES, PROFILE_ORDER, profileOf, cachedTune, rememberTune, consequen
 import { compute } from '../compute.js';
 import { scheduleRefresh } from '../refresh.js';
 
-export const APP_VERSION = '0.19.0';
+export const APP_VERSION = '0.20.0';
 
 // regels die het wisselprofiel bepaalt; zet je er zelf een, dan wordt het profiel 'Eigen'
 const TUNED = ['marge', 'equalTime', 'evenOften', 'maxBenchOn', 'maxBench', 'minInterval', 'turnsPerPeriod', 'priority', 'strongBias'];
@@ -237,6 +237,11 @@ export function Team({ state }) {
 
     <section class="card">
       <span class="h2">Wisselen</span>
+      <span class="label">Wie maakt het plan</span>
+      <${Seg} label="Wie maakt het plan" value=${r.planMode === 'eigen' ? 'eigen' : 'app'} onChange=${(v) => setRule('planMode', v)} options=${[['app', 'De app'], ['eigen', 'Ikzelf']]} />
+      <span class="small">${r.planMode === 'eigen'
+        ? 'Je maakt zelf het plan, per periode. De app adviseert alleen als je erom vraagt. Per wedstrijd kun je dit nog veranderen.'
+        : 'De app maakt het plan; jij kunt momenten vastzetten. Per wedstrijd kun je ook zelf plannen.'}</span>
       <span class="sub">Kies hoe je wilt wisselen. De app rekent het door voor je ${squad.length} spelers, en per wedstrijd opnieuw met wie er is.</span>
       <div class="profiles" role="radiogroup" aria-label="Wisselprofiel">
         ${PROFILE_ORDER.map((k) => html`<${ProfileCard} key=${k} k=${k} on=${prof === k} r=${profs[k]} stale=${profBusy} ref0=${profs.balans && profs.balans.stats} n=${squad.length} onPick=${() => pickProfile(k)} />`)}
