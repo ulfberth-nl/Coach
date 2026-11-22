@@ -681,6 +681,8 @@ export function useDragSwap(ref, enabled, onSwap, hint, opts = {}) {
     const isSlot = (id) => id.slice(0, 5) === 'line:';
     const down = (e) => {
       if (e.button > 0) return;
+      // een vorige sleep die nooit netjes eindigde (iPhone: geen loslaat-signaal): eerst opruimen
+      if (st) abort();
       const el = e.target.closest('[data-pid]');
       // lege plekken en vakken (zone:…) zijn alleen een doel, je pakt ze niet op
       if (!el || !el.dataset.pid || isSlot(el.dataset.pid) || el.dataset.pid.slice(0, 5) === 'zone:' || el.dataset.pid.slice(0, 6) === 'empty:' || !root.contains(el)) return;
@@ -822,6 +824,20 @@ export function useDragSwap(ref, enabled, onSwap, hint, opts = {}) {
       nudge(null);
       root.querySelectorAll('.addslot.off').forEach((n) => n.classList.remove('off'));
     };
+    // sleep afbreken zonder iets te doen: zwever en markeringen weg, alles terug zoals het was
+    const abort = () => {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      if (st && st.ghost) {
+        st.ghost.remove(); if (st.tip) st.tip.remove();
+        if (st.el) st.el.classList.remove('drag-src');
+        if (st.over) st.over.el.classList.remove('drop-target');
+        clear();
+      }
+      root.querySelectorAll('.drag-src, .drop-target').forEach((n) => n.classList.remove('drag-src', 'drop-target'));
+      st = null;
+    };
+    const cancel = () => abort();
+    const hide = () => { if (document.hidden) abort(); };
     const up = () => {
       if (!st) return;
       if (raf) { cancelAnimationFrame(raf); raf = 0; }
@@ -854,17 +870,21 @@ export function useDragSwap(ref, enabled, onSwap, hint, opts = {}) {
     root.addEventListener('scroll', rescroll, true);
     window.addEventListener('pointermove', move, { passive: false });
     window.addEventListener('pointerup', up);
-    window.addEventListener('pointercancel', up);
+    // afgebroken door het toestel (bijv. een systeemgebaar): niet laten vallen, gewoon terug
+    window.addEventListener('pointercancel', cancel);
+    window.addEventListener('blur', cancel);
+    document.addEventListener('visibilitychange', hide);
     return () => {
-      if (raf) cancelAnimationFrame(raf);
+      abort();
       root.removeEventListener('touchmove', noScroll);
       root.classList.remove('draggable');
-      clear();
+      window.removeEventListener('blur', cancel);
+      document.removeEventListener('visibilitychange', hide);
       root.removeEventListener('pointerdown', down);
       root.removeEventListener('scroll', rescroll, true);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
-      window.removeEventListener('pointercancel', up);
+      window.removeEventListener('pointercancel', cancel);
     };
   }, [enabled]);
 }
