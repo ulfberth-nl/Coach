@@ -159,20 +159,43 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
     const out = aF ? a : b, inn = aF ? b : a;
     onPin(nx.t, pairsAfterDrag(nx, out, inn, perMoment), swapNoOf(nx));
   };
-  // dit moment aanpassen: een bankspeler op een veldspeler. Kwam die veldspeler net erin, dan neemt de
-  // bankspeler zijn beurt over (erin voor dezelfde speler); anders komt hij erin voor die veldspeler.
+  // dit moment aanpassen (speldje), zoals live: bankspeler op een veldspeler = hij komt erin (kwam die veldspeler
+  // net erin, dan neemt de bankspeler zijn beurt over); veld op veld = ruilen van plek of linie; naar een lege
+  // plek (+) = andere opstelling vanaf dit moment.
   const herePairs = c.kind === 'swap' ? c.pairs || [{ out: c.out, in: c.in }] : [];
+  const herePin = (match.pins || []).find((x) => x.t === c.t);
+  const hereMoves = (herePin && herePin.moves) || [];
   const hereMove = (a, b) => {
-    if (b.slice(0, 5) === 'line:' || a === match.keeperId || b === match.keeperId) return null;
+    if (a === match.keeperId || b === match.keeperId) return null;
+    if (b.slice(0, 5) === 'line:') {
+      const to = b.split(':')[1];
+      if (!(a in c.pos)) return null;
+      const n = M.formationAfter(lines, c.pos[a], to);
+      return n ? { kind: 'form', move: { a, to }, lines: n } : null;
+    }
     const aF = a in c.pos, bF = b in c.pos;
+    if (aF && bF) return { kind: c.pos[a] === c.pos[b] ? 'place' : 'line', move: { a, b } };
     if (aF === bF) return null;
     const field = aF ? a : b, inn = aF ? b : a;
     if (herePairs.some((p) => p.out === inn)) return null; // ging net zelf eruit
     const pr = herePairs.find((p) => p.in === field);
-    return { out: pr ? pr.out : field, in: inn };
+    return { kind: 'swap', out: pr ? pr.out : field, in: inn };
   };
-  const hereHint = (a, b) => { const mv = hereMove(a, b); return mv ? `${M.nickOf(team, mv.in)} erin voor ${M.nickOf(team, mv.out)} · wissel ${swapNoOf(c)} vast` : null; };
-  const hereDrop = (a, b) => { const mv = hereMove(a, b); if (mv) onPinHere(c.t, pairsAfterDrag(c, mv.out, mv.in, perMoment), swapNoOf(c)); };
+  const hereHint = (a, b) => {
+    const mv = hereMove(a, b);
+    if (!mv) return null;
+    const tail = ` · wissel ${swapNoOf(c)} vast`;
+    if (mv.kind === 'form') return M.formationLabel(lines, c.pos[a], mv.move.to) + ' vanaf hier';
+    if (mv.kind === 'place') return `Ruil van plek met ${M.nickOf(team, b)}${tail}`;
+    if (mv.kind === 'line') return `Ruil van linie met ${M.nickOf(team, b)}${tail}`;
+    return `${M.nickOf(team, mv.in)} erin voor ${M.nickOf(team, mv.out)}${tail}`;
+  };
+  const hereDrop = (a, b) => {
+    const mv = hereMove(a, b);
+    if (!mv) return;
+    if (mv.kind === 'swap') onPinHere(c.t, pairsAfterDrag(c, mv.out, mv.in, perMoment), swapNoOf(c), hereMoves);
+    else onPinHere(c.t, herePairs, swapNoOf(c), hereMoves.concat([mv.move]), mv.kind);
+  };
   // keeper slepen bij de start: van en naar de keeperplek
   const keeperHint = (a, b) => { const k = match.keeperId; const o = a === k ? b : a; return o.slice(0, 5) === 'line:' ? null : `${M.nickOf(team, o)} keept · ${M.nickOf(team, k)} neemt zijn plek`; };
   useDragSwap(zone, canEdit || canPlan || canPinHere, (a, b) => (canPlan ? planDrop(a, b) : canPinHere ? hereDrop(a, b) : onSwap && onSwap(a, b)), (a, b) => (canPlan ? planHint(a, b) : canPinHere ? hereHint(a, b)
@@ -288,7 +311,7 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
         ${peek && nx
           ? html`<${Field} slots=${nx.slots} lines=${nx.lines || lines} keeperId=${nx.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
               onTap=${() => {}} neon=${changes(cards, i + 1).in} accent=${accentFor(team)} />`
-          : html`<${Field} slots=${c.slots} lines=${lines} formable=${canEdit} keeperDrag=${canEdit && !!match.keeperId} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
+          : html`<${Field} slots=${c.slots} lines=${lines} formable=${canEdit || canPinHere} keeperDrag=${canEdit && !!match.keeperId} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
               onTap=${() => {}} neon=${planner ? nxOuts : []} marked=${planner ? [] : ch.in} dashed=${!planner && ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} ghosts=${planner && !peek && !calm ? ghostsFor(nx, c.pos, nick) : null} />`}
         ${planner && peek && nx && html`<span class="peeklabel" role="status"><${Icon} name="eye" size=${15} />${nx.kind === 'lineup' ? 'Opstelling ' + M.periodLabel(team, nx.period) : 'Na wissel ' + swapNoOf(nx)}</span>`}
       </div>

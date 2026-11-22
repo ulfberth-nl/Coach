@@ -446,11 +446,13 @@ function pinnedRun(start, ctx, T, pins, grid, rhythm) {
   const broken = [];
   let now = T;
   let p = Math.min(periods - 1, Math.floor(T / periodLen));
+  // een vastgezette andere opstelling (bijv. een verdediger erbij) geldt daarna, ook na de rust
+  let curLines = ctx.lines;
   const lineupAt = (t, period) => {
     advance(state, now, t);
     now = t;
     if (rules.newLineupAtBreak) {
-      const lu = breakLineup(state, fctx, t, null);
+      const lu = breakLineup(state, { ...fctx, lines: curLines }, t, null);
       steps.push({ type: 'lineup', t, pos: lu.pos, bench: lu.bench, period });
       applyLineup(state, lu, t);
     }
@@ -473,6 +475,21 @@ function pinnedRun(start, ctx, T, pins, grid, rhythm) {
         applySwap(state, sw, t);
         used.add(pr.out); used.add(pr.in);
       }
+      // plekwissels van de coach op dit moment: ruilen van plek of linie, of één speler naar een andere linie
+      for (const mv of pin.moves || []) {
+        if (mv.to) {
+          const from = state.pos[mv.a];
+          if (!from || from === mv.to) { broken.push({ t, move: true, out: mv.a, in: mv.a }); continue; }
+          state.pos = { ...state.pos, [mv.a]: mv.to };
+          curLines = { V: 0, M: 0, A: 0 };
+          for (const l of Object.values(state.pos)) curLines[l] = (curLines[l] || 0) + 1;
+          steps.push({ type: 'move', t, a: mv.a, from, to: mv.to, pos: { ...state.pos }, pinned: true });
+          continue;
+        }
+        if (!(mv.a in state.pos) || !(mv.b in state.pos)) { broken.push({ t, move: true, out: mv.a, in: mv.b }); continue; }
+        state.pos = { ...state.pos, [mv.a]: state.pos[mv.b], [mv.b]: state.pos[mv.a] };
+        steps.push({ type: 'move', t, a: mv.a, b: mv.b, pos: { ...state.pos }, pinned: true });
+      }
       return;
     }
     const interval = (k + 1 < times.length ? times[k + 1] : cut) - t || 180;
@@ -487,7 +504,7 @@ function pinnedRun(start, ctx, T, pins, grid, rhythm) {
   const ids = Object.keys(start.pos).concat(start.bench);
   const moments = new Set(steps.filter((x) => x.type === 'swap').map((x) => x.t)).size;
   if (!rhythm) {
-    const rest = planRest(state, { ...ctx, lineupPending: false, firstAt: null }, last);
+    const rest = planRest(state, { ...ctx, lines: curLines, lineupPending: false, firstAt: null }, last);
     const fair = rest.fair ? { ...rest.fair, maxStint: Math.max(rest.fair.maxStint || 0, state.maxStint) } : rest.fair;
     return { ...rest, fair, steps: steps.concat(rest.steps), broken };
   }
@@ -500,7 +517,7 @@ function pinnedRun(start, ctx, T, pins, grid, rhythm) {
   // vanaf de volgende periode rekent de app weer helemaal zelf, met wat er tot dan gespeeld is
   advance(state, now, cut);
   const prefixStint = state.maxStint;
-  const rest = planRest(state, { ...ctx, lineupPending: true, firstAt: null }, cut);
+  const rest = planRest(state, { ...ctx, lines: curLines, lineupPending: true, firstAt: null }, cut);
   const fair = rest.fair ? { ...rest.fair, maxStint: Math.max(rest.fair.maxStint || 0, prefixStint) } : rest.fair;
   return { ...rest, fair, steps: steps.concat(rest.steps), broken };
 }

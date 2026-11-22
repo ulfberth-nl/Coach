@@ -24,7 +24,8 @@ const cardsOk = (match) => {
 // helpers
 assert.equal(M.formationText({ A: 2, M: 1, V: 2 }), '2-1-2');
 assert.deepEqual(M.formationAfter({ A: 2, M: 1, V: 2 }, 'V', 'M'), { A: 2, M: 2, V: 1 });
-assert.equal(M.formationAfter({ A: 2, M: 1, V: 2 }, 'M', 'V'), null, 'laatste middenvelder kan niet weg');
+assert.deepEqual(M.formationAfter({ A: 2, M: 1, V: 2 }, 'M', 'V'), { A: 2, M: 0, V: 3 }, 'de laatste middenvelder mag weg (lege linie, keuze Raymond)');
+assert.equal(M.formationAfter({ A: 2, M: 0, V: 3 }, 'M', 'V'), null, 'uit een lege linie kan niemand weg');
 assert.equal(M.formationAfter({ A: 2, M: 1, V: 2 }, 'V', 'V'), null);
 assert.equal(M.formationLabel({ A: 2, M: 1, V: 2 }, 'V', 'M'), 'Naar het midden · 2-2-1');
 {

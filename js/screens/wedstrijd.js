@@ -212,7 +212,10 @@ function PrepView({ state, match, team }) {
         <${PlanChoice} match=${match} team=${team} swaps=${swaps} perMoment=${perMoment} />
         <div class="grow-field"><${PlanView} match=${match} team=${team} compact editable=${!M.isOwn(match, team)}
           onSwap=${(a, b) => conceptDrop(mutateConcept, team, a, b)}
-          onPinHere=${(t, pairs, no) => { mutateConcept((m, d) => M.pinMoment(m, d.teams.find((x) => x.id === m.teamId), t, pairs)); toast(`Wissel ${no} vastgezet · de rest rekent de app opnieuw`); }} /></div>`}
+          onPinHere=${(t, pairs, no, moves, kind) => {
+            mutateConcept((m, d) => M.pinMoment(m, d.teams.find((x) => x.id === m.teamId), t, pairs, 'terug', moves));
+            toast(kind === 'form' ? `Andere opstelling vanaf wissel ${no} · de rest rekent de app opnieuw` : kind ? `Plekwissel bij wissel ${no} vastgezet` : `Wissel ${no} vastgezet · de rest rekent de app opnieuw`);
+          }} /></div>`}
     <div class="prepdock">
       <button type="button" class="btn primary startbtn" disabled=${tooFew} onClick=${() => (emptyGp ? setSheet('gpleeg') : todo.length ? setSheet('confirm') : start())}>
         <${Icon} name="play" size=${20} /><span class="sb-t"><b>Start</b><small>tik bij de aftrap</small></span>
@@ -463,7 +466,7 @@ function LiveView({ match, team }) {
       liveAct.run = null;
       setTimeout(() => {
         const ps = run.pairs;
-        mutate((m, t) => (M.isOwn(m, t) ? M.doPlannedMoment(m, t) : ps.length > 1 ? M.doSwapGroup(m, t, ps) : M.doSwap(m, t, ps[0].out, ps[0].in, ps[0].shift)));
+        mutate((m, t) => (M.isOwn(m, t) || M.nextMoves(m, t).length ? M.doPlannedMoment(m, t) : ps.length > 1 ? M.doSwapGroup(m, t, ps) : M.doSwap(m, t, ps[0].out, ps[0].in, ps[0].shift)));
         showAct(ps.length > 1 ? { outs: ps.map((p) => p.out), undos: 1 } : { out: ps[0].out, undos: 1 });
       }, reduced() ? 60 : TEMPO.screen + 150);
     }
@@ -681,7 +684,7 @@ function LiveView({ match, team }) {
     haptic('success');
     setTimeout(() => {
       // game plan: precies zoals gepland (met doorschuiver en plekwissels); anders zoals altijd
-      mutate((m, t) => (M.isOwn(m, t) ? M.doPlannedMoment(m, t) : pairs.length > 1 ? M.doSwapGroup(m, t, pairs) : M.doSwap(m, t, pairs[0].out, pairs[0].in, pairs[0].shift)));
+      mutate((m, t) => (M.isOwn(m, t) || M.nextMoves(m, t).length ? M.doPlannedMoment(m, t) : pairs.length > 1 ? M.doSwapGroup(m, t, pairs) : M.doSwap(m, t, pairs[0].out, pairs[0].in, pairs[0].shift)));
       showAct(pairs.length > 1 ? { outs: pairs.map((p) => p.out), undos: 1 } : { out: pairs[0].out, undos: 1 });
       setSpinning(false);
       resetRing();

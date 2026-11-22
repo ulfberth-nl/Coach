@@ -2203,3 +2203,9 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 @media (display-mode: standalone) { :root { --edge: 12px; } }
 /* blok op het veld: wie niet gekozen is wordt rustig (wit, iets doorzichtig), niet paars */
 .bfv .field .pill.muted { background: #fff; color: var(--ink); opacity: .55; box-shadow: none; }
+/* de ring stuitert af en toe een stukje naar links: zo zie je dat je hem moet schuiven (vaker in de laatste minuut) */
+@keyframes ringNudge { 0%, 84%, 100% { translate: 0 0; } 88% { translate: -18px 0; } 92% { translate: 0 0; } 95% { translate: -7px 0; } 98% { translate: 0 0; } }
+.islandwrap > .i-ring.swapbtn:not(.sliding):not(.held) { animation: ringNudge 9s ease-in-out 4s infinite; }
+.islandwrap.hot > .i-ring.swapbtn:not(.sliding):not(.held) { animation: breathe var(--breathe, 1.4s) ease-in-out infinite, ringNudge 5s ease-in-out 1s infinite; }
+.reduce .islandwrap > .i-ring.swapbtn { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .islandwrap > .i-ring.swapbtn { animation: none !important; } }

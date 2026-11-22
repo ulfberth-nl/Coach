@@ -9,7 +9,7 @@ export const linesOf = (match, team) => (match && match.lines) || team.lines;
 export const formationText = (lines) => `${lines.A || 0}-${lines.M || 0}-${lines.V || 0}`;
 // opstelling na het verplaatsen van één speler van linie 'from' naar 'to' (null als dat niet kan)
 // (empty = true: de coach mag een linie leeg maken, bijv. alles naar achteren; zo plant hij het in een game plan)
-export function formationAfter(lines, from, to, empty = false) {
+export function formationAfter(lines, from, to, empty = true) {
   if (!from || !to || from === to || !((lines[from] || 0) > (empty ? 0 : 1))) return null;
   return { ...lines, [from]: lines[from] - 1, [to]: (lines[to] || 0) + 1 };
 }
@@ -370,10 +370,14 @@ function activePins(match, anchor, end) {
 }
 
 // Een moment vastzetten (speldje): op tijd t gebeuren precies deze wissels. Vervangt een speldje op dat moment.
-export function pinMoment(match, team, t, pairs, after = 'terug') {
+// moves: plekwissels op dat moment (na de wissels): { a, b } = twee veldspelers ruilen van plek of linie,
+// { a, to } = één veldspeler naar een andere linie (andere opstelling). Zonder moves blijven die van het speldje staan.
+export function pinMoment(match, team, t, pairs, after = 'terug', moves) {
+  const had = (match.pins || []).find((p) => p.t === t);
+  const mv = (moves !== undefined ? moves : (had && had.moves) || []).map((x) => (x.to ? { a: x.a, to: x.to } : { a: x.a, b: x.b }));
   const list = (match.pins || []).filter((p) => p.t !== t);
   if (match.fixed && match.fixed.t === t) match.fixed = null;
-  list.push({ t, pairs: pairs.map((p) => ({ out: p.out, in: p.in, ...(p.shift ? { shift: { id: p.shift.id, to: p.shift.to } } : {}) })), after });
+  list.push({ t, pairs: pairs.map((p) => ({ out: p.out, in: p.in, ...(p.shift ? { shift: { id: p.shift.id, to: p.shift.to } } : {}) })), after, ...(mv.length ? { moves: mv } : {}) });
   match.pins = list.sort((a, b) => a.t - b.t);
   match.firstAt = null;
   replan(match, team);
@@ -1064,7 +1068,7 @@ function applyPlannedMoves(match, team, T, pos, moves, g) {
 // Game plan: een moment met alleen plekwissels (geen wissel ervoor in deze periode, of eerder dan de volgende
 // wissel). Het live-scherm toont het als eigen moment.
 export function nextMovesOnly(match, team) {
-  if (!match.plan || match.finished || !isOwn(match, team)) return null;
+  if (!match.plan || match.finished) return null;
   const end = (match.clock.period + 1) * periodLen(team);
   const first = match.plan.steps[0];
   if (!first || first.type !== 'move' || first.t >= end) return null;

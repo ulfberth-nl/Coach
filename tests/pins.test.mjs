@@ -91,3 +91,30 @@ assert.ok(Math.abs(n1.t - (M.gameTime(m2, team) + 60)) <= 1 && n1.pinned, 'vastg
 M.clearFixed(m2, team);
 assert.ok(!M.isPinned(m2, M.nextSwap(m2, team).t));
 console.log('Speldjestest geslaagd');
+
+// ---------- standaardplan: plekwissel en andere opstelling vastzetten op een later moment ----------
+{
+  const team2 = store.newTeam('P2', true);
+  const ids2 = team2.players.map((p) => p.id);
+  const k2 = ids2[ids2.length - 1];
+  const mp = M.createMatch(team2, { opponent: 'Pin', present: ids2, keeperId: k2 });
+  const first = mp.plan.steps.find((s) => s.type === 'swap');
+  const st = M.timeline(mp, team2).cards.find((c) => c.t === first.t);
+  const fieldIds = Object.keys(st.pos);
+  const a = fieldIds.find((id) => st.pos[id] === 'V'), b = fieldIds.find((id) => st.pos[id] === 'A');
+  M.pinMoment(mp, team2, first.t, st.pairs || [{ out: first.out, in: first.in }], 'terug', [{ a, b }]);
+  const mvs = mp.plan.steps.filter((s) => s.type === 'move' && s.t === first.t);
+  assert.ok(mvs.some((s) => s.a === a && s.b === b), 'de plekwissel staat in het plan');
+  const after = M.timeline(mp, team2).cards.find((c) => c.t === first.t);
+  assert.equal(after.pos[a], 'A'); assert.equal(after.pos[b], 'V');
+  // andere opstelling vanaf dit moment (de enige middenvelder naar voren)
+  const mid = Object.keys(after.pos).find((id) => after.pos[id] === 'M');
+  M.pinMoment(mp, team2, first.t, st.pairs || [{ out: first.out, in: first.in }], 'terug', [{ a, b }, { a: mid, to: 'V' }]);
+  const c2 = M.timeline(mp, team2).cards.find((c) => c.t === first.t);
+  assert.equal(Object.values(c2.pos).filter((x) => x === 'M').length, 0, 'midden leeg vanaf dit moment');
+  assert.equal(Object.values(c2.pos).filter((x) => x === 'V').length, 3);
+  // een bankwissel op hetzelfde moment houdt de plekwissels
+  M.pinMoment(mp, team2, first.t, st.pairs || [{ out: first.out, in: first.in }]);
+  assert.equal(mp.pins.find((pp) => pp.t === first.t).moves.length, 2);
+}
+console.log('speldjes met plekwissels ok');
