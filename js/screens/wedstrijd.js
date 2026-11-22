@@ -211,6 +211,7 @@ function PrepView({ state, match, team }) {
       : html`
         <${PlanChoice} match=${match} team=${team} swaps=${swaps} perMoment=${perMoment} />
         <div class="grow-field"><${PlanView} match=${match} team=${team} compact editable=${!M.isOwn(match, team)}
+          onLocked=${M.isOwn(match, team) ? (open) => { if (open) go('/plan'); else toast('Je volgt je game plan: spelers verplaats je daar.', { label: 'Open', run: () => go('/plan') }); } : null}
           onSwap=${(a, b) => conceptDrop(mutateConcept, team, a, b)}
           onPinHere=${(t, pairs, no, moves, kind) => {
             mutateConcept((m, d) => M.pinMoment(m, d.teams.find((x) => x.id === m.teamId), t, pairs, 'terug', moves));

@@ -115,7 +115,7 @@ export function pairsAfterDrag(next, out, inn, perMoment) {
   return list;
 }
 
-export function PlanView({ match, team, editable = false, onSwap, initialIndex = 0, nowIndex = -1, compact = false, liveT = null, onSwapNow = null, planner = false, onPin = null, onUnpin = null, onIndex = null, children = null, onPinHere = null }) {
+export function PlanView({ match, team, editable = false, onSwap, initialIndex = 0, nowIndex = -1, compact = false, liveT = null, onSwapNow = null, planner = false, onPin = null, onUnpin = null, onIndex = null, children = null, onPinHere = null, onLocked = null }) {
   const nick = (id) => M.nickOf(team, id);
   const END = M.matchEnd(team);
   const L = M.periodLen(team);
@@ -196,6 +196,36 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
     if (mv.kind === 'swap') onPinHere(c.t, pairsAfterDrag(c, mv.out, mv.in, perMoment), swapNoOf(c), hereMoves);
     else onPinHere(c.t, herePairs, swapNoOf(c), hereMoves.concat([mv.move]), mv.kind);
   };
+  // vastgezet (game plan): een speler pakken doet niets, maar zegt wel waarom en waar je het wel aanpast.
+  // Vegen opzij door het plan blijft gewoon werken; alleen tikken, vasthouden of omhoog/omlaag slepen telt.
+  useEffect(() => {
+    const el = zone.current;
+    if (!el || !onLocked || planner) return undefined;
+    let st = null, said = false;
+    const say = (pill) => {
+      if (said) return; said = true;
+      if (pill) { pill.classList.remove('nope'); void pill.offsetWidth; pill.classList.add('nope'); }
+      haptic('no');
+      onLocked(false);
+    };
+    const down = (e) => {
+      const p = e.target.closest('[data-pid]');
+      if (!p || !p.dataset.pid) return;
+      said = false;
+      st = { x: e.clientX, y: e.clientY, p: p.querySelector('.pill') || p, timer: setTimeout(() => say(st && st.p), 420) };
+    };
+    const move = (e) => {
+      if (!st) return;
+      const dx = Math.abs(e.clientX - st.x), dy = Math.abs(e.clientY - st.y);
+      if (dx > 10 && dx > dy) { clearTimeout(st.timer); st = null; return; } // vegen door het plan
+      if (dy > 14) { clearTimeout(st.timer); say(st.p); st = null; }
+    };
+    const up = () => { if (!st) return; clearTimeout(st.timer); say(st.p); st = null; };
+    el.addEventListener('pointerdown', down);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    return () => { el.removeEventListener('pointerdown', down); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+  }, [!!onLocked, planner]);
   // keeper slepen bij de start: van en naar de keeperplek
   const keeperHint = (a, b) => { const k = match.keeperId; const o = a === k ? b : a; return o.slice(0, 5) === 'line:' ? null : `${M.nickOf(team, o)} keept · ${M.nickOf(team, k)} neemt zijn plek`; };
   useDragSwap(zone, canEdit || canPlan || canPinHere, (a, b) => (canPlan ? planDrop(a, b) : canPinHere ? hereDrop(a, b) : onSwap && onSwap(a, b)), (a, b) => (canPlan ? planHint(a, b) : canPinHere ? hereHint(a, b)
@@ -313,6 +343,7 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
               onTap=${() => {}} neon=${changes(cards, i + 1).in} accent=${accentFor(team)} />`
           : html`<${Field} slots=${c.slots} lines=${lines} formable=${canEdit || canPinHere} keeperDrag=${canEdit && !!match.keeperId} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
               onTap=${() => {}} neon=${planner ? nxOuts : []} marked=${planner ? [] : ch.in} dashed=${!planner && ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} ghosts=${planner && !peek && !calm ? ghostsFor(nx, c.pos, nick) : null} />`}
+        ${onLocked && !planner && html`<button type="button" class="pv-lock" onClick=${() => onLocked(true)}><${Icon} name="lock" size=${13} /><span>Game plan</span><b>Aanpassen</b><${Icon} name="chev" size=${13} /></button>`}
         ${planner && peek && nx && html`<span class="peeklabel" role="status"><${Icon} name="eye" size=${15} />${nx.kind === 'lineup' ? 'Opstelling ' + M.periodLabel(team, nx.period) : 'Na wissel ' + swapNoOf(nx)}</span>`}
       </div>
       <div class="benchrow">
