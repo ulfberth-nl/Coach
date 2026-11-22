@@ -277,3 +277,28 @@ console.log('gameplan oplossingen ok');
   assert.ok(M.gpCompare(mg, team, st1, M.gpStats(mg, team)).worse.length >= 0);
 }
 console.log('gameplan roepen en winst ok');
+
+// ---------- plekruil binnen een linie (links/rechts) in één blok ----------
+{
+  const ms = M.createMatch(team, { opponent: 'Plek', present: ids, keeperId, planMode: 'eigen' });
+  M.gpEnsure(ms, team, 4);
+  const fi = M.gpFieldIds(ms); const ln = M.linesOf(ms, team);
+  const st0 = {}; let q = 0; for (const l of ['V', 'M', 'A']) for (let i = 0; i < (ln[l] || 0); i++) st0[fi[q++]] = l;
+  M.gpSetBlock(ms, team, 0, st0);
+  const two = Object.keys(st0).filter((id) => st0[id] === 'V');
+  assert.ok(two.length >= 2, 'twee voorspelers nodig voor deze test');
+  const [x, y] = two;
+  const B = M.gpBlocks(ms, team, 4);
+  assert.ok(M.gpSwapSlots(ms, team, 2, x, y));
+  const pin = ms.pins.find((pp) => Math.abs(pp.t - B[2].t) < 0.5);
+  assert.ok(pin && pin.moves.some((mv) => (mv.a === x && mv.b === y) || (mv.a === y && mv.b === x)), 'plekruil wordt een plekwissel in het plan');
+  const { cards } = M.timeline(ms, team);
+  const at = (t) => cards.filter((c) => c.t <= t + 0.5).pop();
+  const k1 = Object.keys(at(B[1].t).slots).find((k) => at(B[1].t).slots[k] === x);
+  const k2 = Object.keys(at(B[2].t).slots).find((k) => at(B[2].t).slots[k] === x);
+  assert.notEqual(k1, k2, 'in blok 3 staat hij aan de andere kant');
+  assert.equal(M.gpSwapSlots(ms, team, 2, y, x), true);
+  assert.ok(!ms.pins.some((pp) => Math.abs(pp.t - B[2].t) < 0.5), 'nog eens ruilen = terug');
+  assert.equal(M.gpSwapSlots(ms, team, 2, x, Object.keys(st0).find((id) => st0[id] === 'A')), false, 'alleen binnen een linie');
+}
+console.log('gameplan plekruil ok');

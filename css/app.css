@@ -48,7 +48,7 @@ button { cursor: pointer; }
 a { color: var(--blue); }
 #app { max-width: 480px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column; overflow-x: clip; }
 
-.screen { flex: 1 1 auto; display: flex; flex-direction: column; gap: 12px; padding: calc(10px + var(--safe-t)) 16px calc(16px + var(--safe-b)); }
+.screen { flex: 1 1 auto; display: flex; flex-direction: column; gap: 12px; padding: calc(10px + var(--safe-t) + var(--edge)) 16px calc(16px + var(--safe-b)); }
 .screen.with-tabs { padding-bottom: calc(96px + var(--safe-b)); }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; }
 .h1 { margin: 0; font-size: 28px; font-weight: 900; line-height: 1.1; }
@@ -397,7 +397,7 @@ select.input { appearance: none; -webkit-appearance: none; }
 .keeperspot { background: none; border: none; padding: 0; }
 
 /* ================= één Wedstrijd-scherm (past zonder scrollen) ================= */
-.matchscreen { height: 100dvh; display: flex; flex-direction: column; gap: 8px; padding: calc(6px + var(--safe-t)) 12px calc(10px + var(--safe-b)); overflow: hidden; }
+.matchscreen { height: 100dvh; display: flex; flex-direction: column; gap: 8px; padding: calc(6px + var(--safe-t) + var(--edge)) 12px calc(10px + var(--safe-b)); overflow: hidden; }
 .matchscreen.with-tabs { padding-bottom: calc(86px + var(--safe-b)); }
 .matchscreen > * { flex: 0 0 auto; }
 .mhead { display: flex; align-items: center; gap: 4px; min-height: 48px; }
@@ -1622,7 +1622,7 @@ html.gp-wide #app { max-width: none; }
 .gp-empty b { font-size: 16px; font-weight: 900; }
 
 /* stappen: voortgang in vier delen, glazen balk die blijft staan */
-.gp-prog { position: sticky; top: calc(4px + var(--safe-t)); z-index: 15; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 8px 10px 4px; margin: 0 -4px; border-radius: 18px; background: rgba(255,255,255,.84); -webkit-backdrop-filter: saturate(1.6) blur(16px); backdrop-filter: saturate(1.6) blur(16px); box-shadow: 0 1px 0 rgba(17,24,39,.04), 0 12px 30px -20px rgba(31,60,136,.45); }
+.gp-prog { position: sticky; top: calc(4px + var(--safe-t) + var(--edge)); z-index: 15; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 8px 10px 4px; margin: 0 -4px; border-radius: 18px; background: rgba(255,255,255,.84); -webkit-backdrop-filter: saturate(1.6) blur(16px); backdrop-filter: saturate(1.6) blur(16px); box-shadow: 0 1px 0 rgba(17,24,39,.04), 0 12px 30px -20px rgba(31,60,136,.45); }
 .gq { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 44px; padding: 2px 0 0; border: none; background: none; text-align: left; color: var(--muted); }
 .gq-bar { position: relative; display: block; height: 6px; border-radius: 99px; background: var(--line-3); overflow: hidden; }
 .gq-bar i { position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(90deg, #2B57C9, #7C5CFF); transform: scaleX(0); transform-origin: left; transition: transform .6s var(--spring-soft), opacity .3s ease; }
@@ -2069,7 +2069,7 @@ html:has(.gp-selbar.wide) .gplan.wide:not(.is-live) { padding-bottom: calc(112px
 .planner .nextcap .call-do { font-size: 14px; }
 
 /* ---------- v0.24: blok op het veld (game plan) ---------- */
-.bfv { position: fixed; inset: 0; z-index: 35; display: flex; flex-direction: column; gap: 8px; padding: calc(8px + var(--safe-t)) 12px calc(10px + var(--safe-b)); background: var(--bg, #F5F7FB); overflow: hidden; animation: bfvIn var(--t-screen) var(--spring-soft) both; }
+.bfv { position: fixed; inset: 0; z-index: 35; display: flex; flex-direction: column; gap: 8px; padding: calc(8px + var(--safe-t) + var(--edge)) 12px calc(10px + var(--safe-b)); background: var(--bg, #F5F7FB); overflow: hidden; animation: bfvIn var(--t-screen) var(--spring-soft) both; }
 @keyframes bfvIn { from { opacity: 0; translate: 0 18px; } }
 .bfv-top { display: flex; align-items: center; gap: 4px; min-height: 48px; }
 .bfv-t { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1px; }
@@ -2167,3 +2167,39 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 .reduce .field .pill.marked, .reduce .scrubzone .field .spot, .reduce .benchrow .benchpill, .reduce .benchrow .neon { animation: none !important; }
 .bk-when { font-size: 13px; font-weight: 800; color: var(--muted); }
 .bk-when.warn { color: #B45309; }
+.field .lane-empty { position: absolute; left: 50%; translate: -50% -50%; padding: 5px 12px; border: 1.5px dashed rgba(255,255,255,.55); border-radius: 99px; color: rgba(255,255,255,.85); font-size: 12px; font-weight: 800; white-space: nowrap; pointer-events: none; }
+.field.dragging .lane-empty, .dragging .field .lane-empty { opacity: 0; }
+.gf .gf-n { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; background: #F5A524; color: #111; font-size: 11px; font-weight: 900; display: inline-grid; place-items: center; }
+.bf-tag i { white-space: nowrap; }
+/* staand: de periodeknoppen blijven bovenin staan onder de stappenbalk */
+.gplan:not(.wide) .gp-tools { position: sticky; top: calc(64px + var(--safe-t) + var(--edge)); z-index: 14; margin: 0 -6px; padding: 4px 6px; border-radius: 16px; background: rgba(245,247,252,.88); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+
+/* ---------- schuif om te wisselen (vervangt vasthouden) ---------- */
+.islandwrap { --sf: 0; }
+.islandwrap > .i-ring { --sx: 0px; translate: var(--sx) 0; touch-action: none; transition: translate .5s var(--spring-soft), scale .3s var(--spring-play), box-shadow .3s ease; }
+.islandwrap > .i-ring.sliding { transition: scale .25s var(--spring-play), box-shadow .25s ease; scale: 1.05; box-shadow: 0 0 0 calc(2px + var(--sf) * 6px) rgba(245,165,36,calc(.2 + var(--sf) * .4)), 0 12px 28px -8px rgba(13,27,69,.6); }
+.islandwrap > .i-ring.over { box-shadow: 0 0 0 8px rgba(34,197,94,.55), 0 12px 28px -8px rgba(13,27,69,.6); }
+.islandwrap > .i-ring.held { transition: translate .25s ease-out; }
+.islandwrap > .i-ring .holdarc { display: none; }
+.islandwrap > .i-ring.sliding .i-arrows { animation: none !important; rotate: calc(var(--sf) * -200deg); color: var(--orange); }
+.islandwrap > .i-ring.over .i-arrows { color: #16A34A; }
+/* het eiland loopt vol achter de ring, de tekst wijkt */
+.islandwrap > .island::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; background: linear-gradient(270deg, rgba(245,165,36,.55), rgba(245,165,36,.12)); clip-path: inset(0 0 0 calc((1 - var(--sf)) * 100%) round 24px); transition: opacity .3s ease; }
+.islandwrap.sliding > .island::after, .islandwrap:has(.i-ring.held) > .island::after { opacity: 1; }
+.islandwrap:has(.i-ring.over) > .island::after { background: linear-gradient(270deg, rgba(34,197,94,.6), rgba(34,197,94,.15)); }
+.islandwrap.sliding > .island .i-txt { opacity: max(0, calc(1 - var(--sf) * 4)); }
+.islandwrap > .island .i-txt { transition: opacity .3s ease; }
+.islandwrap.sliding > .island::before { content: 'Schuif om te wisselen'; position: absolute; right: 18px; top: 50%; translate: 0 -50%; z-index: 1; font-size: 14px; font-weight: 900; color: inherit; opacity: clamp(0, calc(var(--sf) * 4 - .4), 1); pointer-events: none; }
+.islandwrap.sliding:has(.i-ring.over) > .island::before { content: 'Loslaten = wisselen'; }
+.reduce .islandwrap > .i-ring { transition: none; }
+/* keeper wisselen (live): rustig, in de keeperkleur */
+.chip.kp[aria-pressed="true"] { background: #E8F7EE; border-color: #1f8a3a; color: #0E6B31; box-shadow: 0 0 0 1.5px #1f8a3a inset; }
+.btn.kp-go { gap: 8px; }
+.btn.kp-go .kbadge { background: #1f8a3a; color: #fff; }
+
+/* iOS 26 legt in een geïnstalleerde web-app een zachte vervaging over de bovenrand van het scherm. Daar mag
+   niets belangrijks onder vallen (zoals de gekozen wedstrijd): in de app staat alles iets lager. */
+:root { --edge: 0px; }
+@media (display-mode: standalone) { :root { --edge: 12px; } }
+/* blok op het veld: wie niet gekozen is wordt rustig (wit, iets doorzichtig), niet paars */
+.bfv .field .pill.muted { background: #fff; color: var(--ink); opacity: .55; box-shadow: none; }

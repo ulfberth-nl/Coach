@@ -540,8 +540,10 @@ export function Icon({ name, size = 22 }) {
 const landing = {};
 const LANE_NAMES = { V: 'voor', M: 'midden', A: 'achter' };
 
-export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = [], marked = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false, picking = false, hot = null, hotKey = 0, ghosts = null, animate = false, accent = null, badges = null, cheer = null, formable = false }) {
-  const rows = ['V', 'M', 'A'].filter((l) => (lines[l] || 0) > 0);
+export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = [], marked = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false, picking = false, hot = null, hotKey = 0, ghosts = null, animate = false, accent = null, badges = null, cheer = null, formable = false, keeperDrag = false }) {
+  // bij slepen (formable) blijft ook een lege linie zichtbaar, zodat je er iemand naartoe kunt slepen
+  lines = { V: lines.V || 0, M: lines.M || 0, A: lines.A || 0 };
+  const rows = ['V', 'M', 'A'].filter((l) => lines[l] > 0 || formable);
   // linies gelijk verdeeld tussen de bovenrand en de keeper (middelpunten in %)
   const START = 5, END = 78;
   const tops = rows.map((_, r) => `${START + ((r + 0.5) * (END - START)) / rows.length}%`);
@@ -620,6 +622,7 @@ export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = []
     <span class="arc top"></span>
     <span class="arc bottom"></span>
     ${formable && rows.map((l, r) => html`<span class="lane" key=${'ln' + l} data-l=${l} style=${`top:${(START + r * band).toFixed(2)}%;height:${band.toFixed(2)}%;--r:${r}`} aria-hidden="true"><b>${LANE_NAMES[l]}</b></span>`)}
+    ${formable && rows.filter((l) => !lines[l]).map((l) => html`<span class="lane-empty" key=${'le' + l} style=${`top:${tops[rows.indexOf(l)]}`} aria-hidden="true">${LANE_NAMES[l][0].toUpperCase() + LANE_NAMES[l].slice(1)} leeg · sleep hierheen</span>`)}
     ${formable && rows.flatMap((l, r) => Array.from({ length: lines[l] + 1 }, (_, k) => html`<span class="addslot" key=${'ad' + l + k + ':' + lines[l]} data-pid=${'line:' + l + ':' + k} data-l=${l}
       style=${`left:${(((k + 0.5) / (lines[l] + 1)) * 100).toFixed(2)}%;top:${tops[r]};--k:${k};--r:${r}`} aria-hidden="true"></span>`))}
     ${mem.current.exits.map((x) => html`<span class="spot exitspot" key=${'x' + x.id + x.t} style=${`left:${x.left};top:${x.top};--d:${(x.i * 0.18).toFixed(2)}s`} aria-hidden="true"><span class="pill" style=${pillStyle}>${x.name}</span></span>`)}
@@ -627,7 +630,7 @@ export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = []
       const n = lines[l];
       return Array.from({ length: n }, (_, i) => spot(slots[l + i], `${((i + 1) / (n + 1)) * 100}%`, tops[r], l + i));
     })}
-    ${keeperId && html`<button type="button" class=${'spot keeperspot' + (hot && hot === keeperId ? ' scored' : '')} key=${'k' + keeperId + (hot === keeperId ? ':' + hotKey : '')} style="left:50%;bottom:16px;top:auto" disabled=${!onKeeper} onClick=${() => onKeeper && onKeeper(keeperId)} aria-label=${'Keeper ' + nick(keeperId)}>${goalMark(keeperId, true)}<${KeeperPill} name=${nick(keeperId)} /></button>`}
+    ${keeperId && html`<button type="button" class=${'spot keeperspot' + (hot && hot === keeperId ? ' scored' : '')} key=${'k' + keeperId + (hot === keeperId ? ':' + hotKey : '')} style="left:50%;bottom:16px;top:auto" disabled=${!onKeeper && !keeperDrag} data-pid=${keeperDrag ? keeperId : undefined} onClick=${() => onKeeper && onKeeper(keeperId)} aria-label=${'Keeper ' + nick(keeperId)}>${goalMark(keeperId, true)}<${KeeperPill} name=${nick(keeperId)} /></button>`}
   </div>`;
 }
 

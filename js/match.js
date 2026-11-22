@@ -121,6 +121,16 @@ export function moveStory(slots, lines, moves) {
   });
 }
 
+// Korte namen voor plekken (labels onder een pil). Achter LB · CV · RB (linksback, centrale verdediger,
+// rechtsback), midden LM · CM · RM, voor LV · MV · RV (linksvoor, midvoor, rechtsvoor). Links = links op
+// het scherm (het team speelt naar boven). Geen 'A' voor aanval of achter: dat leest verwarrend.
+export function posShort(line, i, n) {
+  const c = { A: 'CV', M: 'CM', V: 'MV' }[line], l = { A: 'LB', M: 'LM', V: 'LV' }[line], r = { A: 'RB', M: 'RM', V: 'RV' }[line];
+  if (!c) return '';
+  if (n <= 1) return c;
+  return i === 0 ? l : i === n - 1 ? r : c;
+}
+
 // Wat de coach roept bij een wisselmoment: wie eruit, en per kind dat erin komt of van plek verandert
 // waar hij aan het eind staat. Tussenstappen vallen weg (schuift iemand twee keer, dan telt alleen zijn
 // eindplek) en wie op zijn eigen plek terugkomt, staat er niet in. Erin eerst, daarna van voor naar achter.
@@ -1579,6 +1589,19 @@ export function gpRoom(match, team, pos, l) {
 }
 // Zet de opstelling van blok b (door de coach of de voorzet). Het eerste volle blok op een leeg bord is de basis:
 // dat loopt door tot het eind van de wedstrijd. Daarna staat elk blok op zichzelf.
+// Twee spelers in dezelfde linie ruilen van plek (links/rechts) in één blok; nog eens = terug.
+export function gpSwapSlots(match, team, b, a, c) {
+  const gp = match.gameplan;
+  if (!gp || !gp.grid[b] || !gp.grid[b][a] || gp.grid[b][a] !== gp.grid[b][c]) return false;
+  gp.sw = gp.sw || {};
+  const list = (gp.sw[b] || []).slice();
+  const i = list.findIndex(([x, y]) => (x === a && y === c) || (x === c && y === a));
+  if (i !== -1) list.splice(i, 1); else list.push([a, c]);
+  gp.sw[b] = list;
+  gp.src[b] = 'coach';
+  gpSync(match, team);
+  return true;
+}
 export function gpSetBlock(match, team, b, pos, src = 'coach') {
   const gp = match.gameplan;
   if (!gp) return;
@@ -1679,13 +1702,17 @@ export function gpSync(match, team) {
     let pos = gp.grid[bl.b];
     if (!gpComplete(match, team, pos)) pos = prev; // onvolledig blok: telt als ongewijzigd (zie Controle)
     if (!pos) continue;
+    // plekruilen binnen een linie die de coach op het veld deed (links/rechts), aan het begin van dit blok
+    const sw = (gp.sw && gp.sw[bl.b] && pos === gp.grid[bl.b] ? gp.sw[bl.b] : []).filter(([a, c]) => pos[a] && pos[a] === pos[c]);
+    const swapIn = (sl) => { for (const [a, c] of sw) { const ka = slotOf(sl, a), kc = slotOf(sl, c); if (ka && kc) sl = { ...sl, [ka]: c, [kc]: a }; } return sl; };
     if (bl.i === 0) {
       const bl0 = gpCount(pos);
-      const slots = reslot(prevSlots, pos, bl0, players);
+      const slots = swapIn(reslot(prevSlots, pos, bl0, players));
       lineups[bl.p] = { pos: { ...pos }, bench: ids.filter((id) => !(id in pos)), slots, lines: bl0 };
       prevSlots = slots;
     } else if (prev) {
-      const { pairs, moves } = gpDiff(prev, pos);
+      const { pairs, moves: lm } = gpDiff(prev, pos);
+      const moves = lm.concat(sw.map(([a, c]) => ({ a, b: c })));
       if (pairs.length || moves.length) pins.push({ t: bl.t, pairs, moves, after: 'terug' });
       // plekken (links/rechts) volgen de wissels zoals live
       let sl = { ...prevSlots };

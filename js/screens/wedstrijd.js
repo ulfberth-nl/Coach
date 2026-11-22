@@ -16,6 +16,15 @@ import { Field, Neon, Roll, Sheet, CallStory, Confirm, Seg, Stepper, Icon, accen
 // slepen in de startopstelling: twee spelers ruilen, of een speler naar een lege plek in een andere linie
 // (dan verandert de opstelling voor deze wedstrijd). Het plan rekent daarna opnieuw.
 export function conceptDrop(mut, team, a, b) {
+  // keeper slepen: wie op de keeper landt (of de keeper op wie hij landt) keept; de oude keeper neemt zijn plek
+  const kid = mut((m) => m.keeperId);
+  if (kid && (a === kid || b === kid)) {
+    const who = a === kid ? b : a;
+    if (who.slice(0, 5) === 'line:') return;
+    mut((m, d) => conceptKeeper(d, who));
+    toast(`${M.nickOf(team, who)} keept · ${M.nickOf(team, kid)} neemt zijn plek · plan opnieuw berekend`);
+    return;
+  }
   if (b.slice(0, 5) === 'line:') {
     const [, to, at] = b.split(':');
     const lines = mut((m, d) => M.changeFormation(m, d.teams.find((t) => t.id === m.teamId), a, to, +at));
@@ -24,6 +33,32 @@ export function conceptDrop(mut, team, a, b) {
   }
   mut((m, d) => M.swapInStartLineup(m, d.teams.find((t) => t.id === m.teamId), a, b));
   toast(`${M.nickOf(team, a)} ↔ ${M.nickOf(team, b)} · plan opnieuw berekend`);
+}
+
+// Keeper wisselen bij het voorbereiden door te slepen. De opstelling blijft zoals hij is: de oude keeper neemt de
+// plek van de nieuwe keeper (op het veld of op de bank).
+export function conceptKeeper(d, who) {
+  const i = d.matches.findIndex((x) => x.id === d.currentMatchId);
+  if (i === -1) return;
+  const m = d.matches[i];
+  const old = m.keeperId;
+  if (!old || who === old || m.present.indexOf(who) === -1) return;
+  const ev = m.events[0];
+  const pos = { ...ev.pos }, bench = ev.bench.slice(), slots = { ...(ev.slots || {}) };
+  if (who in pos) {
+    pos[old] = pos[who]; delete pos[who];
+    for (const k in slots) if (slots[k] === who) slots[k] = old;
+  } else {
+    const j = bench.indexOf(who);
+    if (j !== -1) bench[j] = old; else bench.push(old);
+  }
+  rebuildConcept(d, { keeperId: who });
+  const n = d.matches[i];
+  const t = d.teams.find((x) => x.id === n.teamId);
+  if (n.keeperId !== who) return;
+  n.events[0] = { ...n.events[0], pos, bench, slots };
+  M.replan(n, t);
+  n.setup = { ...(n.setup || {}), keeper: true };
 }
 
 // ---------- concept-wedstrijd (nog niet begonnen) ----------
@@ -176,7 +211,8 @@ function PrepView({ state, match, team }) {
       : html`
         <${PlanChoice} match=${match} team=${team} swaps=${swaps} perMoment=${perMoment} />
         <div class="grow-field"><${PlanView} match=${match} team=${team} compact editable=${!M.isOwn(match, team)}
-          onSwap=${(a, b) => conceptDrop(mutateConcept, team, a, b)} /></div>`}
+          onSwap=${(a, b) => conceptDrop(mutateConcept, team, a, b)}
+          onPinHere=${(t, pairs, no) => { mutateConcept((m, d) => M.pinMoment(m, d.teams.find((x) => x.id === m.teamId), t, pairs)); toast(`Wissel ${no} vastgezet · de rest rekent de app opnieuw`); }} /></div>`}
     <div class="prepdock">
       <button type="button" class="btn primary startbtn" disabled=${tooFew} onClick=${() => (emptyGp ? setSheet('gpleeg') : todo.length ? setSheet('confirm') : start())}>
         <${Icon} name="play" size=${20} /><span class="sb-t"><b>Start</b><small>tik bij de aftrap</small></span>
@@ -582,45 +618,48 @@ function LiveView({ match, team }) {
     else if (next) go('/plan');
   };
 
-  // ronde wisselknop in het eiland: vasthouden tot de ring vol is, dan draaien de pijlen een slag rond en
-  // gebeurt de wissel op het veld. Kort tikken doet niets behalve uitleggen hoe het werkt.
+  // ronde wisselknop in het eiland: schuif de ring naar links over het eiland (je duim gaat van het veld af en
+  // het eiland loopt vol). Voorbij ~60% en loslaten = de pijlen draaien een slag rond en de wissel gebeurt op
+  // het veld. Eerder loslaten = de ring veert terug. Kort tikken doet niets behalve uitleggen hoe het werkt.
   const [spinning, setSpinning] = useState(false);
   const [spinKey, setSpinKey] = useState(0);
   const [holdHint, setHoldHint] = useState(0);
-  const holdRef = useRef(null);
-  const HOLD = 650;
-  const setHold = (el, v) => el && el.style.setProperty('--hold', v.toFixed(3));
-  const holdTick = () => {
-    const h = holdRef.current;
-    if (!h) return;
-    const p = Math.min(1, (performance.now() - h.t0) / HOLD);
-    setHold(h.el, p);
-    if (!h.half && p >= 0.5) { h.half = true; haptic('select'); }
-    if (p >= 1) { h.done = true; h.el.classList.remove('holding'); h.el.classList.add('held'); swapFromRing(); return; }
-    h.raf = requestAnimationFrame(holdTick);
-  };
+  const slideRef = useRef(null);
+  const SLIDE_OK = 0.6;
+  const setSlide = (el, px, f) => { if (!el) return; el.style.setProperty('--sx', px.toFixed(1) + 'px'); if (el.parentElement) el.parentElement.style.setProperty('--sf', f.toFixed(3)); };
   const ringDown = (e) => {
-    if (e.button > 0 || spinning || !group.length) return;
+    if (e.button > 0 || spinning || !(group.length || moNow)) return;
     const el = e.currentTarget;
-    holdRef.current = { el, t0: performance.now(), x: e.clientX, y: e.clientY, done: false, half: false, raf: 0 };
+    const isl = el.parentElement && el.parentElement.querySelector('.island');
+    const r = el.getBoundingClientRect(), ir = isl ? isl.getBoundingClientRect() : r;
+    slideRef.current = { el, x0: e.clientX, y0: e.clientY, t0: Date.now(), track: Math.max(90, r.left - ir.left - 4), f: 0, over: false };
     try { el.setPointerCapture(e.pointerId); } catch (x) { /* oud toestel */ }
     el.classList.remove('held');
-    el.classList.add('holding');
+    el.classList.add('sliding'); el.parentElement.classList.add('sliding');
     setHoldHint(0);
-    holdRef.current.raf = requestAnimationFrame(holdTick);
   };
-  const ringStop = (early) => {
-    const h = holdRef.current;
-    holdRef.current = null;
-    if (!h) return;
-    cancelAnimationFrame(h.raf);
-    h.el.classList.remove('holding');
-    if (h.done) return;
-    // te vroeg losgelaten: de ring loopt terug en zegt hoe het werkt
-    setHold(h.el, 0);
-    if (early) { setHoldHint(Date.now()); haptic('no'); }
+  const ringMove = (e) => {
+    const s = slideRef.current;
+    if (!s) return;
+    const px = Math.max(-s.track, Math.min(0, e.clientX - s.x0));
+    s.f = -px / s.track;
+    setSlide(s.el, px, s.f);
+    // een tikje als je over de drempel gaat (en weer terug)
+    if (!s.over && s.f >= SLIDE_OK) { s.over = true; s.el.classList.add('over'); haptic('select'); }
+    else if (s.over && s.f < SLIDE_OK - 0.08) { s.over = false; s.el.classList.remove('over'); }
   };
-  const ringMove = (e) => { const h = holdRef.current; if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > 24) ringStop(false); };
+  const ringStop = (cancel) => {
+    const s = slideRef.current;
+    slideRef.current = null;
+    if (!s) return;
+    s.el.classList.remove('sliding', 'over'); s.el.parentElement.classList.remove('sliding');
+    if (!cancel && s.f >= SLIDE_OK) { setSlide(s.el, -s.track, 1); s.el.classList.add('held'); swapFromRing(); return; }
+    setSlide(s.el, 0, 0);
+    // alleen getikt: zeg hoe het werkt; halverwege losgelaten: 'nee'
+    if (!cancel && s.f < 0.06 && Date.now() - s.t0 < 500) { setHoldHint(Date.now()); haptic('no'); }
+    else if (!cancel && s.f >= 0.06) haptic('no');
+  };
+  const resetRing = () => { const r = document.querySelector('.islandwrap > .i-ring'); if (r) { r.classList.remove('held'); setSlide(r, 0, 0); } };
   useEffect(() => { if (!holdHint) return undefined; const t = setTimeout(() => setHoldHint(0), 2600); return () => clearTimeout(t); }, [holdHint]);
   const swapFromRing = () => {
     if (spinning) return;
@@ -630,8 +669,7 @@ function LiveView({ match, team }) {
         mutate((m, t) => M.doPlannedMoves(m, t));
         toast(mo.moves.some((x) => x.to) ? 'Andere opstelling, zoals gepland' : 'Plekwissel gedaan, zoals gepland', undoAction);
         setSpinning(false);
-        const r = document.querySelector('.islandwrap > .i-ring');
-        if (r) { r.classList.remove('held'); r.style.setProperty('--hold', '0'); }
+        resetRing();
       }, reduced() ? 0 : 360);
       return;
     }
@@ -646,8 +684,7 @@ function LiveView({ match, team }) {
       mutate((m, t) => (M.isOwn(m, t) ? M.doPlannedMoment(m, t) : pairs.length > 1 ? M.doSwapGroup(m, t, pairs) : M.doSwap(m, t, pairs[0].out, pairs[0].in, pairs[0].shift)));
       showAct(pairs.length > 1 ? { outs: pairs.map((p) => p.out), undos: 1 } : { out: pairs[0].out, undos: 1 });
       setSpinning(false);
-      const r = document.querySelector('.islandwrap > .i-ring');
-      if (r) { r.classList.remove('held'); r.style.setProperty('--hold', '0'); }
+      resetRing();
     }, reduced() ? 0 : 360);
   };
 
@@ -827,10 +864,10 @@ function LiveView({ match, team }) {
     </button>
     ${isl.ring && html`<button type="button" class=${'i-ring' + (isl.swap ? ' swapbtn' : '') + (isl.swap && countdown <= 60 ? ' soon' : '') + (isl.swap && countdown <= 0 ? ' due' : '')}
       style=${isl.breathe ? `--breathe:${isl.breathe.toFixed(2)}s` : ''}
-      onPointerDown=${isl.swap ? ringDown : undefined} onPointerUp=${isl.swap ? () => ringStop(true) : undefined} onPointerCancel=${isl.swap ? () => ringStop(false) : undefined} onPointerMove=${isl.swap ? ringMove : undefined}
+      onPointerDown=${isl.swap ? ringDown : undefined} onPointerUp=${isl.swap ? () => ringStop(false) : undefined} onPointerCancel=${isl.swap ? () => ringStop(true) : undefined} onPointerMove=${isl.swap ? ringMove : undefined}
       onContextMenu=${(e) => e.preventDefault()}
       onClick=${isl.swap ? (e) => { if (e.detail === 0) swapFromRing(); } : openNext}
-      aria-label=${isl.swap ? (moNow ? 'Houd vast: plekwissel zoals gepland' : 'Houd vast om nu te wisselen: ' + group.map((s) => nick(s.in) + ' erin voor ' + nick(s.out)).join(', ')) : isl.k}>
+      aria-label=${isl.swap ? (moNow ? 'Schuif naar links: plekwissel zoals gepland' : 'Schuif naar links om nu te wisselen: ' + group.map((s) => nick(s.in) + ' erin voor ' + nick(s.out)).join(', ')) : isl.k}>
       <svg viewBox="0 0 80 80" aria-hidden="true"><circle class="track" cx="40" cy="40" r="33" /><circle class="arc" cx="40" cy="40" r="33" stroke-dasharray=${C} stroke-dashoffset=${isl.full || countdown <= 0 ? 0 : (C * (isl.frac || 0)).toFixed(1)} />${isl.swap && html`<circle class="holdarc" cx="40" cy="40" r="33" stroke-dasharray=${C} />`}</svg>
       ${isl.swap
         ? html`<span class="i-lbl swaplbl"><span class="i-arrows" key=${'sp' + spinKey}><${Icon} name="swaparrows" size=${countdown <= 0 ? 30 : 22} /></span><span class="i-time">${isl.ring}</span></span>`
@@ -838,7 +875,7 @@ function LiveView({ match, team }) {
     </button>`}
     ${isl.late && html`<span class="i-late">${isl.late}</span>`}
     ${drawer}
-    ${isl.swap && !spinning && !peek && (holdHint || countdown <= 60) && html`<span class=${'i-holdtip' + (holdHint ? ' nudge' : '')} key=${'ht' + holdHint} aria-hidden="true">${holdHint ? 'Houd vast om te wisselen' : 'houd vast'}</span>`}
+    ${isl.swap && !spinning && !peek && (holdHint || countdown <= 60) && html`<span class=${'i-holdtip' + (holdHint ? ' nudge' : '')} key=${'ht' + holdHint} aria-hidden="true">${holdHint ? '← Schuif de ring naar links om te wisselen' : '← schuif'}</span>`}
   </div>`;
 
   // zwevende wisselspelers achter de plekken die gaan veranderen

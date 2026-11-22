@@ -395,19 +395,20 @@ export function KeeperSheet({ match, team, d, onClose }) {
   return html`<${Sheet} onClose=${onClose} label="Keeper wisselen">
     <span class="h2" style="font-size:22px">Keeper wisselen</span>
     <span class="sub">Nu keept ${nick(keeper)}.</span>
+    ${bench.length > 0 && html`<div class="col">
+      <span class="label">Van de bank</span>
+      <div class="wrap">${bench.map((id) => html`<button type="button" class="chip big kp" aria-pressed=${to === id ? 'true' : 'false'} onClick=${() => setTo(id)}>${nick(id)}</button>`)}</div>
+    </div>`}
     <div class="col">
-      <span class="label">Nieuwe keeper</span>
-      <div class="wrap">
-        ${bench.map((id) => html`<button type="button" class="chip big" aria-pressed=${to === id ? 'true' : 'false'} onClick=${() => setTo(id)}>${nick(id)}<span class="small">bank</span></button>`)}
-        ${field.map((id) => html`<button type="button" class="chip big warm" aria-pressed=${to === id ? 'true' : 'false'} onClick=${() => setTo(id)}>${nick(id)}<span class="small">veld</span></button>`)}
-      </div>
+      <span class="label">Uit het veld</span>
+      <div class="wrap">${field.map((id) => html`<button type="button" class="chip big kp" aria-pressed=${to === id ? 'true' : 'false'} onClick=${() => setTo(id)}>${nick(id)}</button>`)}</div>
     </div>
     ${to && html`<div class="col">
       <span class="label">${nick(keeper)} daarna</span>
       <${Seg} label="Oude keeper" value=${m} onChange=${setMode} options=${opts} />
       ${fromField && m !== 'veld' && html`<span class="small">Er komt iemand van de bank op de plek van ${nick(to)}.</span>`}
     </div>`}
-    <${Neon} box><button type="button" class="btn primary block" style="box-shadow:none" disabled=${!to} onClick=${run}>Keeper wisselen</button></${Neon}>
+    <button type="button" class="btn primary block kp-go" disabled=${!to} onClick=${run}>${to ? html`<span class="kbadge">K</span>${nick(to)} keept vanaf nu` : 'Kies wie er keept'}</button>
     <button type="button" class="btn plain block" onClick=${onClose}>Annuleren</button>
   </${Sheet}>`;
 }

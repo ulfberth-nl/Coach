@@ -12,6 +12,7 @@ import { NextBar, MiniScore } from './plan.js';
 const STEPS = [['opzet', 'Opzet'], ['start', 'Start'], ['wissels', 'Wissels'], ['controle', 'Controle']];
 const KEYS = STEPS.map((s) => s[0]);
 const TITLE = { opzet: 'Opzet', start: 'Startopstelling', wissels: 'Wissels per blok', controle: 'Controle' };
+const LSHORT = { V: 'voor', M: 'mid', A: 'achter' };
 const LNAME = { A: 'achter', M: 'midden', V: 'voor' };
 const LTO = { A: 'achter', M: 'het midden', V: 'voor' };
 const LCAP = { V: 'Voor', M: 'Mid', A: 'Achter', B: 'Bank', K: 'Keeper' };
@@ -171,8 +172,16 @@ function Opzet({ match, team, begin, setBegin, pickN, setPickN }) {
   const [rec, setRec] = useState(null);
   const touched = useRef(false);
   const sig = style + '|' + JSON.stringify(match.lines || null) + '|' + match.keeperId + '|' + info.n;
-  // vooruit rekenen gebeurt na het tekenen; tot dan glinsteren de keuzes
-  useEffect(() => { setRec(null); const id = setTimeout(() => setRec(M.gpRecommend(match, team, style)), reduced() ? 0 : 140); return () => clearTimeout(id); }, [sig]);
+  // vooruit rekenen gebeurt pas als het scherm er staat (na de schermovergang), anders hapert die;
+  // tot dan glinsteren de keuzes. Bij een wijziging daarna (speelstijl) gaat het sneller.
+  const firstRec = useRef(true);
+  useEffect(() => {
+    setRec(null);
+    const wait = reduced() ? 0 : firstRec.current ? 560 : 140;
+    firstRec.current = false;
+    const id = setTimeout(() => setRec(M.gpRecommend(match, team, style)), wait);
+    return () => clearTimeout(id);
+  }, [sig]);
   const n = gp ? gp.n : pickN || (rec && rec.recommended) || 4;
   const total = team.periods * n;
   const many = total >= 12;
@@ -267,7 +276,7 @@ function Opzet({ match, team, begin, setBegin, pickN, setPickN }) {
 }
 
 // ---------- het liniebord ----------
-const FILTERS = [['alle', 'Alle'], ['V', 'Voor'], ['M', 'Midden'], ['A', 'Achter'], ['nog', 'Nog spelen']];
+const FILTERS = [['alle', 'Alle'], ['V', 'Voor'], ['M', 'Mid'], ['A', 'Achter'], ['let', 'Aandacht']];
 const FIT_TXT = { dominant: 'sterkste plek', voorkeur: 'voorkeur', buiten: 'buiten kracht' };
 const fitGlyph = (f) => (f === 'dominant' ? '★' : f === 'voorkeur' ? '☆' : f === 'buiten' ? '✕' : '');
 const good = (f) => f === 'dominant' || f === 'voorkeur';
@@ -306,6 +315,11 @@ function Board({ match, team, mode, wide, readOnly, focus, toStart }) {
   const prevOf = (b) => (b > 0 ? gp.grid[b - 1] || null : null);
   const tb = stats.targetBlocks;
   const lowKid = (id) => tb > 0 && stats.kids[id].blocks < Math.floor(tb + 1e-9);
+  // aandacht: te weinig gespeeld, te lang aaneen aan de kant, of (bij Sterkste opstelling) buiten zijn kracht
+  const rr0 = M.effRules(match, team);
+  const ruleSec = rr0.maxBenchOn ? (rr0.maxBench || 10) * 60 : null;
+  const attn = (id) => lowKid(id) || (ruleSec && stats.kids[id].maxRun > ruleSec + 1) || (style === 'sterk' && stats.kids[id].out > 0);
+  const attnN = ids.filter(attn).length;
 
   // een zet op het bord: wie (de gekozen speler) en waarheen (speler, lege plek, linie of bank) in één blok
   const combine = (pos, who, key) => {
@@ -391,6 +405,25 @@ function Board({ match, team, mode, wide, readOnly, focus, toStart }) {
     if (r) { apply(b, r); if (!start) setSel(from.slice(2)); }
   });
   const fresh = () => Date.now() - lastDrag.current > 350;
+  // staand: veeg over het bord naar de periode ervoor of erna (de periodeknoppen blijven bovenin staan)
+  const gridRef = useRef(null);
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el || wide || start) return undefined;
+    let st = null;
+    const down = (e) => { st = { x: e.clientX, y: e.clientY, t: Date.now() }; };
+    const up = (e) => {
+      if (!st) return;
+      const dx = e.clientX - st.x, dy = e.clientY - st.y, t0 = st.t; st = null;
+      if (lastDrag.current > t0 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+      const q = p + (dx < 0 ? 1 : -1);
+      if (q < 0 || q >= team.periods) { haptic('no'); return; }
+      haptic('select'); setP(q); setSlot(null);
+    };
+    el.addEventListener('pointerdown', down);
+    window.addEventListener('pointerup', up);
+    return () => { el.removeEventListener('pointerdown', down); window.removeEventListener('pointerup', up); };
+  }, [p, wide, start, team.periods]);
 
   // wie licht op en wie wordt rustig: eerst de gekozen speler, dan een gekozen lege plek, dan het filter
   const look = (b, id) => {
@@ -398,7 +431,7 @@ function Board({ match, team, mode, wide, readOnly, focus, toStart }) {
     if (slot && slot.b === b) return good(fitOf(players[id], slot.lane)) ? 'hl' : 'dim';
     if (slot) return 'dim';
     if (filter === 'alle') return '';
-    if (filter === 'nog') return lowKid(id) ? 'hl' : 'dim';
+    if (filter === 'let') return attn(id) ? 'hl' : 'dim';
     return good(fitOf(players[id], filter)) ? 'hl' : 'dim';
   };
 
@@ -534,9 +567,9 @@ function Board({ match, team, mode, wide, readOnly, focus, toStart }) {
     ${(start || gp.base) && html`<div class=${'gp-work' + (wide ? ' wide' : '')}>
       ${!start && html`<div class="gp-filters" role="toolbar" aria-label="Filter">
         ${FILTERS.map(([k, label]) => html`<button type="button" key=${k} class=${'gf' + (filter === k && !sel ? ' on' : '')} aria-pressed=${filter === k ? 'true' : 'false'}
-          onClick=${() => { haptic('select'); setFilter(k); setSel(null); setSlot(null); setNeed(null); }}>${k !== 'alle' && k !== 'nog' && html`<i style=${'background:var(--pos-' + k + ')'}></i>`}${label}</button>`)}
+          onClick=${() => { haptic('select'); setFilter(k); setSel(null); setSlot(null); setNeed(null); }}>${k !== 'alle' && k !== 'let' && html`<i style=${'background:var(--pos-' + k + ')'}></i>`}${label}${k === 'let' && attnN > 0 && html`<b class="gf-n">${attnN}</b>`}</button>`)}
       </div>`}
-      <div class="gp-gridwrap">${grid}</div>
+      <div class="gp-gridwrap" ref=${gridRef}>${grid}</div>
     </div>`}
     ${!sel && fieldB == null && impEl(false)}
     ${hint && html`<p class="gp-hint" key=${hint}>${hint}</p>`}
@@ -564,7 +597,7 @@ function Board({ match, team, mode, wide, readOnly, focus, toStart }) {
       <button type="button" class="gsb-x" onClick=${() => { setSel(null); setNeed(null); haptic('select'); }} aria-label="Klaar met deze speler"><${Icon} name="x" size=${18} /></button>
     </div></${Portal}>`}
     ${!start && allOk && gp.base && !readOnly && !sel && stats.blocks.some((x) => x.swaps || x.moves) && html`<p class="gp-ok"><${Icon} name="check" size=${15} />Alle blokken zijn vol. Kijk bij Controle hoe het plan uitpakt.</p>`}
-    ${fieldB != null && html`<${BlockField} match=${match} team=${team} b=${fieldB} setB=${setFieldB} combine=${combine} apply=${apply} undo=${undo} canUndo=${hist.length > 0}
+    ${fieldB != null && html`<${BlockField} match=${match} team=${team} b=${fieldB} setB=${setFieldB} combine=${combine} apply=${apply} undo=${undo} canUndo=${hist.length > 0} pushHist=${pushHist}
       sel=${sel} setSel=${setSel} need=${need} readOnly=${readOnly} impactEl=${impEl(false)} onClose=${() => { haptic('select'); setFieldB(null); setP(blocks[fieldB].p); }} />`}
     ${impOpen && impact && html`<${ImpactSheet} match=${match} team=${team} impact=${impact} onClose=${() => { setImpOpen(false); setImpact(null); }} onApplied=${pushHist} />`}
     ${winsOpen && html`<${WinsSheet} match=${match} team=${team} onClose=${() => setWinsOpen(false)} onApplied=${pushHist} />`}
@@ -801,7 +834,7 @@ function WinsSheet({ match, team, onClose, onApplied }) {
 // Een blok op het veld. Schuiven zoals live: bank op veld = wissel, veld op veld = ruilen van linie, naar een
 // lege plek (+) = andere opstelling. Een wijziging geldt alleen voor dit blok. Veeg over het veld naar het blok
 // ervoor of erna; de gekozen speler blijft gekozen. Zelfde ongedaan-knop als het bord.
-function BlockField({ match, team, b, setB, combine, apply, undo, canUndo, sel, setSel, need, readOnly, impactEl, onClose }) {
+function BlockField({ match, team, b, setB, combine, apply, undo, canUndo, pushHist, sel, setSel, need, readOnly, impactEl, onClose }) {
   const gp = match.gameplan;
   const blocks = M.gpBlocks(match, team, gp.n);
   const bl = blocks[b];
@@ -828,7 +861,26 @@ function BlockField({ match, team, b, setB, combine, apply, undo, canUndo, sel, 
     return { slots: M.makeSlots(pos, lines, players), lines };
   }, [match, team, b]);
   const bench = ids.filter((id) => !(id in pos));
-  const chg = (id) => { if (!prev || !gp.grid[b]) return ''; const was = prev[id] || 'B', now = pos[id] || 'B'; return was === now ? '' : was === 'B' ? 'in' : now === 'B' ? 'out' : 'mv'; };
+  // waar stond iemand in het blok ervoor (plek, zoals het plan hem neerzette)
+  const prevSlots = useMemo(() => {
+    if (!prev) return null;
+    const pb = blocks[b - 1];
+    const c = cards.filter((x) => x.t <= pb.t + 0.5).pop();
+    return c && c.slots ? { slots: c.slots, lines: c.lines || M.gpCount(prev) } : null;
+  }, [match, team, b]);
+  const wasAt = (id) => {
+    const k = prevSlots && Object.keys(prevSlots.slots).find((x) => prevSlots.slots[x] === id);
+    return k ? M.posShort(k[0], +k.slice(1), prevSlots.lines[k[0]] || 0) : LSHORT[prev[id]];
+  };
+  const nowAt = (id) => Object.keys(view.slots).find((x) => view.slots[x] === id);
+  const chg = (id) => {
+    if (!prev || !gp.grid[b]) return '';
+    const was = prev[id] || 'B', now = pos[id] || 'B';
+    if (was !== now) return was === 'B' ? 'in' : now === 'B' ? 'out' : 'mv';
+    // zelfde linie, andere plek (links/rechts geruild)
+    if (now !== 'B' && prevSlots) { const k = nowAt(id); const pk = Object.keys(prevSlots.slots).find((x) => prevSlots.slots[x] === id); if (k && pk && M.posShort(k[0], +k.slice(1), view.lines[k[0]] || 0) !== M.posShort(pk[0], +pk.slice(1), prevSlots.lines[pk[0]] || 0)) return 'mv'; }
+    return '';
+  };
   const tb = stats.targetBlocks;
   const lvl = (id) => { const k = stats.kids[id]; return tb <= 0 ? '' : k.blocks < Math.floor(tb + 1e-9) ? 'low' : k.blocks > Math.ceil(tb - 1e-9) ? 'high' : 'ok'; };
 
@@ -857,7 +909,11 @@ function BlockField({ match, team, b, setB, combine, apply, undo, canUndo, sel, 
     if (lane && !(a in pos) && placed < F) return combine(pos, a, 'e:' + lane);
     return combine(pos, a, keyOf(x));
   };
+  // twee spelers in dezelfde linie: van plek ruilen (links/rechts), alleen in dit blok
+  const sameLine = (a, x) => x.slice(0, 5) !== 'line:' && a in pos && x in pos && pos[a] === pos[x];
+  const swapSlots = (a, x) => { const before = snap(gp); mutate((m, t) => M.gpSwapSlots(m, t, b, a, x)); pushHist(before); haptic('select'); };
   const hint = (a, x) => {
+    if (sameLine(a, x)) return `Ruil van plek met ${nick(x)}`;
     const r = tryDrop(a, x);
     if (!r) return null;
     const lane = x.slice(0, 5) === 'line:' ? x.split(':')[1] : null;
@@ -865,7 +921,7 @@ function BlockField({ match, team, b, setB, combine, apply, undo, canUndo, sel, 
     if (r.kind === 'move') return `Ruil van linie met ${nick(x)}`;
     return a in pos ? `${nick(x)} erin` : `Erin voor ${nick(x)}`;
   };
-  useDragSwap(zone, !readOnly, (a, x) => { const r = tryDrop(a, x); if (r) { apply(b, r); setSel(x.slice(0, 5) === 'line:' || !(a in pos) ? a : sel); } }, hint, { benchSlots: true });
+  useDragSwap(zone, !readOnly, (a, x) => { if (sameLine(a, x)) { swapSlots(a, x); return; } const r = tryDrop(a, x); if (r) { apply(b, r); setSel(x.slice(0, 5) === 'line:' || !(a in pos) ? a : sel); } }, hint, { benchSlots: true });
   // vegen over het veld: naar het blok ervoor of erna
   useEffect(() => {
     const el = zone.current;
@@ -902,7 +958,7 @@ function BlockField({ match, team, b, setB, combine, apply, undo, canUndo, sel, 
   const below = (id) => {
     const c = chg(id), f = fitOf(players[id], pos[id]);
     if (!c && (f === 'neutraal' || !f)) return null;
-    return html`<span class="bf-tag">${c === 'in' ? html`<i class="in">erin</i>` : c === 'mv' ? html`<i class="mv">was ${LNAME[prev[id]]}</i>` : ''}${f && f !== 'neutraal' && html`<i class=${'fit ' + f}>${fitGlyph(f)}</i>`}</span>`;
+    return html`<span class="bf-tag">${c === 'in' ? html`<i class="in">erin</i>` : c === 'mv' ? html`<i class="mv">was ${wasAt(id)}</i>` : ''}${f && f !== 'neutraal' && html`<i class=${'fit ' + f}>${fitGlyph(f)}</i>`}</span>`;
   };
   const rel = bl.t - bl.p * L, rel1 = bl.t1 - bl.p * L;
   const sk = sel ? stats.kids[sel] : null;
