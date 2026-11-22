@@ -1,7 +1,7 @@
 import { html, render, useEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { useStore } from './store.js';
 import { installPress, viewTransition, canTransition } from './motion.js';
-import { ToastHost, FlashHost, Icon, toast } from './ui.js';
+import { ToastHost, FlashHost, Icon, toast, appInfo } from './ui.js';
 import { Wedstrijd } from './screens/wedstrijd.js';
 import { Plan } from './screens/plan.js';
 import { Afloop } from './screens/afloop.js';
@@ -94,6 +94,6 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('./sw.js').catch(() => {});
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (hadController) toast('Nieuwe versie klaar', { label: 'Vernieuwen', run: () => location.reload() });
+    if (hadController) { appInfo.updateReady = true; toast('Nieuwe versie klaar', { label: 'Vernieuwen', run: () => location.reload() }); }
   });
 }

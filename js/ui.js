@@ -26,6 +26,9 @@ let toastState = null;
 const toastSubs = new Set();
 let toastTimer = null;
 const emit = () => toastSubs.forEach((f) => f(toastState));
+// app-informatie: staat er een nieuwe versie klaar (de service worker is al bijgewerkt)?
+export const appInfo = { updateReady: false };
+
 export function toast(text, action) {
   toastState = { text, action, key: Date.now(), leaving: false };
   emit();

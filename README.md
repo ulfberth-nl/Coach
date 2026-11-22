@@ -140,6 +140,7 @@ Achter **LB · CV · RB** (linksback, centrale verdediger, rechtsback), midden *
 
 ## Gegevens en back-up
 
+- **Versie:** onderaan de Team-pagina (*SpaBo Coach · versie …*; staat er een nieuwe versie klaar, dan *Nieuwe versie klaar · Vernieuwen*) en onderin het ⋯-menu van het Wedstrijd-scherm.
 - **Laatste back-up:** bij Team → Gegevens staat wanneer je de laatste back-up maakte (oranje als het nooit gebeurde of langer dan 14 dagen geleden is).
 
 De app maakt geen verbinding met andere diensten: geen koppelingen, geen analytics, geen lettertypes of scripts van buitenaf. Alleen de bestanden van de app zelf worden (één keer) geladen en daarna bewaard voor gebruik zonder bereik.

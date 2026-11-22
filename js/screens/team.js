@@ -2,13 +2,13 @@ import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { update, activeTeam, currentMatch, newTeam, exportData, importData } from '../store.js';
 import { periodWord } from '../match.js';
 import { suggestKeeper } from './home.js';
-import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, Reveal, toast, STANDS } from '../ui.js';
+import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, Reveal, toast, STANDS, appInfo } from '../ui.js';
 import { devicePrefs, setDevicePref, onDevicePrefs, osReduced } from '../motion.js';
 import { PROFILES, PROFILE_ORDER, profileOf, cachedTune, rememberTune, consequences } from '../profiles.js';
 import { compute } from '../compute.js';
 import { scheduleRefresh } from '../refresh.js';
 
-export const APP_VERSION = '0.24.4';
+export const APP_VERSION = '0.24.5';
 
 // regels die het wisselprofiel bepaalt; zet je er zelf een, dan wordt het profiel 'Eigen'
 const TUNED = ['marge', 'equalTime', 'evenOften', 'maxBenchOn', 'maxBench', 'minInterval', 'turnsPerPeriod', 'priority', 'strongBias'];
@@ -325,8 +325,14 @@ export function Team({ state }) {
         d.activeTeamId = d.teams[0].id;
         if (d.currentMatchId && !d.matches.some((m) => m.id === d.currentMatchId)) d.currentMatchId = null;
       }) })}>Team verwijderen</button>`}
-      <span class="small" style="text-align:center">Versie ${APP_VERSION}</span>
     </section>
+
+    <footer class="appver">
+      <span class="appver-n"><b>SpaBo Coach</b> · versie ${APP_VERSION}</span>
+      ${appInfo.updateReady
+        ? html`<button type="button" class="link" onClick=${() => location.reload()}>Nieuwe versie klaar · Vernieuwen</button>`
+        : html`<span class="small">Nieuwe versies komen vanzelf binnen.</span>`}
+    </footer>
 
     ${confirm && html`<${Confirm} title=${confirm.title} text=${confirm.text} yes=${confirm.yes} danger=${confirm.danger} onYes=${confirm.run} onClose=${() => setConfirm(null)} />`}
   </main>`;

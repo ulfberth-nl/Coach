@@ -2214,3 +2214,7 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 .pv-lock b { color: #fff; font-weight: 900; }
 .pv-lock::before { content: ''; position: absolute; inset: -6px; }
 .field .pill.nope, .benchpill.nope { animation: noShakeA .42s var(--ease-out); }
+/* versie: rustig onderaan de Team-pagina en in het ⋯-menu */
+.appver { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0 8px; text-align: center; color: var(--muted); }
+.appver-n { font-size: 13px; font-weight: 700; } .appver-n b { color: var(--ink); font-weight: 900; }
+.appver-mini { align-self: center; font-size: 12px; font-weight: 700; color: var(--muted); }

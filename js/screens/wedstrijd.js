@@ -9,6 +9,7 @@ import { matchRules } from '../profiles.js';
 import { scheduleRefresh } from '../refresh.js';
 import { viewTransition, haptic, reduced, T as TEMPO } from '../motion.js';
 import { switchPlanMode } from './plan.js';
+import { APP_VERSION } from './team.js';
 import { Rooster } from './gameplan.js';
 import { mutate, undoAction, liveAct, SwapSheet, GroupSwapSheet, BenchSheet, GoalSheet, JoinSheet, KeeperSheet } from './live.js';
 import { Field, Neon, Roll, Sheet, CallStory, Confirm, Seg, Stepper, Icon, accentFor, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, BenchScroll, beep, flash, unlockAudio, toast, go } from '../ui.js';
@@ -1029,6 +1030,7 @@ function GameMenu({ match, team, live, onClose, onSheet }) {
       <a class="btn plain grow" href="#/seizoen">Seizoen</a>
       <a class="btn plain grow" href="#/team">Team</a>
     </div>
+    <span class="appver-mini">SpaBo Coach · versie ${APP_VERSION}</span>
   </${Sheet}>`;
 }
 
