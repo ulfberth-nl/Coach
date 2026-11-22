@@ -115,7 +115,7 @@ export function pairsAfterDrag(next, out, inn, perMoment) {
   return list;
 }
 
-export function PlanView({ match, team, editable = false, onSwap, initialIndex = 0, nowIndex = -1, compact = false, liveT = null, onSwapNow = null, planner = false, onPin = null, onUnpin = null, onIndex = null, children = null, onPinHere = null, onLocked = null }) {
+export function PlanView({ match, team, editable = false, onSwap, initialIndex = 0, nowIndex = -1, compact = false, liveT = null, onSwapNow = null, planner = false, onPin = null, onUnpin = null, onIndex = null, children = null, onPinHere = null, onLocked = null, onTour = null }) {
   const nick = (id) => M.nickOf(team, id);
   const END = M.matchEnd(team);
   const L = M.periodLen(team);
@@ -206,7 +206,7 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
       if (said) return; said = true;
       if (pill) { pill.classList.remove('nope'); void pill.offsetWidth; pill.classList.add('nope'); }
       haptic('no');
-      onLocked(false);
+      onLocked();
     };
     const down = (e) => {
       const p = e.target.closest('[data-pid]');
@@ -343,7 +343,7 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
               onTap=${() => {}} neon=${changes(cards, i + 1).in} accent=${accentFor(team)} />`
           : html`<${Field} slots=${c.slots} lines=${lines} formable=${canEdit || canPinHere} keeperDrag=${canEdit && !!match.keeperId} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
               onTap=${() => {}} neon=${planner ? nxOuts : []} marked=${planner ? [] : ch.in} dashed=${!planner && ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} ghosts=${planner && !peek && !calm ? ghostsFor(nx, c.pos, nick) : null} />`}
-        ${onLocked && !planner && html`<button type="button" class="pv-lock" onClick=${() => onLocked(true)}><${Icon} name="lock" size=${13} /><span>Game plan</span><b>Aanpassen</b><${Icon} name="chev" size=${13} /></button>`}
+        ${onTour && !planner && html`<button type="button" class=${'pv-lock' + (onLocked ? ' locked' : '')} onClick=${onTour} aria-label=${onLocked ? 'Game plan: alleen bekijken. Uitleg' : 'Autopilot. Uitleg'}><${Icon} name=${onLocked ? 'lock' : 'spark'} size=${13} /><b>Uitleg</b></button>`}
         ${planner && peek && nx && html`<span class="peeklabel" role="status"><${Icon} name="eye" size=${15} />${nx.kind === 'lineup' ? 'Opstelling ' + M.periodLabel(team, nx.period) : 'Na wissel ' + swapNoOf(nx)}</span>`}
       </div>
       <div class="benchrow">

@@ -8,7 +8,7 @@ import { PROFILES, PROFILE_ORDER, profileOf, cachedTune, rememberTune, consequen
 import { compute } from '../compute.js';
 import { scheduleRefresh } from '../refresh.js';
 
-export const APP_VERSION = '0.24.5';
+export const APP_VERSION = '0.24.6';
 
 // regels die het wisselprofiel bepaalt; zet je er zelf een, dan wordt het profiel 'Eigen'
 const TUNED = ['marge', 'equalTime', 'evenOften', 'maxBenchOn', 'maxBench', 'minInterval', 'turnsPerPeriod', 'priority', 'strongBias'];
@@ -243,7 +243,7 @@ export function Team({ state }) {
     <section class="card">
       <span class="h2">Wisselen</span>
       <span class="label">Nieuwe wedstrijd begint met</span>
-      <${Seg} label="Nieuwe wedstrijd begint met" value=${r.planMode === 'eigen' ? 'eigen' : 'app'} onChange=${(v) => setRule('planMode', v)} options=${[['app', 'Standaardplan'], ['eigen', 'Game plan']]} />
+      <${Seg} label="Nieuwe wedstrijd begint met" value=${r.planMode === 'eigen' ? 'eigen' : 'app'} onChange=${(v) => setRule('planMode', v)} options=${[['app', 'Autopilot'], ['eigen', 'Game plan']]} />
       <span class="small">${r.planMode === 'eigen'
         ? 'Je legt per wedstrijd zelf de puzzel op het liniebord: startopstelling, dan wie waar speelt per blok. De app rekent mee en kan een voorzet doen.'
         : 'De app maakt het plan volgens de instellingen hieronder. Per wedstrijd kun je ook een game plan maken.'}</span>

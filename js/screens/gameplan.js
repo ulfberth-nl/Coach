@@ -249,7 +249,7 @@ function Opzet({ match, team, begin, setBegin, pickN, setPickN }) {
       <span><small>Per grens</small><b class="num">${info.bench}×</b></span>
     </div>`}
     ${rec && recO && html`<${AiNote} title=${'Advies: ' + rec.recommended + ' blokken per ' + pw} action=${rec.recommended !== n ? html`<button type="button" class="ai-apply" onClick=${() => setN(rec.recommended)}>Neem advies over</button>` : null}>
-      ${info.n} veldspelers en ${info.F} in het veld: ${info.bench} op de bank. Per blokgrens wisselt de hele bank, ${info.bench} tegelijk${per < info.bench ? ` (je standaardplan wisselt ${per} per moment)` : ''}. Zo speelt iedereen ${mins(recO.minPlayed)}–${mins(recO.maxPlayed)} min${maxB ? ` en zit niemand langer dan ${mins(recO.maxStretch)} min aan de kant (regel ${maxB})` : ''}. De ${breakWord(team)} is een extra wisselmoment.
+      ${info.n} veldspelers en ${info.F} in het veld: ${info.bench} op de bank. Per blokgrens wisselt de hele bank, ${info.bench} tegelijk${per < info.bench ? ` (Autopilot wisselt ${per} per moment)` : ''}. Zo speelt iedereen ${mins(recO.minPlayed)}–${mins(recO.maxPlayed)} min${maxB ? ` en zit niemand langer dan ${mins(recO.maxStretch)} min aan de kant (regel ${maxB})` : ''}. De ${breakWord(team)} is een extra wisselmoment.
     </${AiNote}>`}
   </section>
 

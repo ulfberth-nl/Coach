@@ -2218,3 +2218,22 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 .appver { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0 8px; text-align: center; color: var(--muted); }
 .appver-n { font-size: 13px; font-weight: 700; } .appver-n b { color: var(--ink); font-weight: 900; }
 .appver-mini { align-self: center; font-size: 12px; font-weight: 700; color: var(--muted); }
+/* uitleg over de twee manieren: lichte laag, kaart per manier, tik = verder */
+.mtour { position: fixed; inset: 0; z-index: 45; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: calc(16px + var(--safe-t)) 16px calc(24px + var(--safe-b)); background: rgba(13,27,69,.42); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); animation: fadeIn var(--t-small) ease both; cursor: pointer; }
+.mt-card { width: min(100%, 420px); display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 24px; background: rgba(255,255,255,.96); box-shadow: 0 24px 60px -20px rgba(13,27,69,.7); cursor: default; animation: mtIn var(--t-screen) var(--spring-soft) both; }
+@keyframes mtIn { from { opacity: 0; translate: 0 16px; scale: .97; } }
+.mt-card.ai { border: 2px solid transparent; background: linear-gradient(rgba(255,255,255,.97), rgba(255,255,255,.97)) padding-box, var(--ai-conic) border-box; animation: mtIn var(--t-screen) var(--spring-soft) both, aiSpin 6s linear infinite; }
+.mt-top { display: flex; align-items: center; gap: 8px; }
+.mt-name { font-size: 20px; font-weight: 900; }
+.mt-on { display: inline-flex; align-items: center; gap: 3px; padding: 3px 9px; border-radius: 99px; background: #E8F7EE; color: #0E6B31; font-size: 12px; font-weight: 900; }
+.mt-off { padding: 3px 9px; border-radius: 99px; background: var(--line-3); color: var(--muted); font-size: 12px; font-weight: 800; }
+.mt-x { margin-left: auto; width: 36px; height: 36px; display: grid; place-items: center; border: none; border-radius: 99px; background: var(--line-3); }
+.mt-what { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.4; }
+.mt-how { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; font-size: 14px; font-weight: 600; color: var(--muted); line-height: 1.35; }
+.mt-acts { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.mt-note { font-size: 12px; font-weight: 700; color: var(--muted); text-align: center; }
+.mt-tap { color: rgba(255,255,255,.9); font-size: 13px; font-weight: 800; pointer-events: none; }
+.pv-lock { gap: 4px; }
+.pv-lock.locked { background: rgba(13,27,69,.62); }
+.pv-lock:not(.locked) { background: rgba(124,92,255,.55); }
+.reduce .mtour, .reduce .mt-card { animation: none !important; }
