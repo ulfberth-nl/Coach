@@ -302,3 +302,39 @@ console.log('gameplan roepen en winst ok');
   assert.equal(M.gpSwapSlots(ms, team, 2, x, Object.keys(st0).find((id) => st0[id] === 'A')), false, 'alleen binnen een linie');
 }
 console.log('gameplan plekruil ok');
+
+// ---------- voorzet: kan de speeltijd niet precies gelijk, dan krijgen sterkere spelers het extra blok ----------
+{
+  const LS = ['V', 'M', 'A'];
+  let seed = 11;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (const style of ['balans', 'sterk']) {
+    let uneven = 0;
+    for (let r = 0; r < 12; r++) {
+      const tv = store.newTeam();
+      const nField = 9 + (r % 2);
+      tv.players = [];
+      for (let i = 0; i <= nField; i++) {
+        // twee dragende spelers met een vaste rol, twee beginners zonder voorkeur, de rest ertussen
+        const kracht = i < 2 ? 80 + Math.floor(rnd() * 15) : i >= nField - 2 && i < nField ? 20 + Math.floor(rnd() * 12) : 40 + Math.floor(rnd() * 30);
+        const p = { id: 'v' + i, name: 'v' + i, nick: 'v' + i, kracht, prefs: [], strengths: [], active: true };
+        if (i < 2) { p.main = LS[Math.floor(rnd() * 3)]; p.prefs = [p.main]; } else if (i < nField - 2) p.prefs = [LS[Math.floor(rnd() * 3)]];
+        tv.players.push(p);
+      }
+      const vids = tv.players.map((p) => p.id);
+      const mv = M.createMatch(tv, { opponent: 'Voorzet', present: vids, keeperId: vids[vids.length - 1], planMode: 'eigen' });
+      mv.planStyle = style;
+      M.gpEnsure(mv, tv, M.gpRecommend(mv, tv).recommended);
+      M.gpFill(mv, tv);
+      const kids = M.gpStats(mv, tv).kids;
+      const bl = Object.values(kids).map((k) => k.blocks);
+      const lo = Math.min(...bl), hi = Math.max(...bl);
+      if (lo === hi) continue;
+      uneven++;
+      assert.ok(kids.v0.blocks > lo && kids.v1.blocks > lo, style + ': dragende speler niet bij de minste blokken (team ' + r + ')');
+      if (style === 'balans') assert.ok(kids['v' + (nField - 2)].blocks < hi && kids['v' + (nField - 1)].blocks < hi, 'gebalanceerd: beginner niet bij de meeste blokken (team ' + r + ')');
+    }
+    assert.ok(uneven >= 3, style + ': genoeg teams waar het niet precies uitkomt');
+  }
+}
+console.log('gameplan voorzet sterk/beginner ok');

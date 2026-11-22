@@ -63,6 +63,8 @@ export function GamePlan({ match, team }) {
   const total0 = team.periods * ((gp && gp.n) || 4);
   const [begin, setBegin] = useState(total0 >= 12 ? 'voorzet' : 'leeg');
   const [pickN, setPickN] = useState(null);
+  // het advies uit de opzet (aantal blokken); zonder eigen keuze begint het bord daarmee
+  const recN = useRef(null);
   const wide = useWide();
   const idx = KEYS.indexOf(at);
   const done = (match.ownSteps && match.ownSteps.done) || {};
@@ -98,7 +100,7 @@ export function GamePlan({ match, team }) {
     goTo('start', null, 'opzet');
   };
   const next = () => {
-    if (at === 'opzet') return startBoard(gp ? gp.n : pickN || 4);
+    if (at === 'opzet') return startBoard(gp ? gp.n : pickN || recN.current || M.gpRecommend(match, team).recommended || 4);
     if (at === 'controle') { mutate((m) => { m.ownSteps = { done: { ...done, controle: true }, at: 'controle' }; }); haptic('success'); goHash('/'); return undefined; }
     goTo(KEYS[idx + 1], null, at);
     return undefined;
@@ -109,7 +111,7 @@ export function GamePlan({ match, team }) {
 
   let body;
   if (live && !gp) body = html`<section class="card gp-empty"><b>Er is geen game plan gemaakt</b><span class="sub">De wissels volgen wat er live gebeurt.</span></section>`;
-  else if (at === 'opzet') body = html`<${Opzet} match=${match} team=${team} begin=${begin} setBegin=${setBegin} pickN=${pickN} setPickN=${setPickN} />`;
+  else if (at === 'opzet') body = html`<${Opzet} match=${match} team=${team} begin=${begin} setBegin=${setBegin} pickN=${pickN} setPickN=${setPickN} recN=${recN} />`;
   else if (at === 'controle') body = html`<${Controle} match=${match} team=${team} goTo=${(b, id) => goTo('wissels', { b, id })} />`;
   else if (!gp) body = html`<section class="card gp-empty"><b>Eerst de opzet</b><span class="sub">Kies hoe je speelt en hoeveel blokken per periode.</span><button type="button" class="btn primary" onClick=${() => goTo('opzet')}>Naar de opzet</button></section>`;
   else body = html`<${Board} match=${match} team=${team} mode=${at} wide=${wide} readOnly=${live || match.finished} focus=${focus} key=${at + (focus ? ':' + focus.b + ':' + (focus.id || '') : '')}
@@ -164,7 +166,7 @@ const STYLES = {
   balans: { title: 'Gebalanceerd', tag: 'Jongere teams', icon: 'team', text: 'Eerlijke speeltijd, afwisselen mag. Uit positie staat rustig grijs.' }
 };
 
-function Opzet({ match, team, begin, setBegin, pickN, setPickN }) {
+function Opzet({ match, team, begin, setBegin, pickN, setPickN, recN }) {
   const gp = match.gameplan;
   const style = M.planStyle(match, team);
   const info = M.squadInfo(match, team);
@@ -179,7 +181,8 @@ function Opzet({ match, team, begin, setBegin, pickN, setPickN }) {
     setRec(null);
     const wait = reduced() ? 0 : firstRec.current ? 560 : 140;
     firstRec.current = false;
-    const id = setTimeout(() => setRec(M.gpRecommend(match, team, style)), wait);
+    if (recN) recN.current = null;
+    const id = setTimeout(() => { const r = M.gpRecommend(match, team, style); if (recN) recN.current = r.recommended; setRec(r); }, wait);
     return () => clearTimeout(id);
   }, [sig]);
   const n = gp ? gp.n : pickN || (rec && rec.recommended) || 4;
@@ -249,7 +252,7 @@ function Opzet({ match, team, begin, setBegin, pickN, setPickN }) {
       <span><small>Per grens</small><b class="num">${info.bench}×</b></span>
     </div>`}
     ${rec && recO && html`<${AiNote} title=${'Advies: ' + rec.recommended + ' blokken per ' + pw} action=${rec.recommended !== n ? html`<button type="button" class="ai-apply" onClick=${() => setN(rec.recommended)}>Neem advies over</button>` : null}>
-      ${info.n} veldspelers en ${info.F} in het veld: ${info.bench} op de bank. Per blokgrens wisselt de hele bank, ${info.bench} tegelijk${per < info.bench ? ` (Autopilot wisselt ${per} per moment)` : ''}. Zo speelt iedereen ${mins(recO.minPlayed)}–${mins(recO.maxPlayed)} min${maxB ? ` en zit niemand langer dan ${mins(recO.maxStretch)} min aan de kant (regel ${maxB})` : ''}. De ${breakWord(team)} is een extra wisselmoment.
+      ${info.n} veldspelers en ${info.F} in het veld: ${info.bench} op de bank. Per blokgrens wisselt de hele bank, ${info.bench} tegelijk${per < info.bench ? ` (Autopilot wisselt ${per} per moment)` : ''}. Zo speelt iedereen ${mins(recO.minPlayed)}–${mins(recO.maxPlayed)} min${maxB ? ` en zit niemand langer dan ${mins(recO.maxStretch)} min aan de kant (regel ${maxB})` : ''}.${info.n && (info.F * team.periods * recO.n) % info.n ? ' Komt het niet precies uit, dan krijgen dragende spelers als eerste het extra blok.' : ''} De ${breakWord(team)} is een extra wisselmoment.
     </${AiNote}>`}
   </section>
 

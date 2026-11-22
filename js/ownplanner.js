@@ -5,6 +5,10 @@
 //           wordt vooral binnen de linies gewisseld. Sterkere spelers staan iets langer, binnen de marge.
 //   balans  Gebalanceerd: eerlijke speeltijd voorop, met oog voor voorkeursposities (vaak jongere teams).
 //
+// Kan de speeltijd niet precies gelijk (blokken delen niet op), dan gaat het extra blok in beide stijlen naar de
+// sterkere spelers, nooit 'toevallig' naar een beginner. Gebalanceerd houdt daarnaast de ploeg zo even sterk
+// mogelijk over de hele wedstrijd.
+//
 // Vooruitkijken: een advies op één moment kijkt naar de hele rest van de wedstrijd (met de logische momenten en
 // het ritme), zodat wie alle adviezen overneemt eerlijk uitkomt in plaats van alleen het moment zelf goed te doen.
 
@@ -36,7 +40,17 @@ export function naturalMoments(L, p) {
   return out;
 }
 
-const STRONG_BIAS = 3; // seconden extra 'nodig' per punt speelkracht boven 50 (alleen bij sterk)
+const STRONG_BIAS = 3; // seconden extra 'nodig' per punt speelkracht boven 50 (bij sterk)
+// Bij gebalanceerd een heel kleine voorsprong: alleen beslissend als twee kinderen even lang speelden. Zo gaat
+// een extra blok (als de speeltijd niet precies gelijk kan) naar sterkere spelers en niet toevallig naar een beginner.
+const EVEN_BIAS = 0.6;
+// Vooruitkijken: van twee even eerlijke uitkomsten wint die waarin sterkere spelers de extra minuten hebben
+// (punten per minuut speeltijd × afwijking van de gemiddelde speelkracht / 50).
+const TILT = { sterk: 6, balans: 3 };
+// Gebalanceerd: de ploeg zo veel mogelijk even sterk over de hele wedstrijd (spreiding van de gemiddelde
+// speelkracht in het veld rond het eigen gemiddelde van de wedstrijd, in punten).
+const EVEN_TEAM = 1.5;
+const krOf = (players, id) => (players[id] && players[id].kracht != null ? players[id].kracht : 50);
 
 function clone(s) {
   return { pos: { ...s.pos }, bench: s.bench.slice(), played: { ...s.played }, turns: { ...s.turns }, since: { ...s.since }, disabled: { ...(s.disabled || {}) } };
@@ -51,7 +65,7 @@ function needs(state, ctx, t, end, style) {
   const need = {};
   for (const id of all) {
     const k = ctx.players[id] && ctx.players[id].kracht != null ? ctx.players[id].kracht : 50;
-    need[id] = target - (state.played[id] || 0) + (style === 'sterk' ? STRONG_BIAS * (k - 50) : 0);
+    need[id] = target - (state.played[id] || 0) + (style === 'sterk' ? STRONG_BIAS : EVEN_BIAS) * (k - 50);
   }
   return { need, all, F, target };
 }
@@ -187,14 +201,14 @@ export function project({ start, T0, ctx, items, k, style, lookahead = true, sna
   const sorted = items.filter((x) => x.t >= T0 && x.t < end).sort((a, b) => a.t - b.t || isL(b) - isL(a));
   const st = clone(start);
   const ids = Object.keys(st.pos).concat(st.bench);
-  const acc = { fit: 0, field: 0, stretch: {}, swaps: 0, moments: new Set() };
+  const acc = { fit: 0, field: 0, ks: 0, kq: 0, stretch: {}, swaps: 0, moments: new Set() };
   for (const id of ids) acc.stretch[id] = 0;
   const out = { emitted: [], lineups: [], snaps: snaps ? { [T0]: { ...st.pos } } : null };
   const fin = run(st, T0, acc, sorted, 0, { ctx, k, style, end, lookahead, out });
   return { emitted: out.emitted, lineups: out.lineups, final: fin, snaps: out.snaps };
 }
 
-function cloneAcc(a) { return { fit: a.fit, field: a.field, stretch: { ...a.stretch }, swaps: a.swaps, moments: new Set(a.moments) }; }
+function cloneAcc(a) { return { fit: a.fit, field: a.field, ks: a.ks || 0, kq: a.kq || 0, stretch: { ...a.stretch }, swaps: a.swaps, moments: new Set(a.moments) }; }
 
 function outcome(st, acc, ctx, end) {
   const ids = Object.keys(st.pos).concat(st.bench);
@@ -202,7 +216,11 @@ function outcome(st, acc, ctx, end) {
   for (const id of st.bench) { const len = end - (st.since[id] || 0); if (len > stretch[id]) stretch[id] = len; }
   const avail = ids.filter((id) => !(st.disabled && st.disabled[id] === 'wedstrijd'));
   const played = avail.map((id) => st.played[id] || 0);
+  // wie krijgt de extra minuten: positief als dat de sterkere spelers zijn
+  const km = avail.reduce((a, id) => a + krOf(ctx.players, id), 0) / Math.max(1, avail.length);
+  const tilt = avail.reduce((a, id) => a + ((st.played[id] || 0) / 60) * (krOf(ctx.players, id) - km) / 50, 0);
   return {
+    tilt, kbal: acc.field ? Math.sqrt(Math.max(0, (acc.kq || 0) / acc.field - ((acc.ks || 0) / acc.field) ** 2)) : 0,
     played: { ...st.played }, turns: { ...st.turns },
     minPlayed: played.length ? Math.min(...played) : 0,
     maxPlayed: played.length ? Math.max(...played) : 0,
@@ -219,7 +237,9 @@ function badness(f, ctx, style) {
   // ook wie er nog meer te lang aan de kant zit telt mee (niet alleen de langste), zodat een gedwongen lange
   // bankbeurt niet 'gratis' meer kinderen lang laat zitten
   const overSum = maxB === Infinity || !f.stretches ? 0 : f.stretches.reduce((a, x) => a + Math.max(0, x - maxB), 0);
-  return (f.maxPlayed - f.minPlayed) + 1.5 * Math.max(0, f.maxStretch - maxB) + 0.6 * overSum + (1 - f.kracht) * (style === 'sterk' ? 1200 : 120) + f.swaps * 4;
+  const sterk = style === 'sterk';
+  return (f.maxPlayed - f.minPlayed) + 1.5 * Math.max(0, f.maxStretch - maxB) + 0.6 * overSum + (1 - f.kracht) * (sterk ? 1200 : 120) + f.swaps * 4 -
+    TILT[sterk ? 'sterk' : 'balans'] * (f.tilt || 0) + (sterk ? 0 : EVEN_TEAM * (f.kbal || 0));
 }
 
 // Vooruitkijken bij een vrije opstelling: wie er in de rust naar de bank gaat, bepaalt hoe de rest uitpakt.
@@ -228,7 +248,8 @@ function bestLineup(st, acc, lu, it, i, sorted, o) {
   const { need, all, F } = needs(st, ctx, it.t, end, style);
   const nB = Math.max(0, all.length - F);
   if (!nB) return lu;
-  const pool = all.slice().sort((a, b) => need[a] - need[b]).slice(0, Math.min(all.length, nB + 3));
+  // kandidaten voor de bank: wie het minst nodig heeft; bij gelijke stand eerst de minder sterke spelers
+  const pool = all.slice().sort((a, b) => need[a] - need[b] || krOf(ctx.players, a) - krOf(ctx.players, b)).slice(0, Math.min(all.length, nB + 3));
   const combos = [];
   const pick = (from, chosen) => {
     if (chosen.length === nB) { combos.push(chosen.slice()); return; }
@@ -260,6 +281,14 @@ function run(st, now, acc, sorted, from, o) {
   const players = ctx.players;
   const advanceTo = (t) => {
     const dt = Math.max(0, t - now);
+    if (dt > 0) {
+      // gemiddelde sterkte van de ploeg in het veld, voor 'even sterk over de hele wedstrijd'
+      const on = Object.keys(st.pos);
+      const avg = on.reduce((a, id) => a + krOf(players, id), 0) / Math.max(1, on.length);
+      const w = dt * on.length;
+      acc.ks = (acc.ks || 0) + avg * w;
+      acc.kq = (acc.kq || 0) + avg * avg * w;
+    }
     for (const id of Object.keys(st.pos)) {
       st.played[id] = (st.played[id] || 0) + dt;
       acc.field += dt;
