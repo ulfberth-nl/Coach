@@ -338,3 +338,20 @@ console.log('gameplan plekruil ok');
   }
 }
 console.log('gameplan voorzet sterk/beginner ok');
+
+// ---------- voorzet: 7 veldspelers, 4 blokken (blokken van 6½ en 6 min): beginners krijgen het extra blok niet ----------
+{
+  const tv = store.newTeam();
+  const lv = (n) => (n - 1) * 12.5;
+  const defs = [[9, 'A', ['A', 'M']], [7, 'V', ['V', 'M']], [7, 'M', ['M', 'A']], [4, null, ['V', 'M', 'A']], [3, null, ['A', 'M', 'V']], [3, 'A', ['A', 'V', 'M']], [2, null, ['V', 'M']], [2, null, ['V', 'M']]];
+  tv.players = defs.map(([l, main, prefs], i) => ({ id: 'w' + i, name: 'w' + i, nick: 'w' + i, kracht: lv(l), main, prefs, strengths: [], active: true }));
+  const vids = tv.players.map((p) => p.id);
+  const mv = M.createMatch(tv, { opponent: 'Blokken', present: vids, keeperId: 'w7', planMode: 'eigen' });
+  mv.planStyle = 'sterk';
+  M.gpEnsure(mv, tv, 4);
+  M.gpFill(mv, tv);
+  const kids = M.gpStats(mv, tv).kids;
+  assert.equal(kids.w1.blocks, 6, 'dragende speler met vaste rol krijgt het extra blok');
+  assert.equal(kids.w6.blocks, 5, 'de beginner krijgt het extra blok niet');
+}
+console.log('gameplan voorzet blokken van ongelijke lengte ok');

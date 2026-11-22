@@ -1100,7 +1100,7 @@ function Controle({ match, team, goTo }) {
     { v: k.kracht.pct, color: '#C4B5FD', label: 'In hun kracht', val: `${Math.round(k.kracht.pct * 100)}%` }
   ];
   const tiles = [
-    { key: 'tijd', icon: 'team', label: 'Speeltijd', a: mins(k.time.min), b: mins(k.time.max), unit: 'min', chip: k.time.ok ? `✓ verschil ${mins(k.time.spread)} · marge ${mins(k.time.marge)}` : `${mins(k.time.spread - k.time.marge)} min te veel verschil`, ok: k.time.ok },
+    { key: 'tijd', icon: 'team', label: 'Speeltijd', a: mins(k.time.min), b: mins(k.time.max), unit: 'min', chip: k.time.ok ? `✓ verschil ${halfMin(k.time.spread)} · marge ${mins(k.time.marge)}` : `${mins(k.time.spread - k.time.marge)} min te veel verschil`, ok: k.time.ok },
     { key: 'kant', icon: 'clock', label: 'Langst aan de kant', a: mins(k.bench.max), unit: 'min', chip: !k.bench.rule ? 'geen regel' : k.bench.ok ? `✓ regel ${mins(k.bench.rule)} min` : `${mins(k.bench.max - k.bench.rule)} min te lang`, ok: k.bench.rule ? k.bench.ok : null },
     { key: 'wissels', icon: 'swaparrows', label: 'Wissels', a: k.swaps.n, unit: '', chip: `op ${k.swaps.moments} momenten`, ok: null },
     { key: 'kracht', icon: 'shield', label: 'In hun kracht', a: Math.round(k.kracht.pct * 100), unit: '%', chip: k.kracht.pct >= 0.9 ? '✓ dominant of voorkeur' : 'te vaak buiten kracht', ok: k.kracht.pct >= 0.9 }

@@ -45,8 +45,10 @@ const STRONG_BIAS = 3; // seconden extra 'nodig' per punt speelkracht boven 50 (
 // een extra blok (als de speeltijd niet precies gelijk kan) naar sterkere spelers en niet toevallig naar een beginner.
 const EVEN_BIAS = 0.6;
 // Vooruitkijken: van twee even eerlijke uitkomsten wint die waarin sterkere spelers de extra minuten hebben
-// (punten per minuut speeltijd × afwijking van de gemiddelde speelkracht / 50).
-const TILT = { sterk: 6, balans: 3 };
+// (punten per minuut speeltijd × afwijking van de gemiddelde speelkracht / 50). Sterk genoeg om de ruis van
+// blokken op halve minuten (6½ of 6 min) te winnen, te zwak om echte speeltijd te verschuiven: een heel blok
+// van een beginner naar een dragende speler kost altijd meer dan het oplevert.
+const TILT = { sterk: 25, balans: 12 };
 // Gebalanceerd: de ploeg zo veel mogelijk even sterk over de hele wedstrijd (spreiding van de gemiddelde
 // speelkracht in het veld rond het eigen gemiddelde van de wedstrijd, in punten).
 const EVEN_TEAM = 1.5;
