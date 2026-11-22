@@ -671,8 +671,12 @@ export function useDragSwap(ref, enabled, onSwap, hint, opts = {}) {
   // benchSlots: ook een bankspeler mag op een lege plek (+) landen (game plan: blok invullen of een extra plek)
   const ob = useRef(opts);
   ob.current = opts;
+  // het sleepvlak kan opnieuw getekend worden (een nieuw element, bijv. na een focuswissel op het eiland):
+  // dan de luisteraars op het nieuwe element zetten, anders reageert er niets meer
+  const [el, setEl] = useState(null);
+  useLayoutEffect(() => { if (ref.current !== el) setEl(ref.current); });
   useEffect(() => {
-    const root = ref.current;
+    const root = el;
     if (!root || !enabled) return undefined;
     root.classList.add('draggable');
     let st = null;
@@ -886,7 +890,7 @@ export function useDragSwap(ref, enabled, onSwap, hint, opts = {}) {
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', cancel);
     };
-  }, [enabled]);
+  }, [enabled, el]);
 }
 
 // Bankrij die opzij scrollt als hij te vol is: zachte randen, vastklikken per speler, en wie er

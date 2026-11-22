@@ -1,6 +1,6 @@
 // Wedstrijdplan als één veld dat meebeweegt: veeg over het veld of sleep het oranje bolletje
 // over de tijdlijn. Spelers glijden naar hun nieuwe plek; daaronder uitklapbaar het rooster per kind.
-import { html, useState, useMemo, useRef, useEffect } from '../vendor/preact-htm.js';
+import { html, useState, useMemo, useRef, useEffect, useLayoutEffect } from '../vendor/preact-htm.js';
 import * as M from './match.js';
 import { LINE_NAMES } from './planner.js';
 import { Field, Icon, Neon, POS_COLORS, useDragSwap, BenchScroll, accentFor, CallStory } from './ui.js';
@@ -43,8 +43,11 @@ export function useAnimatedF(initial, maxF) {
 export function useScrub(ref, fns) {
   const cur = useRef(fns);
   cur.current = fns;
+  // opnieuw binden als het vlak een nieuw element is geworden (anders werkt vegen niet meer)
+  const [node, setNode] = useState(null);
+  useLayoutEffect(() => { if (ref.current !== node) setNode(ref.current); });
   useEffect(() => {
-    const el = ref.current;
+    const el = node;
     if (!el) return undefined;
     let st = null;
     const down = (e) => {
@@ -87,7 +90,7 @@ export function useScrub(ref, fns) {
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
     };
-  }, []);
+  }, [node]);
 }
 
 // Wie er bij het volgende moment verandert, als zwevers achter de spelers (zelfde taal als live).

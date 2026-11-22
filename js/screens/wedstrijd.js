@@ -992,7 +992,7 @@ function LiveView({ match, team }) {
     </${Affiche}>
     ${board}
     ${restLu ? restPanel : island}
-    <div class="grow-field" ref=${zone}>
+    <div class="grow-field" key="livefield" ref=${zone}>
       <div class=${'fieldbox' + (goal ? ' goalmode' : '') + (restLu ? ' restmode' : '')}>
         <${Field} slots=${restLu ? restLu.slots : d.state.slots} lines=${restLu ? restLu.lines : M.linesOf(match, team)} keeperId=${d.state.keeper} nick=${nick} height="auto" formable=${!goal}
           onTap=${tapField} onKeeper=${goal === 'scorer' ? (id) => scoreFor(id) : () => setSheet({ type: 'keeper' })}
