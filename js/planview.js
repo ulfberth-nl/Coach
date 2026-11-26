@@ -1,10 +1,10 @@
 // Wedstrijdplan als één veld dat meebeweegt: veeg over het veld of sleep het oranje bolletje
-// over de tijdlijn. Spelers glijden naar hun nieuwe plek; daaronder uitklapbaar het rooster per kind.
+// over de tijdlijn. Spelers glijden naar hun nieuwe plek; daaronder uitklapbaar het rooster per speler.
 import { html, useState, useMemo, useRef, useEffect, useLayoutEffect } from '../vendor/preact-htm.js';
 import * as M from './match.js';
 import { LINE_NAMES } from './planner.js';
 import { Field, Icon, Neon, POS_COLORS, useDragSwap, BenchScroll, accentFor, CallStory } from './ui.js';
-import { haptic } from './motion.js';
+import { haptic, reduced } from './motion.js';
 
 const BENCH = '#DCE2EE';
 
@@ -282,7 +282,7 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
       // tijdlijn: gelijk verdeelde bolletjes; rooster: echte tijd
       setF(el === track.current ? p * (cards.length - 1) : fOfTime(p * END), false);
     };
-    const downs = els.map((el) => { const h = (e) => { active = el; at(el, e.clientX); }; el.addEventListener('pointerdown', h); return [el, h]; });
+    const downs = els.map((el) => { const h = (e) => { if (e.target.closest('.tl-pin.tap')) return; active = el; at(el, e.clientX); }; el.addEventListener('pointerdown', h); return [el, h]; });
     const move = (e) => { if (active) { e.preventDefault(); at(active, e.clientX); } };
     const up = () => { if (active) { active = null; setF(Math.round(getF()), true); } };
     window.addEventListener('pointermove', move, { passive: false });
@@ -290,6 +290,15 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
     return () => { downs.forEach(([el, h]) => el.removeEventListener('pointerdown', h)); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
   }, [cards, roster]);
 
+  // speldje wegtikken = dat moment weer aan de app geven (niet bij een game plan: daar is het bord de baas)
+  const canUnpin = !!onUnpin && !M.isOwn(match, team);
+  const [unpinning, setUnpinning] = useState(null);
+  const unpinTap = (t, no) => {
+    if (unpinning != null) return;
+    haptic('select');
+    setUnpinning(t);
+    setTimeout(() => { setUnpinning(null); onUnpin(t, no); }, reduced() ? 0 : 200);
+  };
   const swapNo = [];
   let n = 0;
   for (const cc of cards) swapNo.push(cc.kind === 'swap' ? ++n : 0);
@@ -316,7 +325,12 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
       <span class="tl-line"></span>
       ${cards.map((cc, k) => (k > 0 && cc.kind === 'lineup' ? html`<span class="tl-break" style=${`left:${dotPct(k - 0.5)}%`}><b>${team.periods === 2 ? 'rust' : 'pauze'}</b></span>` : null))}
       ${cards.map((cc, k) => html`<span class=${'tl-dot' + (k < i ? ' past' : k === i ? ' cur' : '') + (cc.kind === 'lineup' ? ' lu' : '') + (cc.pinned ? ' pinned' : '')} style=${`left:${dotPct(k)}%`}></span>`)}
-      ${cards.map((cc, k) => (cc.pinned && !cc.past ? html`<span class="tl-pin" key=${'pin' + cc.t} style=${`left:${dotPct(k)}%`} aria-label="Vastgezet"><${Icon} name="pin" size=${13} /></span>` : null))}
+      ${cards.map((cc, k) => (cc.pinned && !cc.past
+        ? canUnpin
+          ? html`<button type="button" class=${'tl-pin tap' + (unpinning === cc.t ? ' out' : '')} key=${'pin' + cc.t} style=${`left:${dotPct(k)}%`}
+              aria-label=${'Speldje bij wissel ' + swapNo[k] + ' weghalen'} onClick=${(e) => { e.stopPropagation(); unpinTap(cc.t, swapNo[k]); }}><${Icon} name="pin" size=${13} /></button>`
+          : html`<span class="tl-pin" key=${'pin' + cc.t} style=${`left:${dotPct(k)}%`} aria-label="Vastgezet"><${Icon} name="pin" size=${13} /></span>`
+        : null))}
       ${live && html`<span class="tl-now" style=${`left:${nowPct}%`}></span>`}
       <span class="tl-head" style=${`left:${headPct}%`}><span class="tl-time" style=${`transform:translateX(-${headPct}%)`}>${pillText}</span></span>
     </div>
@@ -335,7 +349,7 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
       <span class="col grow" style="gap:0;min-width:0"><b>${until > 0 ? 'Over ' + M.fmt(until) : 'Nu wisselen'}</b><span class="small" style="color:var(--ink)">${swapText}</span></span>
       <button type="button" class="btn primary" style="min-height:44px;padding:0 16px" onClick=${onSwapNow}>Nu wisselen</button>
     </div>`}
-    ${compact && html`<div class="fieldcap">${title}${i > 0 && c.kind === 'swap' ? html` · ${multi ? html`<b>${c.ins.map(nick).join(', ')}</b> erin` : html`<b>${nick(c.in)}</b> erin voor ${nick(c.out)}`}` : ''}</div>`}
+    ${compact && html`<div class="fieldcap">${onLocked ? html`<span class="fc-lock" title="Game plan: alleen bekijken"><${Icon} name="lock" size=${13} /></span>` : null}${title}${i > 0 && c.kind === 'swap' ? html` · ${multi ? html`<b>${c.ins.map(nick).join(', ')}</b> erin` : html`<b>${nick(c.in)}</b> erin voor ${nick(c.out)}`}` : ''}</div>`}
     ${!compact && planner && html`<${NextCaption} i=${i} nx=${nx} c=${c} lines=${lines} team=${team} match=${match} nick=${nick} canPlan=${canPlan}
       swapNo=${nx ? swapNoOf(nx) : 0} total=${cards.filter((x) => x.kind === 'swap').length} label=${label} onUnpin=${onUnpin}
       isNow=${live ? i === nowIndex : i === 0} until=${live && nx ? nx.t - liveT : null} />`}
@@ -346,7 +360,6 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
               onTap=${() => {}} neon=${changes(cards, i + 1).in} accent=${accentFor(team)} />`
           : html`<${Field} slots=${c.slots} lines=${lines} formable=${canEdit || canPinHere} keeperDrag=${canEdit && !!match.keeperId} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
               onTap=${() => {}} neon=${planner ? nxOuts : []} marked=${planner ? [] : ch.in} dashed=${!planner && ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} ghosts=${planner && !peek && !calm ? ghostsFor(nx, c.pos, nick) : null} />`}
-        ${onTour && !planner && html`<button type="button" class=${'pv-lock' + (onLocked ? ' locked' : '')} onClick=${onTour} aria-label=${onLocked ? 'Game plan: alleen bekijken. Uitleg' : 'Autopilot. Uitleg'}><${Icon} name=${onLocked ? 'lock' : 'spark'} size=${13} /><b>Uitleg</b></button>`}
         ${planner && peek && nx && html`<span class="peeklabel" role="status"><${Icon} name="eye" size=${15} />${nx.kind === 'lineup' ? 'Opstelling ' + M.periodLabel(team, nx.period) : 'Na wissel ' + swapNoOf(nx)}</span>`}
       </div>
       <div class="benchrow">
@@ -373,7 +386,7 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
 
     ${!compact && html`<div class="rooster card" style="box-shadow:none;border:1px solid var(--line);gap:0;padding:0">
       <button type="button" class="between" style="background:none;border:none;min-height:48px;padding:0 12px;width:100%" aria-expanded=${roster ? 'true' : 'false'} onClick=${() => setRoster(!roster)}>
-        <span class="h2" style="font-size:15px">Hele wedstrijd per kind</span>
+        <span class="h2" style="font-size:15px">Hele wedstrijd per speler</span>
         <span class=${'chev' + (roster ? ' open' : '')}><${Icon} name="chev" size=${18} /></span>
       </button>
       <div class=${'collapse' + (roster ? ' open' : '')}><div>

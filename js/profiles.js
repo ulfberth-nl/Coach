@@ -13,7 +13,7 @@ export const PROFILES = {
     label: 'Iedereen even lang',
     tag: 'Eerlijkst',
     sub: 'Gelijke speeltijd gaat boven alles.',
-    does: 'Elk kind speelt vrijwel even lang en gaat even vaak naar de bank. Niemand zit lang achter elkaar op de bank. Sterke en minder sterke spelers spelen evenveel.',
+    does: 'Elke speler speelt vrijwel even lang en gaat even vaak naar de bank. Niemand zit lang achter elkaar op de bank. Sterke en minder sterke spelers spelen evenveel.',
     variants: [
       { marge: 2, maxBenchOn: true, maxBench: 8, minInterval: 2, priority: 'eerlijk' },
       { marge: 2, maxBenchOn: true, maxBench: 10, minInterval: 2, priority: 'eerlijk' },
@@ -92,7 +92,7 @@ export function statsOf(match, team) {
   acc += avg(pos) * Math.max(0, end - t);
   const moments = new Set(plan.steps.filter((s) => s.type === 'swap').map((s) => s.t)).size;
   const f = plan.fair;
-  // dragende spelers vs de rest (alleen als groep, nooit per kind)
+  // dragende spelers vs de rest (alleen als groep, nooit per speler)
   const played = plan.finalPlayed || {};
   const strong = field.filter((id) => (kr[id] || 0) >= KEY_KRACHT), rest = field.filter((id) => (kr[id] || 0) < KEY_KRACHT);
   const mean = (ids) => ids.reduce((a, id) => a + (played[id] || 0), 0) / Math.max(1, ids.length);
@@ -121,7 +121,7 @@ function evalVariant(team, prof, v, present, keeperId) {
   const rules = { ...base, ...v };
   let s;
   try { s = statsOf(createMatch(team, { present, keeperId, priority: v.priority, rules }), team); } catch (e) { return null; }
-  // elke paar minuten een wissel is voor kinderen (en de coach) te onrustig, bij elk profiel
+  // elke paar minuten een wissel is voor spelers (en de coach) te onrustig, bij elk profiel
   const hectic = s.moments && s.every < 3 ? (3 - s.every) * 8 : 0;
   return { rules, stats: s, score: prof.score(s) + hectic + (s.ok ? 0 : 1000) };
 }
@@ -186,7 +186,7 @@ export function consequences(key, s, ref) {
   const out = [];
   const d = ref && key !== 'balans' ? s.moments - ref.moments : 0;
   out.push({ t: `${s.moments} ${s.moments === 1 ? 'wissel' : 'wissels'}, ongeveer elke ${String(s.every).replace('.', ',')} min${d ? ` (${d > 0 ? d + ' meer' : -d + ' minder'} dan In balans)` : ''}` });
-  out.push({ t: s.minP === s.maxP ? `Iedereen speelt ${s.minP} min` : `Speeltijd ${s.minP}–${s.maxP} min per kind` });
+  out.push({ t: s.minP === s.maxP ? `Iedereen speelt ${s.minP} min` : `Speeltijd ${s.minP}–${s.maxP} min per speler` });
   out.push({ t: s.minTurns === s.maxTurns ? `Iedereen ${s.minTurns}× naar de bank` : `${s.minTurns}–${s.maxTurns}× naar de bank` });
   const stint = Math.round(s.maxStint);
   out.push({ t: `Hooguit ${stint} min achter elkaar op de bank`, warn: stint > 12 });

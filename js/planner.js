@@ -233,7 +233,7 @@ function applySwap(state, sw, t) {
   state.turns[sw.out] = (state.turns[sw.out] || 0) + 1;
 }
 
-// Nieuwe opstelling bij de start van een periode (de rust is een gratis moment om meerdere kinderen te wisselen).
+// Nieuwe opstelling bij de start van een periode (de rust is een gratis moment om meerdere spelers te wisselen).
 export function breakLineup(state, ctx, t, changes = null) {
   const { players, lines, rules } = ctx;
   const F = Object.values(lines).reduce((a, b) => a + b, 0);
@@ -245,7 +245,7 @@ export function breakLineup(state, ctx, t, changes = null) {
   const onField = avail.filter((id) => id in state.pos);
   const freeSeats = Math.max(0, F - onField.length);
   const maxBench = Math.max(0, avail.length - F);
-  // changes = hoeveel kinderen in de rust naar de bank gaan (null = zoveel als er bankplekken zijn)
+  // changes = hoeveel spelers in de rust naar de bank gaan (null = zoveel als er bankplekken zijn)
   const nBench = changes === null ? maxBench : Math.min(maxBench, Math.max(0, changes - 0));
   void freeSeats;
   // naar de bank in de rust: wie het minst vaak gewisseld is en het meest speelde (bij beste bezetting: aangepaste speeltijd)

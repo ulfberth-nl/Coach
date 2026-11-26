@@ -103,7 +103,7 @@ export function Spelers({ state }) {
     return html`<${PinScreen}>
       <${PinPad} key=${second ? 'b' : 'a'}
         title=${second ? 'Herhaal de pincode' : (stage && stage.change ? 'Nieuwe pincode' : 'Kies een pincode')}
-        sub=${second ? 'Nog een keer, ter controle.' : '4 cijfers. Zo zien de kinderen (en anderen) de beoordelingen niet.'}
+        sub=${second ? 'Nog een keer, ter controle.' : '4 cijfers. Zo zien de spelers (en anderen) de beoordelingen niet.'}
         onComplete=${async (pin) => {
           if (!second) { setStage({ ...(stage || {}), first: pin }); return 'next'; }
           if (pin !== stage.first) { setTimeout(() => setStage(stage.change ? { change: true } : null), 650); return { error: 'Niet hetzelfde, probeer opnieuw.' }; }

@@ -5,6 +5,7 @@ import { html, useMemo, useState, useEffect, useRef } from '../../vendor/preact-
 import * as M from '../match.js';
 import { fitOf } from '../ownplanner.js';
 import { Icon, Sheet, Field, Portal, toast, go as goHash, accentFor, useDragSwap, BenchScroll } from '../ui.js';
+import { PlayTime } from '../playtime.js';
 import { haptic, reduced } from '../motion.js';
 import { mutate } from './live.js';
 import { NextBar, MiniScore } from './plan.js';
@@ -576,7 +577,7 @@ function Board({ match, team, mode, wide, readOnly, focus, toStart }) {
     </div>`}
     ${!sel && fieldB == null && impEl(false)}
     ${hint && html`<p class="gp-hint" key=${hint}>${hint}</p>`}
-    ${(start || gp.base) && html`<div class="gp-strip" aria-label="Speeltijd per kind">
+    ${(start || gp.base) && html`<div class="gp-strip" aria-label="Speeltijd per speler">
       ${ids.map((id) => {
         const k = stats.kids[id];
         const lvl = kidLvl(id);
@@ -1006,7 +1007,7 @@ function BlockField({ match, team, b, setB, combine, apply, undo, canUndo, pushH
   </div></${Portal}>`;
 }
 
-// ---------- rooster per kind (voor het standaardplan én in de controle) ----------
+// ---------- rooster per speler (voor het standaardplan én in de controle) ----------
 export function Rooster({ match, team, cards: given, onKid = null }) {
   const nick = (id) => M.nickOf(team, id);
   const cards = given || M.timeline(match, team).cards;
@@ -1070,13 +1071,6 @@ function Controle({ match, team, goTo }) {
   const open0 = stats ? stats.blocks.filter((b) => !b.ok) : [];
   const ids = rep.ids;
   const played = rep.played;
-  // minuten per linie per kind (voor de grafiek)
-  const perLine = useMemo(() => {
-    const o = {};
-    for (const id of ids) o[id] = { V: 0, M: 0, A: 0 };
-    cards.forEach((c, i) => { const t1 = i + 1 < cards.length ? cards[i + 1].t : END; for (const id in c.pos) if (o[id]) o[id][c.pos[id]] += Math.max(0, t1 - c.t); });
-    return o;
-  }, [cards]);
   const byPlay = ids.slice().sort((a, b) => played[b] - played[a]);
   const lo = byPlay[byPlay.length - 1], hi = byPlay[0];
   const longBench = stats && k.bench.rule ? ids.filter((id) => stats.kids[id] && stats.kids[id].maxRun > k.bench.rule + 1) : [];
@@ -1089,7 +1083,7 @@ function Controle({ match, team, goTo }) {
     const who = longBench.length ? longBench : [k.bench.who];
     reasons.push(`${names(who)} ${who.length === 1 ? 'zit' : 'zitten'} tot ${mins(k.bench.max)} min aaneen aan de kant (regel ${mins(k.bench.rule)}).`);
   }
-  if (k.kracht.pct < 0.9) reasons.push(`${100 - Math.round(k.kracht.pct * 100)}% van de speeltijd staan kinderen buiten hun kracht.`);
+  if (k.kracht.pct < 0.9) reasons.push(`${100 - Math.round(k.kracht.pct * 100)}% van de speeltijd staan spelers buiten hun kracht.`);
   const ok = !open0.length && k.time.ok && k.bench.ok;
   const title = open0.length ? 'Nog niet af' : !k.time.ok ? 'Speeltijd nog niet eerlijk' : !k.bench.ok ? 'Iemand zit te lang aan de kant'
     : k.kracht.pct < 0.9 ? 'Eerlijk, niet iedereen in zijn kracht' : style === 'sterk' ? 'Sterk en eerlijk' : 'Eerlijk en in balans';
@@ -1122,10 +1116,6 @@ function Controle({ match, team, goTo }) {
     haptic('success');
     toast(`✦ ${n} ${plural(n, 'blok', 'blokken')} ingevuld`, restore(prev));
   };
-  // grafiek: speeltijd per kind, per linie gekleurd, met de doelband (gemiddeld ± halve marge)
-  const avg = ids.reduce((a, id) => a + played[id], 0) / Math.max(1, ids.length);
-  const band = [Math.max(0, avg - k.time.marge / 2), avg + k.time.marge / 2];
-  const scale = Math.max(band[1], ...ids.map((id) => played[id])) * 1.04 || 1;
   // wisselmomenten als tijdlijn
   const moments = cards.slice(1).map((c, i) => {
     const prev = cards[i];
@@ -1179,16 +1169,8 @@ function Controle({ match, team, goTo }) {
   </section>`}
 
   <section class="gd-card">
-    <header class="gd-h"><b>Speeltijd per kind</b><span class="gd-hs">tik een kind om het te volgen</span></header>
-    <div class="gd-chart">
-      <span class="gd-band" style=${`--a:${band[0] / scale};--w:${(band[1] - band[0]) / scale}`}></span>
-      ${byPlay.map((id, i) => html`<button type="button" class="gd-row" key=${id} style=${'--i:' + i} onClick=${() => goTo(0, id)}>
-        <span class="gd-n">${nick(id)}</span>
-        <span class="gd-bar">${['V', 'M', 'A'].map((l) => (perLine[id][l] > 0 ? html`<i key=${l} class=${'l' + l} style=${'width:' + (perLine[id][l] / scale) * 100 + '%'}></i>` : null))}</span>
-        <span class=${'gd-m num' + (played[id] < band[0] - 30 || played[id] > band[1] + 30 ? ' off' : '')}>${mins(played[id])}′</span>
-      </button>`)}
-    </div>
-    <div class="rt-legend2"><span><i class="lV"></i>voor</span><span><i class="lM"></i>midden</span><span><i class="lA"></i>achter</span><span><i class="gd-bandkey"></i>doel ± marge</span></div>
+    <header class="gd-h"><b>Speeltijd per speler</b><span class="gd-hs">tik om te volgen</span></header>
+    <${PlayTime} match=${match} team=${team} cards=${cards} onKid=${(id) => goTo(0, id)} />
   </section>
 
   <section class="gd-card">
@@ -1213,7 +1195,7 @@ function Controle({ match, team, goTo }) {
   </section>
 
   <section class="gd-card gd-deep">
-    <button type="button" class="rt-dh" aria-expanded=${open === 'rooster' ? 'true' : 'false'} onClick=${() => toggle('rooster')}><span>Rooster per kind</span><${Icon} name="chev" size=${16} /></button>
+    <button type="button" class="rt-dh" aria-expanded=${open === 'rooster' ? 'true' : 'false'} onClick=${() => toggle('rooster')}><span>Rooster per speler</span><${Icon} name="chev" size=${16} /></button>
     <div class=${'rt-dbody' + (open === 'rooster' ? ' open' : '')}><div><${Rooster} match=${match} team=${team} cards=${cards} onKid=${(id) => goTo(0, id)} /></div></div>
   </section>`;
 }

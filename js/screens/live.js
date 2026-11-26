@@ -140,7 +140,7 @@ export function SwapSheet({ match, team, d, init, counts, onClose, onDone }) {
 
     ${preview && html`<div class="effects">
       <div class="fxrow">${ok(!preview.lines.some((l) => l.light))}<span>${preview.lines.some((l) => l.light) ? 'Lichter: ' + preview.lines.filter((l) => l.light).map((l) => l.name).join(', ') : 'Linies blijven in balans'}</span></div>
-      <div class="fxrow">${ok(!M.effRules(match, team).equalTime || pf.spread <= marge * 60 + 1)}<span>Speeltijd straks ${M.mins(pf.minPlayed)}–${M.mins(pf.maxPlayed)} min per kind</span></div>
+      <div class="fxrow">${ok(!M.effRules(match, team).equalTime || pf.spread <= marge * 60 + 1)}<span>Speeltijd straks ${M.mins(pf.minPlayed)}–${M.mins(pf.maxPlayed)} min per speler</span></div>
       <div class="fxrow">${ok(target != null ? preview.minTurns === target && preview.maxTurns === target : preview.minTurns === preview.maxTurns)}<span>${preview.minTurns === preview.maxTurns ? `Iedereen ${preview.minTurns}× gewisseld` : `${preview.minTurns}–${preview.maxTurns}× gewisseld`}</span></div>
       ${!isPlanned && next && html`<span class="small">Wissel nu: de app rekent direct een nieuw plan. Bewaren: deze wissel gebeurt op het geplande moment, daarna rekent de app verder.</span>`}
     </div>`}
@@ -266,7 +266,7 @@ export function GroupSwapSheet({ match, team, d, counts, onClose, onDone }) {
 
     ${preview && html`<div class="effects">
       <div class="fxrow">${ok(!preview.lines.some((l) => l.light))}<span>${preview.lines.some((l) => l.light) ? 'Lichter: ' + preview.lines.filter((l) => l.light).map((l) => l.name).join(', ') : 'Linies blijven in balans'}</span></div>
-      <div class="fxrow">${ok(!M.effRules(match, team).equalTime || pf.spread <= marge * 60 + 1)}<span>Speeltijd straks ${M.mins(pf.minPlayed)}–${M.mins(pf.maxPlayed)} min per kind</span></div>
+      <div class="fxrow">${ok(!M.effRules(match, team).equalTime || pf.spread <= marge * 60 + 1)}<span>Speeltijd straks ${M.mins(pf.minPlayed)}–${M.mins(pf.maxPlayed)} min per speler</span></div>
       <div class="fxrow">${ok(target != null ? preview.minTurns === target && preview.maxTurns === target : preview.minTurns === preview.maxTurns)}<span>${preview.minTurns === preview.maxTurns ? `Iedereen ${preview.minTurns}× gewisseld` : `${preview.minTurns}–${preview.maxTurns}× gewisseld`}</span></div>
       ${!isPlanned && first && html`<span class="small">Wissel nu: de app rekent direct een nieuw plan. Bewaren: deze wissels gebeuren op het geplande moment, daarna rekent de app verder.</span>`}
     </div>`}

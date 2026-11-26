@@ -131,7 +131,7 @@ export function posShort(line, i, n) {
   return i === 0 ? l : i === n - 1 ? r : c;
 }
 
-// Wat de coach roept bij een wisselmoment: wie eruit, en per kind dat erin komt of van plek verandert
+// Wat de coach roept bij een wisselmoment: wie eruit, en per speler dat erin komt of van plek verandert
 // waar hij aan het eind staat. Tussenstappen vallen weg (schuift iemand twee keer, dan telt alleen zijn
 // eindplek) en wie op zijn eigen plek terugkomt, staat er niet in. Erin eerst, daarna van voor naar achter.
 export function callStory(slots, lines, pairs, moves = []) {
@@ -323,7 +323,7 @@ export function setFairness(match, team, v) {
   replan(match, team);
 }
 
-// Aantal keer gewisseld per kind voor de hele wedstrijd (null = de app kiest zelf).
+// Aantal keer gewisseld per speler voor de hele wedstrijd (null = de app kiest zelf).
 export function turnsTarget(team, match = null) {
   const k = effRules(match, team).turnsPerPeriod;
   return k ? k * team.periods : null;
@@ -532,7 +532,7 @@ function planStart(match, team) {
   return { st, anchor, T };
 }
 
-// Situatie volgens het plan op tijd t (inclusive = wissels op t al gedaan), met gespeelde tijd per kind.
+// Situatie volgens het plan op tijd t (inclusive = wissels op t al gedaan), met gespeelde tijd per speler.
 export function planStateAt(match, team, t, inclusive = false) {
   const { st, anchor } = planStart(match, team);
   return stateAt(st, anchor, (match.plan && match.plan.steps) || [], t, inclusive);
@@ -1760,7 +1760,7 @@ export function reslot(prevSlots, pos, lines, players) {
   return slots;
 }
 
-// Hoe staat het bord ervoor: per blok volledig of niet, per kind blokken en minuten, langst aan de kant.
+// Hoe staat het bord ervoor: per blok volledig of niet, per speler blokken en minuten, langst aan de kant.
 export function gpStats(match, team) {
   const gp = match.gameplan;
   const blocks = gpBlocks(match, team, gp ? gp.n : 4);
@@ -1962,7 +1962,7 @@ export function gpFixes(match, team, ins, max = 3) {
   return out;
 }
 // Twee momentopnames van het game plan vergelijken: wat werd beter en wat slechter. 'Pure winst' = niets
-// slechter (speeltijdverschil, langst aan de kant, in hun kracht, en geen kind verder van zijn doel of vaker
+// slechter (speeltijdverschil, langst aan de kant, in hun kracht, en geen speler verder van zijn doel of vaker
 // buiten zijn kracht) en minstens één ding beter.
 export function gpCompare(match, team, a, b) {
   const r = effRules(match, team);

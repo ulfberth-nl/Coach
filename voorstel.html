@@ -401,7 +401,7 @@ function renderSheet(bumpSide) {
     <div class="sect"><b>Zo loopt de rest van de wedstrijd</b><span>veeg →</span></div>
     <div class="cards" id="cards">${cards}</div>
     <div class="dots" id="dots">${sim.moments.map((_, k) => `<i class="${k === 0 ? 'on' : ''}"></i>`).join('')}</div>
-    <div class="sect"><b>Speeltijd aan het eind</b><span>${isPlan ? 'minuten per kind' : 'verschil met het plan'}</span></div>
+    <div class="sect"><b>Speeltijd aan het eind</b><span>${isPlan ? 'minuten per speler' : 'verschil met het plan'}</span></div>
     ${verdict}
     <div class="mins">${rows}</div>`;
   $('sx').onclick = closeSheet;

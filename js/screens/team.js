@@ -8,7 +8,7 @@ import { PROFILES, PROFILE_ORDER, profileOf, cachedTune, rememberTune, consequen
 import { compute } from '../compute.js';
 import { scheduleRefresh } from '../refresh.js';
 
-export const APP_VERSION = '0.24.10';
+export const APP_VERSION = '0.24.11';
 
 // regels die het wisselprofiel bepaalt; zet je er zelf een, dan wordt het profiel 'Eigen'
 const TUNED = ['marge', 'equalTime', 'evenOften', 'maxBenchOn', 'maxBench', 'minInterval', 'turnsPerPeriod', 'priority', 'strongBias'];
@@ -248,21 +248,27 @@ export function Team({ state }) {
         ? 'Je legt per wedstrijd zelf de puzzel op het liniebord: startopstelling, dan wie waar speelt per blok. De app rekent mee en kan een voorzet doen.'
         : 'De app maakt het plan volgens de instellingen hieronder. Per wedstrijd kun je ook een game plan maken.'}</span>
       <span class="sub">Kies hoe je wilt wisselen. De app rekent het door voor je ${squad.length} spelers, en per wedstrijd opnieuw met wie er is.</span>
-      <div class="profiles" role="radiogroup" aria-label="Wisselprofiel">
+      <${Reveal} open=${prof === 'eigen'}><div class="prof-eigen">
+        <span class="pe-t"><${Icon} name="edit" size=${15} /><span><b>Eigen instellingen gaan voor.</b> De profielen staan uit: de app volgt jouw regels hieronder en stemt niet meer per wedstrijd af.</span></span>
+        <button type="button" class="link" onClick=${() => pickProfile('balans')}>Terug naar In balans</button>
+      </div></${Reveal}>
+      <div class=${'profiles' + (prof === 'eigen' ? ' overruled' : '')} role="radiogroup" aria-label="Wisselprofiel">
         ${PROFILE_ORDER.map((k) => html`<${ProfileCard} key=${k} k=${k} on=${prof === k} r=${profs[k]} stale=${profBusy} ref0=${profs.balans && profs.balans.stats} n=${squad.length} onPick=${() => pickProfile(k)} />`)}
       </div>
-      <${Reveal} open=${prof === 'eigen'}><div class="prof-eigen"><span><b>Eigen instellingen</b> · je hebt zelf regels gezet</span><button type="button" class="link" onClick=${() => pickProfile('balans')}>Terug naar In balans</button></div></${Reveal}>
-      <${Setting} title="Nieuwe opstelling na de rust" sub="Gratis moment om meerdere kinderen te wisselen"><${Switch} label="Nieuwe opstelling na de rust" on=${r.newLineupAtBreak} onChange=${(v) => setRule('newLineupAtBreak', v)} /></${Setting}>
+
+      <${Setting} title="Nieuwe opstelling na de rust" sub="Gratis moment om meerdere spelers te wisselen"><${Switch} label="Nieuwe opstelling na de rust" on=${r.newLineupAtBreak} onChange=${(v) => setRule('newLineupAtBreak', v)} /></${Setting}>
 
       <button type="button" class="between" style="background:none;border:none;padding:0;min-height:44px;width:100%" aria-expanded=${more ? 'true' : 'false'} onClick=${() => setMore(!more)}>
         <span class="label">Eigen instellingen</span><span class=${'chev' + (more ? ' open' : '')}><${Icon} name="chev" size=${18} /></span>
       </button>
       <${Reveal} open=${more}><div class="col" style="gap:6px">
-        <span class="small">Hier zet je de regels zelf. Pas je iets aan dat het profiel bepaalt, dan heet je keuze 'Eigen'.</span>
-        <span class="label">Hoeveel spelers tegelijk wisselen?</span>
+        <span class=${'eig-note' + (prof === 'eigen' ? ' on' : '')}>${prof === 'eigen'
+          ? html`<b>Deze regels gelden nu</b>, voor elke wedstrijd. Kies hierboven een profiel om terug te gaan.`
+          : html`Nu ingevuld door <b>${PROFILES[prof] ? PROFILES[prof].label : 'het profiel'}</b>. Pas je hier iets aan, dan gaan jouw regels voor en staat het profiel uit.`}</span>
+        <span class="label">Hoeveel spelers tegelijk wisselen? <span class="eig-free">geldt bij elk profiel</span></span>
         <${Seg} label="Spelers per wissel" value=${Math.max(1, Math.min(5, r.perMoment || 1))} onChange=${(v) => setRule('perMoment', v)} options=${[1, 2, 3, 4, 5].map((n) => [n, String(n)])} />
-        <span class="small">${(r.perMoment || 1) > 1 ? `Per wisselmoment gaan er ${r.perMoment} kinderen tegelijk naar de bank (of minder als de bank kleiner is).` : 'Telkens één kind tegelijk.'}${team.type === 'zaal' && (r.perMoment || 1) < Math.min(5, F) ? html` <button type="button" class="link" onClick=${() => setRule('perMoment', Math.min(5, F))}>Hele veldploeg (${Math.min(5, F)})</button>` : ''}</span>
-        <span class="label">Hoe vaak gaat elk kind naar de bank?</span>
+        <span class="small">${(r.perMoment || 1) > 1 ? `Per wisselmoment gaan er ${r.perMoment} spelers tegelijk naar de bank (of minder als de bank kleiner is).` : 'Telkens één speler tegelijk.'}${team.type === 'zaal' && (r.perMoment || 1) < Math.min(5, F) ? html` <button type="button" class="link" onClick=${() => setRule('perMoment', Math.min(5, F))}>Hele veldploeg (${Math.min(5, F)})</button>` : ''}</span>
+        <span class="label">Hoe vaak gaat elke speler naar de bank?</span>
         <${Seg} label="Wisselritme" value=${[0, 1, 2].indexOf(r.turnsPerPeriod || 0) !== -1 ? (r.turnsPerPeriod || 0) : -1} onChange=${(v) => setRule('turnsPerPeriod', v)} options=${[[0, 'App kiest'], [1, '1× per ' + pw], [2, '2× per ' + pw]]} />
         <span class="label">Voorrang</span>
         <${Seg} label="Voorrang" value=${r.priority === 'bezetting' ? 'bezetting' : 'eerlijk'} onChange=${(v) => setRule('priority', v)} options=${[['eerlijk', 'Eerlijkheid'], ['bezetting', 'Beste bezetting']]} />
@@ -279,7 +285,7 @@ export function Team({ state }) {
           <div class="pv-grid">
             <div><b class="num">${preview.swaps}</b><span>${(r.perMoment || 1) > 1 ? 'wisselmomenten' : 'wissels'}</span></div>
             <div><b class="num">~${String(preview.every).replace('.', ',')}′</b><span>tussen wissels</span></div>
-            <div><b class="num">${preview.minP === preview.maxP ? preview.minP : preview.minP + '–' + preview.maxP}′</b><span>speeltijd per kind</span></div>
+            <div><b class="num">${preview.minP === preview.maxP ? preview.minP : preview.minP + '–' + preview.maxP}′</b><span>speeltijd per speler</span></div>
             <div><b class="num">${preview.maxStint}′</b><span>langst op de bank</span></div>
           </div>
           <span class="small">${preview.turns}${!preview.ok ? ' · niet alles past precies, dit is de eerlijkste verdeling' : ''}</span>

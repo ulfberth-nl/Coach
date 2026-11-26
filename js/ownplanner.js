@@ -1,7 +1,7 @@
 // Rekenwerk voor 'Jouw plan' (de coach plant zelf). Pure functies, zonder DOM.
 //
 // Speelstijl
-//   sterk   Sterkste opstelling: kinderen spelen in hun kracht (dominante rol leidend, voorkeur daarna) en er
+//   sterk   Sterkste opstelling: spelers spelen in hun kracht (dominante rol leidend, voorkeur daarna) en er
 //           wordt vooral binnen de linies gewisseld. Sterkere spelers staan iets langer, binnen de marge.
 //   balans  Gebalanceerd: eerlijke speeltijd voorop, met oog voor voorkeursposities (vaak jongere teams).
 //
@@ -41,7 +41,7 @@ export function naturalMoments(L, p) {
 }
 
 const STRONG_BIAS = 3; // seconden extra 'nodig' per punt speelkracht boven 50 (bij sterk)
-// Bij gebalanceerd een heel kleine voorsprong: alleen beslissend als twee kinderen even lang speelden. Zo gaat
+// Bij gebalanceerd een heel kleine voorsprong: alleen beslissend als twee spelers even lang speelden. Zo gaat
 // een extra blok (als de speeltijd niet precies gelijk kan) naar sterkere spelers en niet toevallig naar een beginner.
 const EVEN_BIAS = 0.6;
 // Vooruitkijken: van twee even eerlijke uitkomsten wint die waarin sterkere spelers de extra minuten hebben
@@ -91,7 +91,7 @@ function placeFit(pos, out, inn, players, moved) {
   return { pos: next, shift: null };
 }
 
-// Opstelling in hun kracht: ruil spelers tussen linies zolang meer kinderen op hun dominante of voorkeursplek
+// Opstelling in hun kracht: ruil spelers tussen linies zolang meer spelers op hun dominante of voorkeursplek
 // komen. Daarbinnen blijft de verdeling van de kracht over de linies zoals assignLines die koos.
 export function fitAssign(pos, players) {
   const next = { ...pos };
@@ -237,7 +237,7 @@ function outcome(st, acc, ctx, end) {
 function badness(f, ctx, style) {
   const maxB = ctx.rules && ctx.rules.maxBenchOn ? (ctx.rules.maxBench || 10) * 60 : Infinity;
   // ook wie er nog meer te lang aan de kant zit telt mee (niet alleen de langste), zodat een gedwongen lange
-  // bankbeurt niet 'gratis' meer kinderen lang laat zitten
+  // bankbeurt niet 'gratis' meer spelers lang laat zitten
   const overSum = maxB === Infinity || !f.stretches ? 0 : f.stretches.reduce((a, x) => a + Math.max(0, x - maxB), 0);
   const sterk = style === 'sterk';
   return (f.maxPlayed - f.minPlayed) + 1.5 * Math.max(0, f.maxStretch - maxB) + 0.6 * overSum + (1 - f.kracht) * (sterk ? 1200 : 120) + f.swaps * 4 -

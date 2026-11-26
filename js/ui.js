@@ -1043,7 +1043,7 @@ export function ShieldColors({ name }) {
   </div>`;
 }
 
-// Wat de coach roept bij een wissel: wie eruit, en per kind dat erin komt of van plek verandert één regel
+// Wat de coach roept bij een wissel: wie eruit, en per speler dat erin komt of van plek verandert één regel
 // met waar hij aan het eind staat (uit M.callStory). Zelfde taal in de lade van het live-scherm en in de planner.
 export function CallStory({ call, nick }) {
   if (!call || (!call.out.length && !call.tell.length)) return null;
