@@ -69,16 +69,19 @@ function scoreAgg(ag, tg) {
 
 // Dragende speler: vanaf dit niveau (op de schaal 0–100; stap 6 van 8 op de schuifbalk)
 export const KEY_KRACHT = 75;
+// Vaste Waarde (niveau 6): op de focuslinie goed genoeg, dan hoeft er geen dragende speler naartoe te schuiven
+export const GOOD_KRACHT = 62.5;
 // Sterkste ploeg (rules.keyFewer): dragende spelers gaan één keer minder naar de bank dan de rest. 'Even vaak'
 // telt dan met een beurt voorsprong voor dragende spelers.
 const turnsOf = (state, ctx, id) => (state.turns[id] || 0) + (ctx.rules.keyFewer && ctx.players[id] && ctx.players[id].kracht >= KEY_KRACHT ? 1 : 0);
 const STAND_LINE = { verdedigen: 'A', aanvallen: 'V' };
 
 // Focus op de stand (verdedigen of aanvallen): op de focuslinie hoort een dragende speler.
-// - Staat er een dragende speler met die linie als vaste rol in het veld, dan hoort hij daar (anders straf).
-// - Is die er niet, dan mag een andere dragende speler invallen, en vervalt zijn straf voor spelen buiten zijn
-//   kracht. Voorkeur: wie die linie als voorkeur heeft, dan een dragende middenvelder, dan pas iemand van de
-//   andere kant van het veld (een aanvaller achterin of andersom).
+// - Staat er een dragende speler of een Vaste Waarde (niveau 6) met die linie als vaste rol in het veld, dan
+//   hoort hij daar (anders straf) en hoeft er niemand te schuiven.
+// - Anders: een dragende speler of Vaste Waarde met die linie als voorkeur hoort daar (speelt in zijn kracht).
+// - Is die er ook niet, dan mag een andere dragende speler invallen, en vervalt zijn straf voor spelen buiten
+//   zijn kracht: eerst een dragende middenvelder, dan pas iemand van de andere kant (een aanvaller achterin).
 // - Zijn er helemaal geen dragende spelers, dan de sterkste speler (zoals voorheen).
 // Bij balans geldt dit niet: dan speelt iedereen op zijn eigen plek(ken).
 const LINE_IDX = { V: 0, M: 1, A: 2 };
@@ -87,15 +90,20 @@ export function standPenalty(pos, players, stand) {
   if (!line) return 0;
   const ids = Object.keys(pos);
   if (!ids.length) return 0;
-  const keys = ids.filter((id) => players[id].kracht >= KEY_KRACHT);
-  if (!keys.length) {
+  // goed genoeg op de focuslinie: een dragende speler of een Vaste Waarde (niveau 6) met die linie als vaste rol
+  const natural = ids.filter((id) => players[id].kracht >= GOOD_KRACHT && players[id].main === line);
+  if (natural.length) return natural.some((id) => pos[id] === line) ? 0 : 60;
+  // daarna: een dragende speler of Vaste Waarde met deze linie als voorkeur (die speelt daar in zijn kracht)
+  const pref = ids.filter((id) => players[id].kracht >= GOOD_KRACHT && fieldPrefs(players[id]).indexOf(line) !== -1);
+  if (pref.length) return pref.some((id) => pos[id] === line) ? 0 : 60;
+  // anders mag een dragende speler invallen
+  const subs = ids.filter((id) => players[id].kracht >= KEY_KRACHT);
+  if (!subs.length) {
     const top = Math.max(...ids.map((id) => players[id].kracht));
     return ids.some((id) => players[id].kracht === top && pos[id] === line) ? 0 : 60;
   }
-  const natural = keys.filter((id) => players[id].main === line);
-  if (natural.length) return natural.some((id) => pos[id] === line) ? 0 : 60;
   let best = 60;
-  for (const id of keys) {
+  for (const id of subs) {
     if (pos[id] !== line) continue;
     const p = players[id];
     const from = p.main && p.main !== 'K' ? p.main : (fieldPrefs(p).find((l) => l !== line) || 'M');

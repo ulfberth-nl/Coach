@@ -58,3 +58,23 @@ console.log('sterkste ploeg ok');
   assert.equal(def3.s2, 'A'); assert.equal(def3.s4, 'M'); assert.equal(def3.s1, 'V');
 }
 console.log('focus met invallers ok');
+
+// ---------- focus: een Vaste Waarde (niveau 6) achterin is goed genoeg ----------
+{
+  const { assignLines, FIT_W } = await import('../js/planner.js');
+  const pm = M.playersMap(team);
+  for (const id in pm) pm[id].w = FIT_W.bezetting;
+  const lines = { V: 2, M: 1, A: 2 };
+  const ids5 = ['s1', 's3', 's4', 's5', 's7'];
+  // s7 wordt een Vaste Waarde met vaste rol achter
+  pm.s7 = { ...pm.s7, kracht: lv(6) };
+  const def = assignLines(ids5, lines, pm, 'verdedigen');
+  assert.equal(def.s7, 'A', 'Vaste Waarde staat achter');
+  assert.equal(def.s4, 'M', 'dragende middenvelder blijft in het midden');
+  assert.equal(def.s1, 'V', 'dragende aanvaller blijft voorin');
+  // Vaste Waarde zonder vaste rol maar met voorkeur achter: ook goed genoeg
+  pm.s7 = { ...pm.s7, main: null, prefs: ['A', 'M'] };
+  const def2 = assignLines(ids5, lines, pm, 'verdedigen');
+  assert.equal(def2.s7, 'A'); assert.equal(def2.s4, 'M'); assert.equal(def2.s1, 'V');
+}
+console.log('focus met Vaste Waarde ok');
