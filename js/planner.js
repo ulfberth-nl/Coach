@@ -81,7 +81,8 @@ const STAND_LINE = { verdedigen: 'A', aanvallen: 'V' };
 //   hoort hij daar (anders straf) en hoeft er niemand te schuiven.
 // - Anders: een dragende speler of Vaste Waarde met die linie als voorkeur hoort daar (speelt in zijn kracht).
 // - Is die er ook niet, dan mag een andere dragende speler invallen, en vervalt zijn straf voor spelen buiten
-//   zijn kracht: eerst een dragende middenvelder, dan pas iemand van de andere kant (een aanvaller achterin).
+//   zijn kracht. Met één middenvelder eerst iemand van de andere kant (een aanvaller achterin), zodat het
+//   midden heel blijft; met twee of meer middenvelders eerst een dragende middenvelder.
 // - Zijn er helemaal geen dragende spelers, dan de sterkste speler (zoals voorheen).
 // Bij balans geldt dit niet: dan speelt iedereen op zijn eigen plek(ken).
 const LINE_IDX = { V: 0, M: 1, A: 2 };
@@ -93,8 +94,12 @@ export function standPenalty(pos, players, stand) {
   // goed genoeg op de focuslinie: een dragende speler of een Vaste Waarde (niveau 6) met die linie als vaste rol
   const natural = ids.filter((id) => players[id].kracht >= GOOD_KRACHT && players[id].main === line);
   if (natural.length) return natural.some((id) => pos[id] === line) ? 0 : 60;
+  // Met één middenvelder (bijv. 2-1-2) blijft het midden heel: de middenvelder schuift niet, eerst valt iemand van
+  // de andere kant in. Met twee of meer middenvelders mag eerst een middenvelder schuiven.
+  const oneMid = ids.filter((id) => pos[id] === 'M').length <= 1;
+  const midStays = (id) => oneMid && players[id].main === 'M';
   // daarna: een dragende speler of Vaste Waarde met deze linie als voorkeur (die speelt daar in zijn kracht)
-  const pref = ids.filter((id) => players[id].kracht >= GOOD_KRACHT && fieldPrefs(players[id]).indexOf(line) !== -1);
+  const pref = ids.filter((id) => players[id].kracht >= GOOD_KRACHT && fieldPrefs(players[id]).indexOf(line) !== -1 && !midStays(id));
   if (pref.length) return pref.some((id) => pos[id] === line) ? 0 : 60;
   // anders mag een dragende speler invallen
   const subs = ids.filter((id) => players[id].kracht >= KEY_KRACHT);
@@ -107,7 +112,8 @@ export function standPenalty(pos, players, stand) {
     if (pos[id] !== line) continue;
     const p = players[id];
     const from = p.main && p.main !== 'K' ? p.main : (fieldPrefs(p).find((l) => l !== line) || 'M');
-    const cost = fieldPrefs(p).indexOf(line) !== -1 ? 0 : Math.abs(LINE_IDX[from] - LINE_IDX[line]) === 1 ? 5 : 40;
+    const near = Math.abs(LINE_IDX[from] - LINE_IDX[line]) === 1;
+    const cost = !midStays(id) && fieldPrefs(p).indexOf(line) !== -1 ? 0 : (near !== oneMid) ? 5 : 40;
     best = Math.min(best, cost - linePenalty(p, line));
   }
   return best;
