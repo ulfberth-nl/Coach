@@ -35,11 +35,15 @@ function lineAverages(pos, players) {
 const fieldPrefs = (p) => p.fp || (p.prefs || []).filter((x) => x !== 'K');
 // Strafpunten voor een speler op een linie: dominante rol gaat voor (vast = harde regel), daarna voorkeursposities.
 export const FIXED_PENALTY = 250;
+// Gewicht per speler (p.w, gezet bij het maken van de context): bij beste bezetting telt spelen buiten je kracht
+// veel zwaarder, zodat sterke spelers op hun plek blijven en een speler die overal past schuift.
+export const FIT_W = { eerlijk: { dom: 16, pref: 8 }, bezetting: { dom: 40, pref: 20 } };
 function linePenalty(p, line) {
   let pen = 0;
-  if (p.main && p.main !== 'K' && p.main !== line) pen += p.flex === false ? FIXED_PENALTY : 8;
+  const w = p.w || FIT_W.eerlijk;
+  if (p.main && p.main !== 'K' && p.main !== line) pen += p.flex === false ? FIXED_PENALTY : w.dom;
   const fp = fieldPrefs(p);
-  if (fp.length && fp.indexOf(line) === -1) pen += 4;
+  if (fp.length && fp.indexOf(line) === -1) pen += w.pref;
   return pen;
 }
 
@@ -165,7 +169,7 @@ export function isDisabled(state, id, t, ctx) {
 }
 
 // Kies wie erin gaat en wie eruit.
-export function chooseSwap(state, ctx, t, interval, inMode = 'played', outMode = 'played', used = null) {
+export function chooseSwap(state, ctx, t, interval, inMode = 'played', outMode = 'played', used = null, edge = null, keyAvoid = false) {
   const { players, rules, stand } = ctx;
   // used = wie op dit moment al gewisseld is (bij meerdere wissels tegelijk niet direct terug)
   const eligible = state.bench.filter((id) => !isDisabled(state, id, t, ctx) && !(used && used.has(id)));
@@ -181,8 +185,9 @@ export function chooseSwap(state, ctx, t, interval, inMode = 'played', outMode =
   const adj = (id) => state.played[id] - bias * ((players[id].kracht == null ? 50 : players[id].kracht) - 50);
   const byPlayed = (a, b) => (adj(a) - adj(b)) || (state.since[a] - state.since[b]);
   const bySince = (a, b) => (state.since[a] - state.since[b]) || (adj(a) - adj(b));
+  // edge 'first': eerste wissel na de rust/aftrap: de sterkste bankspeler komt er meteen weer in (korte bankbeurt)
   const kin = eligible.slice().sort((a, b) =>
-    (inMode === 'since' ? bySince(a, b) : byPlayed(a, b)) || (players[b].kracht - players[a].kracht))[0];
+    (edge === 'first' && (players[b].kracht - players[a].kracht)) || (inMode === 'since' ? bySince(a, b) : byPlayed(a, b)) || (players[b].kracht - players[a].kracht))[0];
 
   const minStint = Math.max(60, interval * 0.8);
   let cands = fieldIds.filter((id) => t - state.since[id] >= minStint);
@@ -190,8 +195,14 @@ export function chooseSwap(state, ctx, t, interval, inMode = 'played', outMode =
   const kDiff = (id) => Math.abs(players[id].kracht - players[kin].kracht);
   const main = players[kin].main && players[kin].main !== 'K' ? players[kin].main : null;
   const lineOk = (id) => (main && state.pos[id] !== main ? 1 : 0);
+  // beste bezetting: zit er al een dragende speler op de bank, dan gaat er liever geen tweede bij
+  const keyBench = keyAvoid && !fair && state.bench.some((id) => id !== kin && players[id].kracht >= KEY_KRACHT);
+  const isKey = (id) => (players[id].kracht >= KEY_KRACHT ? 1 : 0);
   cands.sort((a, b) => {
     if (rules.evenOften && state.turns[a] !== state.turns[b]) return state.turns[a] - state.turns[b];
+    if (keyBench && isKey(a) !== isKey(b)) return isKey(a) - isKey(b);
+    // edge 'last': laatste wissel voor de rust/het eind: een sterke speler rust kort uit
+    if (edge === 'last' && players[a].kracht !== players[b].kracht) return players[b].kracht - players[a].kracht;
     const pd = outMode === 'since' ? state.since[a] - state.since[b] : adj(b) - adj(a);
     if (Math.abs(pd) > 30) return pd;
     return (lineOk(a) - lineOk(b)) || (kDiff(a) - kDiff(b));
@@ -234,7 +245,7 @@ function applySwap(state, sw, t) {
 }
 
 // Nieuwe opstelling bij de start van een periode (de rust is een gratis moment om meerdere spelers te wisselen).
-export function breakLineup(state, ctx, t, changes = null) {
+export function breakLineup(state, ctx, t, changes = null, edge = false) {
   const { players, lines, rules } = ctx;
   const F = Object.values(lines).reduce((a, b) => a + b, 0);
   const all = Object.keys(state.pos).concat(state.bench);
@@ -249,7 +260,7 @@ export function breakLineup(state, ctx, t, changes = null) {
   const nBench = changes === null ? maxBench : Math.min(maxBench, Math.max(0, changes - 0));
   void freeSeats;
   // naar de bank in de rust: wie het minst vaak gewisseld is en het meest speelde (bij beste bezetting: aangepaste speeltijd)
-  const order = onField.slice().sort((a, b) => (rules.evenOften ? state.turns[a] - state.turns[b] : 0) || (adj(b) - adj(a)));
+  const order = onField.slice().sort((a, b) => (rules.evenOften ? state.turns[a] - state.turns[b] : 0) || (edge ? players[b].kracht - players[a].kracht : 0) || (adj(b) - adj(a)));
   const toBench = order.slice(0, nBench);
   // wie erin komt: wie het minst gespeeld heeft
   const comeIn = avail.filter((id) => !(id in state.pos)).sort((a, b) => adj(a) - adj(b));
@@ -270,6 +281,18 @@ function applyLineup(state, lu, t) {
   for (const id of Object.keys(lu.pos)) if (!(id in state.pos)) { noteStint(state, id, t); state.since[id] = t; }
   state.pos = { ...lu.pos };
   state.bench = lu.bench.slice();
+}
+
+// Opstelling bij de start van een periode die de coach heeft vastgezet (Autopilot): geldig als iedereen erin er
+// nog is en inzetbaar is; wie er niet in staat, zit op de bank. Anders (null) rekent de app zelf.
+function fixedBreak(state, ctx, t, period) {
+  const fx = ctx.breakLineups && ctx.breakLineups[period];
+  if (!fx) return null;
+  const F = Object.values(ctx.lines).reduce((a, b) => a + b, 0);
+  const all = Object.keys(state.pos).concat(state.bench);
+  const ids = Object.keys(fx.pos);
+  if (ids.length !== F || ids.some((id) => all.indexOf(id) === -1 || isDisabled(state, id, t, ctx))) return null;
+  return { pos: { ...fx.pos }, bench: all.filter((id) => !(id in fx.pos)), slots: fx.slots ? { ...fx.slots } : null, fixed: true };
 }
 
 // Simuleer de rest van de wedstrijd met m wissels (verdeeld over de resterende periodes).
@@ -301,9 +324,10 @@ function simulate(start, ctx, T, m, opt = {}) {
     if (atBreak && sg.p > 0) {
       advance(state, now, sg.p * periodLen);
       now = sg.p * periodLen;
-      if (rules.newLineupAtBreak) {
-        const lu = breakLineup(state, ctx, now, opt.breakChanges === undefined ? null : opt.breakChanges);
-        steps.push({ type: 'lineup', t: now, pos: lu.pos, bench: lu.bench, period: sg.p });
+      const fx = fixedBreak(state, ctx, now, sg.p);
+      if (fx || rules.newLineupAtBreak) {
+        const lu = fx || breakLineup(state, ctx, now, opt.breakChanges === undefined ? null : opt.breakChanges, !!opt.edges);
+        steps.push({ type: 'lineup', t: now, pos: lu.pos, bench: lu.bench, period: sg.p, fixed: !!fx, slots: fx ? fx.slots : undefined });
         applyLineup(state, lu, now);
       }
     }
@@ -315,7 +339,8 @@ function simulate(start, ctx, T, m, opt = {}) {
       // per moment 1–5 spelers tegelijk (instelling Team → Wisselen)
       const used = new Set();
       for (let q = 0; q < perMoment; q++) {
-        const sw = chooseSwap(state, ctx, t, interval, opt.inMode, opt.outMode, used);
+        const edge = !opt.edges ? null : j === sg.k ? 'last' : j === 1 && (sg.p > curP || T === 0) ? 'first' : null;
+        const sw = chooseSwap(state, ctx, t, interval, opt.inMode, opt.outMode, used, edge, !!opt.keyAvoid);
         if (!sw) break;
         steps.push({ type: 'swap', t, out: sw.out, in: sw.in, line: sw.line, shift: sw.shift, pos: { ...sw.pos } });
         applySwap(state, sw, t);
@@ -369,6 +394,34 @@ function assess(final, ctx, ids, m) {
   return { fair: f, ok: okTime && okTurns && okBench, cost, why };
 }
 
+// Kwaliteit van een plan dat binnen de regels past (lager is beter). Bij twijfel gaan de beste spelers voor:
+// - tilt: wie de extra minuten krijgt (positief als dat de sterkere spelers zijn);
+// - omkeringen: een speler die duidelijk sterker is (2 niveaus of meer) speelt korter dan een zwakkere.
+// Bij beste bezetting tellen die zwaar; bij eerlijk eerst het kleinste verschil in speeltijd, dan pas de rest.
+export const QW = { eerlijk: { spread: 3, tilt: 0.3, inv: 1, key: 0.3 }, bezetting: { spread: 0.5, tilt: 1.5, inv: 8, key: 0.8 } };
+function quality(cand, ctx, ids) {
+  const W = QW[ctx.rules.priority === 'bezetting' ? 'bezetting' : 'eerlijk'];
+  const pl = cand.final.played;
+  const counted = ids.filter((id) => !(cand.final.disabled && cand.final.disabled[id]) && (ctx.excludeFair || []).indexOf(id) === -1);
+  const kr = (id) => (ctx.players[id].kracht == null ? 50 : ctx.players[id].kracht);
+  const km = counted.reduce((a, id) => a + kr(id), 0) / Math.max(1, counted.length);
+  let tilt = 0, inv = 0;
+  for (const a of counted) {
+    tilt += ((pl[a] || 0) / 60) * (kr(a) - km) / 50;
+    for (const b of counted) if (kr(a) - kr(b) >= 25 && (pl[a] || 0) < (pl[b] || 0) - 30) inv++;
+  }
+  // minuten met twee of meer dragende spelers tegelijk aan de kant
+  let keyOut = 0;
+  const end = ctx.periods * ctx.periodLen;
+  let field = cand.start;
+  let t0 = cand.T;
+  const keyIds = counted.filter((id) => kr(id) >= KEY_KRACHT);
+  const tick = (t1) => { if (keyIds.filter((id) => !(id in field)).length >= 2) keyOut += (t1 - t0) / 60; t0 = t1; };
+  for (const st of cand.steps) { tick(st.t); field = st.pos; }
+  tick(end);
+  return W.spread * cand.fair.spread / 60 - W.tilt * tilt + W.inv * inv + W.key * keyOut + cand.m * 0.01;
+}
+
 // Hoofdfunctie: maak het plan voor de rest van de wedstrijd vanaf tijd T.
 // ctx: { players, lines, periodLen, periods, rules, stand, firstAt, lineupPending, excludeFair }
 export function planRest(start, ctx, T) {
@@ -381,26 +434,44 @@ export function planRest(start, ctx, T) {
   const maxBench = ctx.rules.maxBenchOn ? (ctx.rules.maxBench || 10) * 60 : 0;
   // genormaliseerde spelers (voorkeurslinies vooraf berekend) voor snelheid
   const fast = {};
-  for (const id in ctx.players) { const p = ctx.players[id]; fast[id] = { kracht: p.kracht, fp: fieldPrefs(p), main: p.main || null, flex: p.flex !== false }; }
+  const w = ctx.rules.priority === 'bezetting' ? FIT_W.bezetting : FIT_W.eerlijk;
+  for (const id in ctx.players) { const p = ctx.players[id]; fast[id] = { kracht: p.kracht, fp: fieldPrefs(p), main: p.main || null, flex: p.flex !== false, w }; }
   ctx = { ...ctx, players: fast };
   let best = null;
   const multi = Math.min(ctx.periods, ctx.periods - Math.floor(T / ctx.periodLen)) > 1;
   const variants = [];
   const B = start.bench.length;
   const breakOpts = multi && ctx.rules.newLineupAtBreak ? Array.from({ length: B + 1 }, (_, i) => B - i) : [null];
+  // beste bezetting: ook proberen of sterke spelers de korte bankbeurten krijgen (vlak voor en na de rust)
+  const extra = [];
   for (const breakChanges of breakOpts) for (const shiftFirst of multi ? [0, -1, 1] : [0]) {
-    for (const inMode of ['played', 'since']) for (const outMode of ['played', 'since']) variants.push({ inMode, outMode, shiftFirst, breakChanges });
+    for (const inMode of ['played', 'since']) for (const outMode of ['played', 'since']) {
+      variants.push({ inMode, outMode, shiftFirst, breakChanges });
+      if (ctx.rules.priority === 'bezetting') for (const [edges, keyAvoid] of [[true, false], [false, true], [true, true]]) extra.push({ inMode, outMode, shiftFirst, breakChanges, edges, keyAvoid });
+    }
   }
   if (start.bench.length) {
     for (let m = 0; m <= maxM; m++) {
+      // bij het kleinste aantal wissels dat past: van alle manieren die passen de beste nemen (niet de eerste)
       let bestOkM = null;
+      const tryV = (v) => {
+        const sim = simulate(start, ctx, T, m, v);
+        const cand = { ...sim, ...assess(sim.final, ctx, ids, m), m, start: start.pos, T };
+        if (cand.ok) { cand.q = quality(cand, ctx, ids); if (!bestOkM || cand.q < bestOkM.q - 1e-9) bestOkM = cand; }
+        return cand;
+      };
       for (const v of variants) {
         const sim = simulate(start, ctx, T, m, v);
-        const cand = { ...sim, ...assess(sim.final, ctx, ids, m), m };
-        if (cand.ok) { bestOkM = cand; break; }
-        if (!best || cand.cost < best.cost) best = cand;
+        const cand = { ...sim, ...assess(sim.final, ctx, ids, m), m, start: start.pos, T };
+        if (cand.ok) {
+          cand.q = quality(cand, ctx, ids);
+          if (!bestOkM || cand.q < bestOkM.q - 1e-9) bestOkM = cand;
+          continue;
+        }
+        if (!bestOkM && (!best || cand.cost < best.cost)) best = cand;
       }
-      if (bestOkM) { best = bestOkM; break; }
+      // beste bezetting: bij dit aantal wissels ook proberen of sterke spelers de korte bankbeurten krijgen
+      if (bestOkM) { for (const v of extra) tryV(v); best = bestOkM; break; }
     }
   }
   if (!best) {
@@ -432,7 +503,8 @@ function busy(r) {
 
 function pinnedRun(start, ctx, T, pins, grid, rhythm) {
   const fast = {};
-  for (const id in ctx.players) { const p = ctx.players[id]; fast[id] = { kracht: p.kracht, fp: fieldPrefs(p), main: p.main || null, flex: p.flex !== false }; }
+  const w = ctx.rules.priority === 'bezetting' ? FIT_W.bezetting : FIT_W.eerlijk;
+  for (const id in ctx.players) { const p = ctx.players[id]; fast[id] = { kracht: p.kracht, fp: fieldPrefs(p), main: p.main || null, flex: p.flex !== false, w }; }
   const fctx = { ...ctx, players: fast };
   const { periodLen, periods, rules } = ctx;
   const perMoment = Math.max(1, Math.min(5, rules.perMoment || 1));
@@ -451,9 +523,10 @@ function pinnedRun(start, ctx, T, pins, grid, rhythm) {
   const lineupAt = (t, period) => {
     advance(state, now, t);
     now = t;
-    if (rules.newLineupAtBreak) {
-      const lu = breakLineup(state, { ...fctx, lines: curLines }, t, null);
-      steps.push({ type: 'lineup', t, pos: lu.pos, bench: lu.bench, period });
+    const fx = fixedBreak(state, { ...fctx, lines: curLines }, t, period);
+    if (fx || rules.newLineupAtBreak) {
+      const lu = fx || breakLineup(state, { ...fctx, lines: curLines }, t, null);
+      steps.push({ type: 'lineup', t, pos: lu.pos, bench: lu.bench, period, fixed: !!fx, slots: fx ? fx.slots : undefined });
       applyLineup(state, lu, t);
     }
   };

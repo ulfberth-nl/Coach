@@ -1,6 +1,6 @@
 // Wedstrijdlogica: klok, gebeurtenissen, afgeleide stand en (her)planning.
 import { naturalMoments, project, candidates as ownCands, decideLineup, fitOf, inKracht, FIT } from './ownplanner.js';
-import { planRest, planPinned, planOwn, stateAt, advise, breakLineup, initialState, LINES, lineStatus, isDisabled, placeIn } from './planner.js';
+import { planRest, planPinned, planOwn, stateAt, advise, breakLineup, initialState, LINES, lineStatus, isDisabled, placeIn, FIT_W } from './planner.js';
 import { uid } from './store.js';
 
 export const periodLen = (team) => team.periodMin * 60;
@@ -331,12 +331,16 @@ export function turnsTarget(team, match = null) {
 
 export function makeCtx(match, team, stand) {
   const r = effRules(match, team);
+  const w = (match.priority || r.priority) === 'bezetting' ? FIT_W.bezetting : FIT_W.eerlijk;
+  const players = playersMap(team);
+  for (const id in players) players[id].w = w;
   return {
-    players: playersMap(team),
+    players,
     lines: linesOf(match, team),
     periodLen: periodLen(team),
     periods: team.periods,
     rules: { ...r, priority: match.priority || r.priority, turnsTarget: turnsTarget(team, match), turnsSlack: r.turnsSlack || 0 },
+    breakLineups: isOwn(match, team) ? null : match.breakLineups || null,
     stand
   };
 }
@@ -384,7 +388,19 @@ export function pinMoment(match, team, t, pairs, after = 'terug', moves) {
 }
 
 // Speldje weghalen: de app kiest op dat moment weer zelf.
+// Opstelling voor het begin van periode p vastzetten (Autopilot): de rest rekent de app eromheen.
+export function setBreakLineup(match, team, p, lu) {
+  match.breakLineups = { ...(match.breakLineups || {}), [p]: { pos: { ...lu.pos }, bench: lu.bench.slice(), slots: { ...lu.slots } } };
+  replan(match, team);
+}
+
 export function unpinMoment(match, team, t) {
+  const L = periodLen(team);
+  if (match.breakLineups && t > 0 && t % L === 0 && match.breakLineups[t / L]) {
+    const next = { ...match.breakLineups };
+    delete next[t / L];
+    match.breakLineups = Object.keys(next).length ? next : null;
+  }
   match.pins = (match.pins || []).filter((p) => p.t !== t);
   if (match.fixed && match.fixed.t === t) match.fixed = null;
   replan(match, team);
@@ -437,6 +453,16 @@ export function replan(match, team, ms = Date.now()) {
   if (pins.length && (!r.ok || swapsOf(r) > swapsOf(r.free) + 1)) {
     const r2 = plan({ ...ctx, rules: { ...ctx.rules, turnsSlack: 1 } });
     if ((r2.ok && !r.ok) || swapsOf(r2) < swapsOf(r)) r = { ...r2, relaxed: true };
+  }
+  // vastgezette opstelling na de rust: ook dan niet ineens veel meer wissels; liever 1 beurt verschil
+  const hasFixed = ctx.breakLineups && Object.keys(ctx.breakLineups).length;
+  if (hasFixed) {
+    const ref = planRest(st, { ...ctx, breakLineups: null }, anchor);
+    if (!r.ok || swapsOf(r) > swapsOf(ref) + 1) {
+      const r2 = plan({ ...ctx, rules: { ...ctx.rules, turnsSlack: 1 } });
+      if ((r2.ok && !r.ok) || swapsOf(r2) < swapsOf(r)) r = { ...r2, relaxed: true, free: r.free || ref };
+      else r = { ...r, free: r.free || ref };
+    }
   }
   if (!match.started) {
     match.baseline = swapsOf(r.free || r);
@@ -625,6 +651,7 @@ export function createMatch(team, opts) {
     fairness: opts.fairness || null,
     planMode: opts.planMode || null,
     periodLineups: opts.periodLineups ? JSON.parse(JSON.stringify(opts.periodLineups)) : null,
+    breakLineups: opts.breakLineups ? JSON.parse(JSON.stringify(opts.breakLineups)) : null,
     ownStash: opts.ownStash ? JSON.parse(JSON.stringify(opts.ownStash)) : null,
     planStyle: opts.planStyle || null,
     planRhythm: opts.planRhythm || null,
@@ -1310,7 +1337,7 @@ export function timeline(match, team) {
         if (s.lines) lines = { ...s.lines };
         slots = s.slots ? { ...s.slots } : makeSlots(s.pos, lines, players);
         pos = { ...s.pos }; bench = s.bench.slice();
-        cards.push({ kind: 'lineup', t: s.t, period: s.period, slots, pos, bench, keeper, lines, past: false, own: !!s.own });
+        cards.push({ kind: 'lineup', t: s.t, period: s.period, slots, pos, bench, keeper, lines, past: false, own: !!s.own, pinned: !!s.fixed });
       } else if (s.type === 'move') {
         // plekwissel (game plan): twee veldspelers ruilen van linie, of één speler gaat naar een andere linie
         if (s.to) {

@@ -118,7 +118,7 @@ export function pairsAfterDrag(next, out, inn, perMoment) {
   return list;
 }
 
-export function PlanView({ match, team, editable = false, onSwap, initialIndex = 0, nowIndex = -1, compact = false, liveT = null, onSwapNow = null, planner = false, onPin = null, onUnpin = null, onIndex = null, children = null, onPinHere = null, onLocked = null, onTour = null }) {
+export function PlanView({ match, team, editable = false, onSwap, initialIndex = 0, nowIndex = -1, compact = false, liveT = null, onSwapNow = null, planner = false, onPin = null, onUnpin = null, onIndex = null, children = null, onPinHere = null, onLocked = null, onTour = null, onBreakSwap = null }) {
   const nick = (id) => M.nickOf(team, id);
   const END = M.matchEnd(team);
   const L = M.periodLen(team);
@@ -134,6 +134,8 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   const canEdit = !planner && editable && i === 0;
   // homescherm: bij een later wisselmoment = dit moment vastzetten (speldje), net als in de planner
   const canPinHere = !planner && editable && !!onPinHere && i > 0 && c.kind === 'swap' && !c.past;
+  // homescherm: de opstelling bij de start van een volgende periode (rust) aanpassen = die opstelling vastzetten
+  const canBreak = !planner && editable && !!onBreakSwap && i > 0 && c.kind === 'lineup' && !c.past;
   // planner: het volgende moment (achtergrond) plan je door op de voorgrond te slepen
   const nx = i + 1 < cards.length ? cards[i + 1] : null;
   const canPlan = planner && !!onPin && !match.finished && nx && nx.kind === 'swap' && !nx.past && i >= Math.max(0, nowIndex);
@@ -231,12 +233,21 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   }, [!!onLocked, planner]);
   // keeper slepen bij de start: van en naar de keeperplek
   const keeperHint = (a, b) => { const k = match.keeperId; const o = a === k ? b : a; return o.slice(0, 5) === 'line:' ? null : `${M.nickOf(team, o)} keept · ${M.nickOf(team, k)} neemt zijn plek`; };
-  useDragSwap(zone, canEdit || canPlan || canPinHere, (a, b) => (canPlan ? planDrop(a, b) : canPinHere ? hereDrop(a, b) : onSwap && onSwap(a, b)), (a, b) => (canPlan ? planHint(a, b) : canPinHere ? hereHint(a, b)
+  const breakHint = (a, b) => {
+    if (b.slice(0, 5) === 'line:' || a.slice(0, 5) === 'line:') return null;
+    const per = M.periodLabel(team, c.period);
+    if (!(a in c.pos) && !(b in c.pos)) return null;
+    if (a in c.pos && b in c.pos) return `Ruil met ${M.nickOf(team, b)} · ${per} vast`;
+    const inn = a in c.pos ? b : a, out = a in c.pos ? a : b;
+    return `${M.nickOf(team, inn)} begint de ${per} voor ${M.nickOf(team, out)}`;
+  };
+  const breakDrop = (a, b) => { if (breakHint(a, b)) onBreakSwap(c.period, c.t, M.swapInLineup({ pos: c.pos, bench: c.bench, slots: c.slots }, a, b)); };
+  useDragSwap(zone, canEdit || canPlan || canPinHere || canBreak, (a, b) => (canPlan ? planDrop(a, b) : canPinHere ? hereDrop(a, b) : canBreak ? breakDrop(a, b) : onSwap && onSwap(a, b)), (a, b) => (canPlan ? planHint(a, b) : canPinHere ? hereHint(a, b) : canBreak ? breakHint(a, b)
     : canEdit && match.keeperId && (a === match.keeperId || b === match.keeperId) ? keeperHint(a, b)
     : b.slice(0, 5) === 'line:'
     ? (a in c.pos ? M.formationLabel(lines, c.pos[a], b.split(':')[1]) : null)
     : 'Ruil met ' + M.nickOf(team, b)));
-  useScrub(zone, { get: getF, set: setF, skipPills: () => (editable && (Math.round(getF()) === 0 || canPinHere)) || canPlan });
+  useScrub(zone, { get: getF, set: setF, skipPills: () => (editable && (Math.round(getF()) === 0 || canPinHere || canBreak)) || canPlan });
   // spieken: vinger stil op een leeg stuk veld = het volgende moment op ware grootte
   useEffect(() => {
     const el = zone.current;

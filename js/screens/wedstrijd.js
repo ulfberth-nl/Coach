@@ -13,7 +13,7 @@ import { switchPlanMode } from './plan.js';
 import { APP_VERSION } from './team.js';
 import { Rooster } from './gameplan.js';
 import { mutate, undoAction, liveAct, SwapSheet, GroupSwapSheet, BenchSheet, GoalSheet, JoinSheet, KeeperSheet } from './live.js';
-import { Field, Neon, Roll, Sheet, CallStory, Confirm, Seg, Stepper, Icon, accentFor, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, BenchScroll, beep, flash, unlockAudio, toast, go, Portal } from '../ui.js';
+import { POS_COLORS, Field, Neon, Roll, Sheet, CallStory, Confirm, Seg, Stepper, Icon, accentFor, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, BenchScroll, beep, flash, unlockAudio, toast, go, Portal } from '../ui.js';
 
 // slepen in de startopstelling: twee spelers ruilen, of een speler naar een lege plek in een andere linie
 // (dan verandert de opstelling voor deze wedstrijd). Het plan rekent daarna opnieuw.
@@ -117,7 +117,7 @@ export function rebuildConcept(d, changes = {}) {
   else if (present.indexOf(keeperId) === -1) keeperId = suggestKeeper(t, present, keeperCounts(d, t));
   // eigen opstelling (gesleept) blijft staan, behalve als de coach om een nieuw voorstel vraagt
   const lines = changes.resetLines ? null : m.lines || null;
-  const keep = changes.resetLines ? { planMode: m.planMode } : { pins: m.pins, fairness: m.fairness, standMode: m.standMode, manualStand: m.manualStand, planMode: m.planMode, periodLineups: m.periodLineups, ownStash: m.ownStash, planStyle: m.planStyle, planRhythm: m.planRhythm, ownSteps: m.ownSteps, gameplan: m.gameplan };
+  const keep = changes.resetLines ? { planMode: m.planMode } : { pins: m.pins, fairness: m.fairness, standMode: m.standMode, manualStand: m.manualStand, planMode: m.planMode, periodLineups: m.periodLineups, ownStash: m.ownStash, planStyle: m.planStyle, planRhythm: m.planRhythm, ownSteps: m.ownSteps, gameplan: m.gameplan, breakLineups: m.breakLineups };
   const n = M.createMatch(t, { present, keeperId, priority: changes.priority || m.priority, opponent: m.opponent, date: m.date, lines, rules: matchRules(t, present, keeperId), ...keep });
   n.id = m.id;
   n.setup = m.setup || { present: false, keeper: false, opponent: false };
@@ -170,12 +170,12 @@ export function Wedstrijd({ state }) {
   return html`<${LiveView} match=${match} team=${mteam} key=${'live' + match.id} />`;
 }
 
-function Affiche({ match, team, onClick, children }) {
+function Affiche({ match, team, onClick, children, todo = false }) {
   return html`<header class="mhead">
-    <button type="button" class="affiche" onClick=${onClick} aria-label="Wedstrijdgegevens">
+    <button type="button" class=${'affiche' + (todo ? ' todo' : '')} onClick=${onClick} aria-label="Wedstrijdgegevens">
       <${TeamBadge} team=${team} size=${32} />
       <span class="col grow" style="gap:0;min-width:0">
-        <span class="aff-title">${match.opponent ? 'tegen ' + match.opponent : 'Tegenstander?'}</span>
+        <span class="aff-title">${match.opponent ? 'tegen ' + match.opponent : todo ? 'Tegen wie speel je?' : 'Tegenstander?'}</span>
         <span class="aff-sub">${dateLabel(match.date)}${match.time ? ' · ' + match.time : ''}${match.field ? ' · ' + match.field : ''}${match.home === false ? ' · uit' : ''}</span>
       </span>
       <${OppBadge} name=${match.opponent} size=${32} />
@@ -211,10 +211,10 @@ function PrepView({ state, match, team }) {
     viewTransition('start', () => mutateConcept((m) => M.startClock(m)));
   };
   return html`<main class="matchscreen with-dock">
-    <${Affiche} match=${match} team=${team} onClick=${() => setSheet('opp')}>
+    <${Affiche} match=${match} team=${team} todo=${!setup.opponent} onClick=${() => setSheet('opp')}>
       <button type="button" class="iconbtn" aria-label="Menu" onClick=${() => setSheet('menu')}><${Icon} name="more" size=${22} /></button>
     </${Affiche}>
-    <${StepRail} match=${match} team=${team} st=${gpSt} onStep=${(k) => (k === 'swap' ? (M.isOwn(match, team) ? go('/plan') : setSheet('speeltijd')) : setSheet(k))} />
+    <${SetupTiles} match=${match} team=${team} onOpen=${setSheet} />
     ${tooFew
       ? html`<div class="card" style="flex:1 1 auto;justify-content:center;text-align:center"><span class="h2">Te weinig spelers</span><span class="sub">Je hebt ${F} veldspelers nodig${team.keeper ? ' plus een keeper' : ''}. Tik op "spelers".</span></div>`
       : html`
@@ -229,9 +229,15 @@ function PrepView({ state, match, team }) {
           }}
           onUnpin=${M.isOwn(match, team) ? null : (t, no) => {
             const prev = JSON.parse(JSON.stringify(match.pins || []));
+            const prevB = match.breakLineups ? JSON.parse(JSON.stringify(match.breakLineups)) : null;
             const teamOf = (m, d) => d.teams.find((x) => x.id === m.teamId);
             mutateConcept((m, d) => M.unpinMoment(m, teamOf(m, d), t));
-            toast(`Speldje bij wissel ${no} weg · de app rekent opnieuw`, { label: 'Ongedaan', run: () => mutateConcept((m, d) => { m.pins = prev; M.replan(m, teamOf(m, d)); }) });
+            const L = M.periodLen(team);
+            toast(no ? `Speldje bij wissel ${no} weg · de app rekent opnieuw` : `Opstelling ${M.periodLabel(team, Math.round(t / L))} weer van de app`, { label: 'Ongedaan', run: () => mutateConcept((m, d) => { m.pins = prev; m.breakLineups = prevB; M.replan(m, teamOf(m, d)); }) });
+          }}
+          onBreakSwap=${M.isOwn(match, team) ? null : (p, t, lu) => {
+            mutateConcept((m, d) => M.setBreakLineup(m, d.teams.find((x) => x.id === m.teamId), p, lu));
+            toast(`Opstelling ${M.periodLabel(team, p)} vastgezet. Tik het speldje om los te maken.`);
           }} /></div>`}
     <div class="prepdock">
       <button type="button" class=${'btn primary startbtn' + (ready ? ' ready' : '')} disabled=${tooFew} onClick=${() => (emptyGp ? setSheet('gpleeg') : todo.length ? setSheet('confirm') : start())}>
@@ -1079,33 +1085,41 @@ function DoneView({ match, team }) {
 
 // Hoe wissel je deze wedstrijd? Twee manieren naast elkaar, de actieve met een vinkje. Het standaardplan maakt
 // de app: dat voelt ook zo (kleurverloop dat rondloopt). Het game plan bouw je zelf.
-// ---------- klaarzetten in vier stappen: Wedstrijd · Spelers · Basis · Wisselen ----------
-function StepRail({ match, team, st, onStep }) {
+// ---------- klaarzetten: vakken om in te vullen (niet per se op volgorde) ----------
+// Leeg = gestippeld vak met een uitnodiging; ingevuld = echte inhoud (wie er zijn, de basis). Een vak dat net
+// klaar is, krijgt een vinkje met een kleine plop.
+function Avatars({ team, ids, max = 5 }) {
+  const byId = Object.fromEntries(team.players.map((p) => [p.id, p]));
+  const show = ids.slice(0, max);
+  return html`<span class="avs">${show.map((id, k) => {
+    const p = byId[id] || {};
+    const c = p.main && POS_COLORS[p.main] ? POS_COLORS[p.main] : 'var(--blue-2)';
+    return html`<i key=${id} style=${`--c:${c};--k:${k}`}>${((p.nick || p.name || '?').trim()[0] || '?').toUpperCase()}</i>`;
+  })}${ids.length > max && html`<i class="more" style=${'--k:' + max}>+${ids.length - max}</i>`}</span>`;
+}
+function SetupTiles({ match, team, onOpen }) {
   const setup = match.setup || {};
   const own = M.isOwn(match, team);
   const gp = match.gameplan;
   const base = match.baseId && (team.bases || []).find((b) => b.id === match.baseId);
+  const field = match.present.filter((id) => id !== match.keeperId);
+  const playersOk = !!setup.present && (!team.keeper || !!setup.keeper);
+  const baseOk = !!(setup.base || (own && gp && gp.base));
   const keeper = team.keeper && match.keeperId ? M.nickOf(team, match.keeperId) : null;
-  const full = st ? st.blocks.filter((b) => b.ok).length : 0;
-  const complete = !!st && full === st.blocks.length;
-  const fair = !!st && st.max - st.min <= (M.effRules(match, team).marge || 5) * 60 + 30;
-  const steps = [
-    { k: 'opp', name: 'Wedstrijd', done: !!setup.opponent, sum: match.opponent ? 'tegen ' + match.opponent : 'tegenstander ✓', req: true },
-    { k: 'players', name: 'Spelers', done: !!setup.present && (!team.keeper || !!setup.keeper), sum: `${match.present.length}${keeper ? ' · K ' + keeper : ' spelers'}`, req: true },
-    { k: 'base', name: 'Basis', done: !!(setup.base || (own && gp && gp.base)), sum: base ? base.name : own ? 'op je bord' : 'eigen opstelling' },
-    { k: 'swap', name: 'Wisselen', done: own ? complete && fair : true, sum: own ? (!st ? 'Zelf · leeg' : !complete ? `Zelf · ${full}/${st.blocks.length}` : fair ? 'Zelf · klaar' : 'Zelf · check') : 'Autopilot', ai: !own },
-  ];
-  let fill = -1;
-  for (let i = 0; i < steps.length; i++) { if (steps[i].done) fill = i; else break; }
-  const cur = steps.findIndex((x) => !x.done);
-  return html`<nav class="srail" aria-label="Wedstrijd klaarzetten">
-    <span class="sr-line" aria-hidden="true"><span class="sr-fill" style=${'--f:' + Math.max(0, fill) / (steps.length - 1)}></span></span>
-    ${steps.map((x, i) => html`<button type="button" key=${x.k} class=${'sr-st' + (x.done ? ' done' : '') + (i === cur ? ' cur' : '') + (x.req ? ' req' : '') + (x.ai && x.done ? ' ai' : '')}
-      aria-label=${`Stap ${i + 1}, ${x.name}: ${x.done ? x.sum : 'nog doen'}`} onClick=${() => { haptic('select'); onStep(x.k); }}>
-      <span class="sr-dot">${x.done ? html`<${Icon} name="check" size=${13} />` : html`<b>${i + 1}</b>`}</span>
-      <span class="sr-l">${x.done ? x.sum : x.name}</span>
-    </button>`)}
-  </nav>`;
+  const tile = (k, ok, todo, label, body, aria) => html`<button type="button" key=${k} class=${'stile' + (ok ? ' ok' : todo ? ' todo' : ' open')} aria-label=${aria} onClick=${() => { haptic('select'); onOpen(k); }}>
+    <span class="st-lab">${label}${ok && html`<span class="st-ok" aria-hidden="true"><${Icon} name="check" size=${11} /></span>`}</span>
+    <span class="st-body">${body}</span>
+  </button>`;
+  return html`<div class="stiles">
+    ${tile('players', playersOk, true, 'Spelers', playersOk
+      ? html`<${Avatars} team=${team} ids=${field} /><span class="st-v">${field.length}${keeper ? html`<span class="st-k"><span class="kbadge">K</span>${keeper}</span>` : ''}</span>`
+      : html`<span class="st-plus"><${Icon} name="team" size=${15} /></span><span class="st-v">Wie zijn er${team.keeper ? ' en wie keept' : ''}?</span>`,
+      playersOk ? `Spelers: ${field.length}${keeper ? ', keeper ' + keeper : ''}` : 'Spelers kiezen')}
+    ${tile('base', baseOk, false, 'Basis', baseOk
+      ? html`${base ? html`<${MiniField} base=${base} />` : html`<span class="st-plus ok"><${Icon} name="field" size=${15} /></span>`}<span class="st-v">${base ? base.name : own ? 'Op je bord' : 'Eigen opstelling'}</span>`
+      : html`<span class="st-plus"><${Icon} name="plus" size=${15} /></span><span class="st-v">${(team.bases || []).length ? 'Kies je basis' : 'Maak een basis'}</span>`,
+      baseOk ? 'Basisopstelling: ' + (base ? base.name : 'eigen opstelling') : 'Basisopstelling kiezen')}
+  </div>`;
 }
 
 // ---------- Autopilot of Zelf plannen: één schakelaar, het een of het ander ----------
@@ -1151,13 +1165,53 @@ function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet }) {
     toast(`✦ ${b.name} staat als start; de rest is een voorzet`);
     go('/plan');
   };
+  // het blokje kun je ook slepen: voorbij het midden loslaten = de andere kant
+  const swRef = useRef(null);
+  const live = useRef({});
+  live.current = { z, toZelf, toAuto };
+  useEffect(() => {
+    const el = swRef.current;
+    if (!el) return undefined;
+    let st = null;
+    let eat = false;
+    const down = (e) => { if (e.button > 0) return; st = { x: e.clientX, from: live.current.z ? 1 : 0, w: Math.max(40, el.clientWidth / 2 - 4), moved: false }; };
+    const move = (e) => {
+      if (!st) return;
+      const dx = e.clientX - st.x;
+      if (!st.moved) { if (Math.abs(dx) < 6) return; st.moved = true; el.classList.add('drag'); try { el.setPointerCapture(e.pointerId); } catch (x) { /* oud toestel */ } }
+      const p = Math.max(0, Math.min(1, st.from + dx / st.w));
+      el.style.setProperty('--p', p);
+      el.classList.toggle('past', p > 0.5);
+    };
+    const up = () => {
+      if (!st) return;
+      const was = st; st = null;
+      if (!was.moved) return;
+      const p = parseFloat(el.style.getPropertyValue('--p'));
+      el.classList.remove('drag', 'past');
+      el.style.removeProperty('--p');
+      eat = true; setTimeout(() => { eat = false; }, 350);
+      const to = p > 0.5 ? 1 : 0;
+      if (to === was.from) { haptic('tap'); return; }
+      if (to) live.current.toZelf(); else live.current.toAuto();
+    };
+    const cancel = () => { if (!st) return; st = null; el.classList.remove('drag', 'past'); el.style.removeProperty('--p'); };
+    const click = (e) => { if (eat) { e.stopPropagation(); e.preventDefault(); eat = false; } };
+    el.addEventListener('pointerdown', down);
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', cancel);
+    el.addEventListener('click', click, true);
+    return () => { el.removeEventListener('pointerdown', down); el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', cancel); el.removeEventListener('click', click, true); };
+  }, []);
   const range = plan && plan.fair ? (M.mins(plan.fair.minPlayed) === M.mins(plan.fair.maxPlayed) ? `${M.mins(plan.fair.minPlayed)}` : `${M.mins(plan.fair.minPlayed)}–${M.mins(plan.fair.maxPlayed)}`) : '';
   const full = st ? st.blocks.filter((b) => b.ok).length : 0;
   return html`<section class="modesw">
     <div class="msw-row">
-      <div class=${'msw' + (z ? ' z' : '')} role="radiogroup" aria-label="Hoe wissel je?">
+      <div class=${'msw' + (z ? ' z' : '')} role="radiogroup" aria-label="Hoe wissel je?" ref=${swRef}>
+        <span class="msw-tag" aria-hidden="true">✦ aanbevolen</span>
         <span class="msw-th" aria-hidden="true"><span class="ai-sparks"><i></i><i></i><i></i><i></i></span></span>
-        <button type="button" role="radio" aria-checked=${z ? 'false' : 'true'} class="msw-a" onClick=${toAuto}><${Icon} name="spark" size=${16} />Autopilot${!z && html`<span class="msw-tag">aanbevolen</span>`}</button>
+        <button type="button" role="radio" aria-checked=${z ? 'false' : 'true'} class="msw-a" onClick=${toAuto}><${Icon} name="spark" size=${16} />Autopilot</button>
         <button type="button" role="radio" aria-checked=${z ? 'true' : 'false'} class="msw-b" onClick=${toZelf}><${Icon} name="edit" size=${15} />Zelf plannen</button>
       </div>
       <button type="button" class="msw-i" aria-label="Uitleg: Autopilot en Zelf plannen" onClick=${() => { haptic('select'); onTour(); }}><${Icon} name="info" size=${19} /></button>

@@ -118,3 +118,24 @@ console.log('Speldjestest geslaagd');
   assert.equal(mp.pins.find((pp) => pp.t === first.t).moves.length, 2);
 }
 console.log('speldjes met plekwissels ok');
+
+// ---------- opstelling na de rust vastzetten (Autopilot) en weer losmaken ----------
+{
+  const m = M.createMatch(team, { opponent: 'Rust', present: ids, keeperId });
+  const L = M.periodLen(team);
+  const lu = M.timeline(m, team).cards.find((c) => c.kind === 'lineup' && c.t === L);
+  assert.ok(lu, 'opstelling na de rust in het plan');
+  const f = Object.keys(lu.pos)[0], b = lu.bench[0];
+  const want = M.swapInLineup({ pos: lu.pos, bench: lu.bench, slots: lu.slots }, f, b);
+  M.setBreakLineup(m, team, 1, want);
+  const step = m.plan.steps.find((s) => s.type === 'lineup' && s.period === 1);
+  assert.deepEqual(step.pos, want.pos, 'de app volgt de vastgezette opstelling');
+  assert.ok(step.fixed);
+  const card = M.timeline(m, team).cards.find((c) => c.kind === 'lineup' && c.t === L);
+  assert.ok(card.pinned, 'speldje op de tijdlijn');
+  assert.ok(m.plan.ok, 'de rest past binnen de regels');
+  M.unpinMoment(m, team, L);
+  assert.equal(m.breakLineups, null, 'losgemaakt');
+  assert.ok(!m.plan.steps.find((s) => s.type === 'lineup' && s.period === 1).fixed);
+}
+console.log('opstelling na de rust ok');

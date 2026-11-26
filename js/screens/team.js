@@ -8,7 +8,7 @@ import { PROFILES, PROFILE_ORDER, profileOf, cachedTune, rememberTune, consequen
 import { compute } from '../compute.js';
 import { scheduleRefresh } from '../refresh.js';
 
-export const APP_VERSION = '0.25.0';
+export const APP_VERSION = '0.25.1';
 
 // regels die het wisselprofiel bepaalt; zet je er zelf een, dan wordt het profiel 'Eigen'
 const TUNED = ['marge', 'equalTime', 'evenOften', 'maxBenchOn', 'maxBench', 'minInterval', 'turnsPerPeriod', 'priority', 'strongBias'];

@@ -2331,18 +2331,26 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 .modesw { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
 .msw-row { display: flex; align-items: center; gap: 8px; }
 .msw { position: relative; flex: 1 1 auto; display: grid; grid-template-columns: 1fr 1fr; height: 50px; padding: 4px; border-radius: 99px; background: #fff; box-shadow: 0 0 0 1px var(--line), 0 6px 16px -10px rgba(17,24,39,.25); }
-.msw-th { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 99px; overflow: hidden; border: 1.5px solid transparent;
+.msw { --p: 0; touch-action: pan-y; margin-top: 8px; }
+.msw.z { --p: 1; }
+.msw-th { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 99px; overflow: hidden; border: 1.5px solid transparent; translate: calc(var(--p) * 100%) 0 !important;
   background: linear-gradient(150deg, #FCFBFF, #EEE9FF 60%, #E3F6F1) padding-box, var(--ai-conic) border-box; animation: aiSpin 3s linear infinite;
   box-shadow: 0 6px 16px -8px rgba(124,92,255,.7); transition: translate .5s var(--spring-play), background .35s, box-shadow .35s; }
-.msw.z .msw-th { translate: 100% 0; background: linear-gradient(var(--navy), var(--navy)) padding-box, linear-gradient(var(--navy), var(--navy)) border-box; animation: none; box-shadow: 0 6px 16px -8px rgba(19,38,94,.8); }
+.msw.z .msw-th, .msw.drag.past .msw-th { background: linear-gradient(var(--navy), var(--navy)) padding-box, linear-gradient(var(--navy), var(--navy)) border-box; animation: none; box-shadow: 0 6px 16px -8px rgba(19,38,94,.8); }
 .msw-th .ai-sparks { transition: opacity .3s; }
-.msw.z .msw-th .ai-sparks { opacity: 0; }
+.msw.z .msw-th .ai-sparks, .msw.drag.past .msw-th .ai-sparks { opacity: 0; }
+.msw.drag .msw-th { transition: background .25s, box-shadow .25s; animation: none; }
+.msw.drag.past .msw-b, .msw.z:not(.drag) .msw-b { color: #fff; }
+.msw.drag.past .msw-a { color: var(--muted); }
+.msw.drag:not(.past) .msw-b { color: var(--muted); }
+.msw.drag:not(.past) .msw-a { color: var(--ai-ink, #4C1D95); }
+.msw.drag .msw-th { scale: 1.02; }
 .msw button { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 6px; border: none; background: none; font-size: 15px; font-weight: 900; color: var(--muted); transition: color .3s; white-space: nowrap; }
 .msw button svg { stroke-width: 2.4; }
 .msw:not(.z) .msw-a { color: var(--ai-ink, #4C1D95); }
 .msw:not(.z) .msw-a svg { color: #7C3AED; animation: twinkle 3.2s ease-in-out infinite; }
 .msw.z .msw-b { color: #fff; }
-.msw-tag { padding: 1px 7px; border-radius: 99px; background: rgba(124,92,255,.14); color: #5B21B6; font-size: 10.5px; font-weight: 900; letter-spacing: .01em; animation: tagIn .4s var(--spring-play) both; }
+.msw-tag { position: absolute; z-index: 2; top: -9px; left: 25%; translate: -50% 0; padding: 2px 8px; border-radius: 99px; border: 1.5px solid transparent; background: linear-gradient(#fff, #fff) padding-box, var(--ai-lin) border-box; color: #5B21B6; font-size: 10.5px; font-weight: 900; letter-spacing: .02em; line-height: 1.2; white-space: nowrap; pointer-events: none; box-shadow: 0 3px 8px -3px rgba(124,92,255,.5); animation: tagIn .5s var(--spring-play) both; }
 @keyframes tagIn { from { opacity: 0; scale: .6; } }
 .msw-i { position: relative; flex: none; display: grid; place-items: center; width: 40px; height: 40px; border: none; border-radius: 99px; background: #fff; color: var(--blue); box-shadow: 0 0 0 1px var(--line); }
 .msw-i::before { content: ''; position: absolute; inset: -4px; }
@@ -2389,3 +2397,37 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 .mf-r i.lV { color: #F87171; } .mf-r i.lM { color: #FBBF24; } .mf-r i.lA { color: #60A5FA; }
 .reduce .sr-fill, .reduce .sr-fill::after, .reduce .sr-dot, .reduce .sr-dot::after, .reduce .sr-dot svg path, .reduce .msw-th, .reduce .msum, .reduce .startbtn.ready, .reduce .cmp-r, .reduce .startopt.ai, .reduce .be-ico, .reduce .msw-tag { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) { .sr-fill, .sr-fill::after, .sr-dot, .sr-dot::after, .sr-dot svg path, .msw-th, .msum, .startbtn.ready, .cmp-r, .startopt.ai, .be-ico, .msw-tag { animation: none !important; transition: none !important; } }
+
+/* ---------- v0.25.1: vakken om in te vullen ---------- */
+.affiche.todo { background: linear-gradient(var(--orange-tint), var(--orange-tint)) padding-box; box-shadow: none; outline: 1.5px dashed var(--orange); outline-offset: -1.5px; animation: todoBreath 2.8s ease-in-out infinite; }
+.affiche.todo .aff-title { color: #92400E; }
+@keyframes todoBreath { 0%, 100% { box-shadow: 0 0 0 0 rgba(245,165,36,0); } 50% { box-shadow: 0 0 0 5px rgba(245,165,36,.16); } }
+.stiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; flex: 0 0 auto; }
+.stile { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; min-height: 62px; padding: 8px 11px 9px; border-radius: 18px; border: none; text-align: left; color: var(--ink); background: #fff; box-shadow: var(--shadow); transition: background .35s, box-shadow .35s, transform .2s var(--spring-play); }
+.stile:active { transform: scale(.97); }
+.stile.todo { background: var(--orange-tint); box-shadow: none; outline: 1.5px dashed var(--orange); outline-offset: -1.5px; animation: todoBreath 2.8s ease-in-out infinite; }
+.stile.open { background: rgba(255,255,255,.55); box-shadow: none; outline: 1.5px dashed var(--line-2); outline-offset: -1.5px; }
+.stile.ok { animation: tileDone .55s var(--spring-play); }
+@keyframes tileDone { 0% { scale: .96; } 55% { scale: 1.03; } 100% { scale: 1; } }
+.st-lab { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.stile.todo .st-lab { color: #B45309; }
+.st-ok { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 99px; background: var(--green-live, #22C55E); color: #fff; animation: srPop .45s var(--spring-play); }
+.st-ok svg { stroke-width: 3.4; }
+.st-ok svg path { stroke-dasharray: 24; animation: srDraw .45s .1s ease-out both; }
+.st-body { display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%; }
+.st-v { min-width: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 14.5px; font-weight: 900; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.stile.todo .st-v, .stile.open .st-v { font-weight: 800; color: var(--ink); white-space: normal; line-height: 1.15; font-size: 13.5px; }
+.st-k { display: inline-flex; align-items: center; gap: 4px; min-width: 0; font-weight: 800; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.st-k .kbadge { flex: none; }
+.st-plus { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 10px; background: #fff; color: var(--orange); box-shadow: 0 0 0 1px rgba(245,165,36,.35); }
+.stile.open .st-plus { color: var(--blue); box-shadow: 0 0 0 1px var(--line-2); }
+.st-plus.ok { color: var(--blue); box-shadow: 0 0 0 1px var(--line); }
+.stile .mini-f { width: 30px; height: 34px; padding: 3px; gap: 2px; border-radius: 7px; }
+.stile .mf-r i { width: 5px; height: 5px; box-shadow: 0 0 0 1px currentColor; }
+.avs { display: inline-flex; flex: none; }
+.avs i { display: grid; place-items: center; width: 24px; height: 24px; margin-left: -7px; border-radius: 99px; background: #fff; color: var(--ink); font-style: normal; font-size: 11px; font-weight: 900; box-shadow: 0 0 0 2px #fff, inset 0 0 0 2px var(--c, var(--blue-2)); animation: avIn .45s var(--spring-play) both; animation-delay: calc(var(--k) * 45ms); }
+.avs i:first-child { margin-left: 0; }
+.avs i.more { background: var(--line-3); color: var(--muted); box-shadow: 0 0 0 2px #fff; font-size: 10px; }
+@keyframes avIn { from { opacity: 0; translate: -6px 0; scale: .6; } }
+.reduce .stile, .reduce .affiche.todo, .reduce .st-ok, .reduce .st-ok svg path, .reduce .avs i, .reduce .msw-tag { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .stile, .affiche.todo, .st-ok, .st-ok svg path, .avs i, .msw-tag { animation: none !important; } }
