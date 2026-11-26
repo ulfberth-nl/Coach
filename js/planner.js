@@ -69,21 +69,40 @@ function scoreAgg(ag, tg) {
 
 // Dragende speler: vanaf dit niveau (op de schaal 0–100; stap 6 van 8 op de schuifbalk)
 export const KEY_KRACHT = 75;
+// Sterkste ploeg (rules.keyFewer): dragende spelers gaan één keer minder naar de bank dan de rest. 'Even vaak'
+// telt dan met een beurt voorsprong voor dragende spelers.
+const turnsOf = (state, ctx, id) => (state.turns[id] || 0) + (ctx.rules.keyFewer && ctx.players[id] && ctx.players[id].kracht >= KEY_KRACHT ? 1 : 0);
 const STAND_LINE = { verdedigen: 'A', aanvallen: 'V' };
 
-// Bij verdedigen minstens één dragende speler achterin (of de sterkste als er geen dragende speler staat);
-// bij aanvallen hetzelfde voorin. Spelers met die voorkeurspositie krijgen voorrang via de voorkeursstraf.
+// Focus op de stand (verdedigen of aanvallen): op de focuslinie hoort een dragende speler.
+// - Staat er een dragende speler met die linie als vaste rol in het veld, dan hoort hij daar (anders straf).
+// - Is die er niet, dan mag een andere dragende speler invallen, en vervalt zijn straf voor spelen buiten zijn
+//   kracht. Voorkeur: wie die linie als voorkeur heeft, dan een dragende middenvelder, dan pas iemand van de
+//   andere kant van het veld (een aanvaller achterin of andersom).
+// - Zijn er helemaal geen dragende spelers, dan de sterkste speler (zoals voorheen).
+// Bij balans geldt dit niet: dan speelt iedereen op zijn eigen plek(ken).
+const LINE_IDX = { V: 0, M: 1, A: 2 };
 export function standPenalty(pos, players, stand) {
   const line = STAND_LINE[stand];
   if (!line) return 0;
   const ids = Object.keys(pos);
   if (!ids.length) return 0;
-  let keys = ids.filter((id) => players[id].kracht >= KEY_KRACHT);
+  const keys = ids.filter((id) => players[id].kracht >= KEY_KRACHT);
   if (!keys.length) {
     const top = Math.max(...ids.map((id) => players[id].kracht));
-    keys = ids.filter((id) => players[id].kracht === top);
+    return ids.some((id) => players[id].kracht === top && pos[id] === line) ? 0 : 60;
   }
-  return keys.some((id) => pos[id] === line) ? 0 : 60;
+  const natural = keys.filter((id) => players[id].main === line);
+  if (natural.length) return natural.some((id) => pos[id] === line) ? 0 : 60;
+  let best = 60;
+  for (const id of keys) {
+    if (pos[id] !== line) continue;
+    const p = players[id];
+    const from = p.main && p.main !== 'K' ? p.main : (fieldPrefs(p).find((l) => l !== line) || 'M');
+    const cost = fieldPrefs(p).indexOf(line) !== -1 ? 0 : Math.abs(LINE_IDX[from] - LINE_IDX[line]) === 1 ? 5 : 40;
+    best = Math.min(best, cost - linePenalty(p, line));
+  }
+  return best;
 }
 
 // Hoe goed is een opstelling? Lager is beter. Eerst kracht (balans per linie), dan voorkeurspositie.
@@ -106,25 +125,44 @@ export function assignLines(ids, lines, players, stand = 'balans') {
     free[choice] -= 1;
     pos[id] = choice;
   }
-  const tg = TARGETS[stand] || TARGETS.balans;
-  const ag = aggregate(pos, players);
-  for (let round = 0; round < 4; round++) {
-    let improved = false;
-    const keys = Object.keys(pos);
-    for (let i = 0; i < keys.length; i++) {
-      for (let j = i + 1; j < keys.length; j++) {
-        const a = keys[i], b = keys[j];
-        const la = pos[a], lb = pos[b];
-        if (la === lb) continue;
-        const cur = scoreAgg(ag, tg) + standPenalty(pos, players, stand);
-        addTo(ag, players[a], la, -1); addTo(ag, players[b], lb, -1);
-        addTo(ag, players[a], lb, 1); addTo(ag, players[b], la, 1);
-        pos[a] = lb; pos[b] = la;
-        if (scoreAgg(ag, tg) + standPenalty(pos, players, stand) < cur - 0.5) { improved = true; }
-        else { pos[a] = la; pos[b] = lb; addTo(ag, players[a], lb, -1); addTo(ag, players[b], la, -1); addTo(ag, players[a], la, 1); addTo(ag, players[b], lb, 1); }
-      }
+  const best = improveLines(pos, players, stand);
+  // focus op verdedigen/aanvallen: ook proberen met elke dragende speler alvast op de focuslinie (een ruil
+  // tegelijk vindt dat niet altijd, bijv. middenvelder naar achter én een ander naar het midden)
+  const fl = STAND_LINE[stand];
+  if (!fl) return best;
+  let bestSc = lineupScore(best, players, stand);
+  let out = best;
+  for (const k of Object.keys(pos)) {
+    if (players[k].kracht < KEY_KRACHT || pos[k] === fl) continue;
+    for (const weak of Object.keys(pos).filter((id) => pos[id] === fl)) {
+      const seed = { ...pos, [k]: fl, [weak]: pos[k] };
+      const cand = improveLines(seed, players, stand);
+      const sc = lineupScore(cand, players, stand);
+      if (sc < bestSc - 0.01) { bestSc = sc; out = cand; }
     }
-    if (!improved) break;
+  }
+  return out;
+}
+
+function improveLines(start, players, stand) {
+  // telkens de beste ruil (niet de eerste die iets beter is), tot niets meer helpt
+  const pos = { ...start };
+  const keys = Object.keys(pos);
+  let cur = lineupScore(pos, players, stand);
+  for (let round = 0; round < 8; round++) {
+    let best = null;
+    for (let i = 0; i < keys.length; i++) for (let j = i + 1; j < keys.length; j++) {
+      const a = keys[i], b = keys[j];
+      if (pos[a] === pos[b]) continue;
+      const la = pos[a];
+      pos[a] = pos[b]; pos[b] = la;
+      const sc = lineupScore(pos, players, stand);
+      pos[b] = pos[a]; pos[a] = la;
+      if (sc < cur - 0.5 && (!best || sc < best.sc)) best = { a, b, sc };
+    }
+    if (!best) break;
+    const la = pos[best.a]; pos[best.a] = pos[best.b]; pos[best.b] = la;
+    cur = best.sc;
   }
   return pos;
 }
@@ -199,7 +237,7 @@ export function chooseSwap(state, ctx, t, interval, inMode = 'played', outMode =
   const keyBench = keyAvoid && !fair && state.bench.some((id) => id !== kin && players[id].kracht >= KEY_KRACHT);
   const isKey = (id) => (players[id].kracht >= KEY_KRACHT ? 1 : 0);
   cands.sort((a, b) => {
-    if (rules.evenOften && state.turns[a] !== state.turns[b]) return state.turns[a] - state.turns[b];
+    if (rules.evenOften && turnsOf(state, ctx, a) !== turnsOf(state, ctx, b)) return turnsOf(state, ctx, a) - turnsOf(state, ctx, b);
     if (keyBench && isKey(a) !== isKey(b)) return isKey(a) - isKey(b);
     // edge 'last': laatste wissel voor de rust/het eind: een sterke speler rust kort uit
     if (edge === 'last' && players[a].kracht !== players[b].kracht) return players[b].kracht - players[a].kracht;
@@ -260,7 +298,7 @@ export function breakLineup(state, ctx, t, changes = null, edge = false) {
   const nBench = changes === null ? maxBench : Math.min(maxBench, Math.max(0, changes - 0));
   void freeSeats;
   // naar de bank in de rust: wie het minst vaak gewisseld is en het meest speelde (bij beste bezetting: aangepaste speeltijd)
-  const order = onField.slice().sort((a, b) => (rules.evenOften ? state.turns[a] - state.turns[b] : 0) || (edge ? players[b].kracht - players[a].kracht : 0) || (adj(b) - adj(a)));
+  const order = onField.slice().sort((a, b) => (rules.evenOften ? turnsOf(state, ctx, a) - turnsOf(state, ctx, b) : 0) || (edge ? players[b].kracht - players[a].kracht : 0) || (adj(b) - adj(a)));
   const toBench = order.slice(0, nBench);
   // wie erin komt: wie het minst gespeeld heeft
   const comeIn = avail.filter((id) => !(id in state.pos)).sort((a, b) => adj(a) - adj(b));
@@ -358,12 +396,14 @@ export function fairness(final, ctx, ids) {
   const counted = ids.filter((id) => !(final.disabled && final.disabled[id] === 'wedstrijd') && skip.indexOf(id) === -1);
   const pv = counted.map((id) => final.played[id] || 0);
   const tv = counted.map((id) => final.turns[id] || 0);
+  // 'even vaak': met keyFewer telt een dragende speler één beurt extra mee
+  const tvAdj = counted.map((id) => turnsOf(final, ctx, id));
   const target = ctx.rules.turnsTarget;
   const dev = target == null ? 0 : tv.reduce((a, x) => a + Math.abs(x - target), 0);
   return {
     dev,
     spread: pv.length ? Math.max(...pv) - Math.min(...pv) : 0,
-    turnsDiff: tv.length ? Math.max(...tv) - Math.min(...tv) : 0,
+    turnsDiff: tvAdj.length ? Math.max(...tvAdj) - Math.min(...tvAdj) : 0,
     minPlayed: pv.length ? Math.min(...pv) : 0,
     maxPlayed: pv.length ? Math.max(...pv) : 0,
     minTurns: tv.length ? Math.min(...tv) : 0,
@@ -424,7 +464,18 @@ function quality(cand, ctx, ids) {
 
 // Hoofdfunctie: maak het plan voor de rest van de wedstrijd vanaf tijd T.
 // ctx: { players, lines, periodLen, periods, rules, stand, firstAt, lineupPending, excludeFair }
+// Sterkste ploeg (keyFewer): dragende spelers één keer minder naar de bank, maar alleen als dat binnen de regels
+// past met hooguit één wissel meer dan zonder. Anders gewoon iedereen even vaak.
 export function planRest(start, ctx, T) {
+  if (!ctx.rules.keyFewer) return planRestCore(start, ctx, T);
+  const base = planRestCore(start, { ...ctx, rules: { ...ctx.rules, keyFewer: false } }, T);
+  if (!base.ok || !start.bench.length) return base;
+  // minder bankbeurten betekent vaak juist minder wissels: zoek tot één wissel boven het gewone plan
+  const kf = planRestCore(start, ctx, T, Math.max(0, base.m - 6), base.m + 1);
+  return kf.ok ? { ...kf, keyFewer: true } : base;
+}
+
+function planRestCore(start, ctx, T, mFrom = 0, mTo = Infinity) {
   const ids = Object.keys(start.pos).concat(start.bench);
   const end = ctx.periods * ctx.periodLen;
   const remaining = Math.max(0, end - T);
@@ -451,7 +502,7 @@ export function planRest(start, ctx, T) {
     }
   }
   if (start.bench.length) {
-    for (let m = 0; m <= maxM; m++) {
+    for (let m = Math.min(mFrom, maxM); m <= Math.min(maxM, mTo); m++) {
       // bij het kleinste aantal wissels dat past: van alle manieren die passen de beste nemen (niet de eerste)
       let bestOkM = null;
       const tryV = (v) => {

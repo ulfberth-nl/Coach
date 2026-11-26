@@ -52,11 +52,11 @@ export const PROFILES = {
     label: 'Sterkste ploeg',
     tag: 'Beste bezetting',
     sub: 'De bezetting gaat voor, binnen een ruime marge.',
-    does: 'De app zet zo vaak mogelijk de sterkste ploeg neer. Iedereen speelt en gaat even vaak naar de bank, maar dragende spelers staan wat langer. Het verschil in speeltijd blijft binnen een ruime marge.',
+    does: 'De app zet zo vaak mogelijk de sterkste ploeg neer. Iedereen speelt, maar dragende spelers gaan één keer minder naar de bank en staan wat langer. Het verschil in speeltijd blijft binnen een ruime marge.',
     variants: [
-      { marge: 6, maxBenchOn: true, maxBench: 12, minInterval: 2, priority: 'bezetting', strongBias: 4 },
-      { marge: 8, maxBenchOn: true, maxBench: 12, minInterval: 2, priority: 'bezetting', strongBias: 6 },
-      { marge: 8, maxBenchOn: true, maxBench: 12, minInterval: 2, priority: 'bezetting', strongBias: 8 }
+      { marge: 8, maxBenchOn: true, maxBench: 12, minInterval: 2, priority: 'bezetting', strongBias: 6, keyFewer: true },
+      { marge: 10, maxBenchOn: true, maxBench: 12, minInterval: 2, priority: 'bezetting', strongBias: 6, keyFewer: true },
+      { marge: 10, maxBenchOn: true, maxBench: 12, minInterval: 2, priority: 'bezetting', strongBias: 8, keyFewer: true }
     ],
     // sterkte op het veld (gemiddelde speelkracht over de wedstrijd) telt het zwaarst
     score: (s) => -s.strength * 2 + s.moments * 0.15 + over(s.maxStint, 14)

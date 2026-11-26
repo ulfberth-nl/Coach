@@ -33,3 +33,28 @@ for (const a of field) for (const b of field) {
 }
 assert.ok(pl.s1 > pl.s3, 'dragende aanvaller speelt langer dan de allrounder');
 console.log('sterkste ploeg ok');
+
+// ---------- focus: zonder dragende verdediger valt eerst een dragende middenvelder achterin in ----------
+{
+  const { assignLines, FIT_W } = await import('../js/planner.js');
+  const pm = M.playersMap(team);
+  for (const id in pm) pm[id].w = FIT_W.bezetting;
+  const lines = { V: 2, M: 1, A: 2 };
+  // s2 (dragende verdediger) is er niet
+  const ids5 = ['s1', 's3', 's4', 's5', 's7'];
+  const def = assignLines(ids5, lines, pm, 'verdedigen');
+  assert.equal(def.s4, 'A', 'dragende middenvelder valt achterin in');
+  assert.equal(def.s1, 'V', 'dragende aanvaller blijft voorin');
+  // middenvelder zonder voorkeur achter: nog steeds liever hij dan de aanvaller
+  pm.s4 = { ...pm.s4, prefs: ['M'] };
+  const def2 = assignLines(ids5, lines, pm, 'verdedigen');
+  assert.equal(def2.s4, 'A', 'ook zonder voorkeur achter: eerst de middenvelder');
+  // balans: iedereen op zijn eigen plek
+  const bal = assignLines(ids5, lines, pm, 'balans');
+  assert.equal(bal.s1, 'V'); assert.equal(bal.s4, 'M');
+  // wel een dragende verdediger: die staat achter, de rest op zijn plek
+  const ids5b = ['s1', 's2', 's3', 's4', 's5'];
+  const def3 = assignLines(ids5b, lines, pm, 'verdedigen');
+  assert.equal(def3.s2, 'A'); assert.equal(def3.s4, 'M'); assert.equal(def3.s1, 'V');
+}
+console.log('focus met invallers ok');

@@ -482,6 +482,7 @@ export function replan(match, team, ms = Date.now()) {
     ok: r.ok,
     why: r.why || [],
     relaxed: !!r.relaxed,
+    keyFewer: !!(r.keyFewer || (r.free && r.free.keyFewer)),
     broken: r.broken || [],
     fair: r.fair,
     finalPlayed: r.final.played,
