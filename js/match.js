@@ -691,6 +691,58 @@ export function swapInStartLineup(match, team, a, b) {
   replan(match, team);
 }
 
+// ---------- basisopstellingen (per team bewaard) ----------
+// Een basis is een verdeling over de linies, wie op welke plek staat en wie keept. Toepassen op een wedstrijd: wie
+// er is staat op zijn plek; een lege plek vult de app met wie daar het best past (dominante rol, voorkeur, kracht).
+export function baseFromMatch(match, team, name) {
+  const lu = (isOwn(match, team) && match.periodLineups && match.periodLineups[0]) || match.events[0];
+  const lines = { V: 0, M: 0, A: 0 };
+  for (const id in lu.pos) if (lines[lu.pos[id]] != null) lines[lu.pos[id]]++;
+  const slots = lu.slots && Object.values(lu.slots).filter(Boolean).length === Object.keys(lu.pos).length ? { ...lu.slots } : makeSlots(lu.pos, lines, playersMap(team));
+  return { id: uid(), name: (name || '').trim() || 'Basis ' + formationText(lines), lines, slots, keeperId: match.keeperId || null, at: Date.now() };
+}
+
+// Past de basis bij de spelvorm van het team (evenveel spelers in het veld)?
+export function baseFits(team, base) {
+  const F = LINES.reduce((a, l) => a + (team.lines[l] || 0), 0);
+  return !!base && LINES.reduce((a, l) => a + (base.lines[l] || 0), 0) === F;
+}
+
+export function applyBase(match, team, base) {
+  if (!baseFits(team, base) || match.started) return null;
+  const players = playersMap(team);
+  const field = match.present.filter((id) => id !== match.keeperId);
+  const lines = { V: base.lines.V || 0, M: base.lines.M || 0, A: base.lines.A || 0 };
+  const slots = {};
+  const used = new Set();
+  const missing = [];
+  for (const l of LINES) for (let i = 0; i < lines[l]; i++) {
+    const id = base.slots[l + i];
+    if (id && field.indexOf(id) !== -1 && !used.has(id)) { slots[l + i] = id; used.add(id); } else { slots[l + i] = null; if (id && id !== match.keeperId) missing.push(id); }
+  }
+  // lege plekken: eerst wie daar zijn dominante rol heeft, dan voorkeur, dan speelkracht
+  const score = (id, l) => { const p = players[id] || {}; return (p.main === l ? 200 : 0) + ((p.prefs || []).indexOf(l) !== -1 ? 100 : 0) + (p.kracht != null ? p.kracht : 50); };
+  const filled = [];
+  for (const k of Object.keys(slots)) {
+    if (slots[k]) continue;
+    const cand = field.filter((id) => !used.has(id)).sort((a, b) => score(b, k[0]) - score(a, k[0]))[0];
+    if (cand) { slots[k] = cand; used.add(cand); filled.push(cand); }
+  }
+  const pos = {};
+  for (const k in slots) if (slots[k]) pos[slots[k]] = k[0];
+  const bench = field.filter((id) => !(id in pos));
+  match.lines = lines;
+  match.events[0] = { ...match.events[0], pos, bench, slots };
+  match.baseId = base.id;
+  if (isOwn(match, team)) {
+    // zelf plannen: de basis wordt het startblok; op een leeg bord loopt hij door tot het eind (zoals bij Start)
+    const gp = match.gameplan && match.gameplan.grid ? gpEnsure(match, team, match.gameplan.n) : gpEnsure(match, team, gpRecommend(match, team).recommended);
+    gp.lines = { ...lines };
+    gpSetBlock(match, team, 0, pos, 'coach');
+  } else replan(match, team);
+  return { missing, filled };
+}
+
 // ---------- acties (muteren een concept van de wedstrijd) ----------
 export function startClock(match) {
   if (match.clock.running || match.finished) return;

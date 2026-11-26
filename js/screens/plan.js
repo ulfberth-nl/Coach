@@ -24,7 +24,7 @@ export function switchPlanMode(mode, quiet = false) {
     return stash;
   });
   haptic('success');
-  if (!quiet) toast(mode === 'eigen' ? (back ? 'Je game plan is terug' : 'Je maakt nu een game plan.') : 'Autopilot staat aan. Je game plan blijft bewaard.');
+  if (!quiet) toast(mode === 'eigen' ? (back ? 'Zelf plannen staat aan · je game plan is terug' : 'Zelf plannen staat aan.') : 'Autopilot staat aan. Je game plan blijft bewaard.');
 }
 
 export function Plan({ state }) {

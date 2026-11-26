@@ -8,7 +8,7 @@ import { PROFILES, PROFILE_ORDER, profileOf, cachedTune, rememberTune, consequen
 import { compute } from '../compute.js';
 import { scheduleRefresh } from '../refresh.js';
 
-export const APP_VERSION = '0.24.11';
+export const APP_VERSION = '0.25.0';
 
 // regels die het wisselprofiel bepaalt; zet je er zelf een, dan wordt het profiel 'Eigen'
 const TUNED = ['marge', 'equalTime', 'evenOften', 'maxBenchOn', 'maxBench', 'minInterval', 'turnsPerPeriod', 'priority', 'strongBias'];
@@ -243,10 +243,10 @@ export function Team({ state }) {
     <section class="card">
       <span class="h2">Wisselen</span>
       <span class="label">Nieuwe wedstrijd begint met</span>
-      <${Seg} label="Nieuwe wedstrijd begint met" value=${r.planMode === 'eigen' ? 'eigen' : 'app'} onChange=${(v) => setRule('planMode', v)} options=${[['app', 'Autopilot'], ['eigen', 'Game plan']]} />
+      <${Seg} label="Nieuwe wedstrijd begint met" value=${r.planMode === 'eigen' ? 'eigen' : 'app'} onChange=${(v) => setRule('planMode', v)} options=${[['app', 'Autopilot'], ['eigen', 'Zelf plannen']]} />
       <span class="small">${r.planMode === 'eigen'
         ? 'Je legt per wedstrijd zelf de puzzel op het liniebord: startopstelling, dan wie waar speelt per blok. De app rekent mee en kan een voorzet doen.'
-        : 'De app maakt het plan volgens de instellingen hieronder. Per wedstrijd kun je ook een game plan maken.'}</span>
+        : 'De app maakt het plan volgens de instellingen hieronder. Per wedstrijd kun je ook zelf plannen.'}</span>
       <span class="sub">Kies hoe je wilt wisselen. De app rekent het door voor je ${squad.length} spelers, en per wedstrijd opnieuw met wie er is.</span>
       <${Reveal} open=${prof === 'eigen'}><div class="prof-eigen">
         <span class="pe-t"><${Icon} name="edit" size=${15} /><span><b>Eigen instellingen gaan voor.</b> De profielen staan uit: de app volgt jouw regels hieronder en stemt niet meer per wedstrijd af.</span></span>

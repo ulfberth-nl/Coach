@@ -8,7 +8,7 @@ import { nextScheduled, todayISO } from './seizoen.js';
 import { matchRules } from '../profiles.js';
 import { PlayTimeSheet } from '../playtime.js';
 import { scheduleRefresh } from '../refresh.js';
-import { viewTransition, haptic, reduced, T as TEMPO } from '../motion.js';
+import { viewTransition, haptic, reduced, T as TEMPO, devicePrefs, setDevicePref } from '../motion.js';
 import { switchPlanMode } from './plan.js';
 import { APP_VERSION } from './team.js';
 import { Rooster } from './gameplan.js';
@@ -123,6 +123,11 @@ export function rebuildConcept(d, changes = {}) {
   n.setup = m.setup || { present: false, keeper: false, opponent: false };
   for (const k of ['scheduleId', 'time', 'meet', 'field', 'home', 'season']) if (m[k] !== undefined) n[k] = m[k];
   d.matches[i] = n;
+  // gekozen basisopstelling: opnieuw toepassen met wie er nu is (bij zelf plannen is het bord de baas)
+  if (!changes.resetLines && m.baseId && !M.isOwn(n, t)) {
+    const b = (t.bases || []).find((x) => x.id === m.baseId);
+    if (b) M.applyBase(n, t, b);
+  }
   // het profiel rekent op de achtergrond na met wie er is; wijkt dat af, dan volgt het plan vanzelf
   scheduleRefresh();
 }
@@ -196,6 +201,10 @@ function PrepView({ state, match, team }) {
   const perMoment = Math.max(1, Math.min(5, team.rules.perMoment || 1));
   const emptyGp = M.isOwn(match, team) && !(match.gameplan && match.gameplan.base);
   const todo = [!setup.present && 'wie er is', team.keeper && !setup.keeper && 'de keeper', !setup.opponent && 'de tegenstander'].filter(Boolean);
+  const gp = match.gameplan;
+  const gpSt = useMemo(() => (M.isOwn(match, team) && gp && gp.base ? M.gpStats(match, team) : null), [match, team]);
+  const ready = !tooFew && !todo.length && !!(setup.base || (gpSt && gp.base)) &&
+    (!M.isOwn(match, team) || (gpSt && gpSt.blocks.every((b) => b.ok) && gpSt.max - gpSt.min <= (M.effRules(match, team).marge || 5) * 60 + 30));
   // aftrap: het veld en het affiche gaan vloeiend over in het live-scherm, het scorebord valt erin
   const start = () => {
     unlockAudio();
@@ -205,19 +214,15 @@ function PrepView({ state, match, team }) {
     <${Affiche} match=${match} team=${team} onClick=${() => setSheet('opp')}>
       <button type="button" class="iconbtn" aria-label="Menu" onClick=${() => setSheet('menu')}><${Icon} name="more" size=${22} /></button>
     </${Affiche}>
-    <div class="setchips">
-      <button type="button" class=${'setchip' + (setup.present ? '' : ' todo')} onClick=${() => setSheet('players')}><${Icon} name="team" size=${16} />${match.present.length} spelers</button>
-      ${team.keeper && html`<button type="button" class=${'setchip' + (setup.keeper ? '' : ' todo')} onClick=${() => setSheet('keeper')}><span class="kbadge">K</span>${match.keeperId ? M.nickOf(team, match.keeperId) : 'keeper?'}</button>`}
-      <button type="button" class=${'setchip' + (setup.opponent ? '' : ' todo')} onClick=${() => setSheet('opp')}>${match.opponent ? 'tegen ' + match.opponent : 'tegenstander?'}</button>
-    </div>
+    <${StepRail} match=${match} team=${team} st=${gpSt} onStep=${(k) => (k === 'swap' ? (M.isOwn(match, team) ? go('/plan') : setSheet('speeltijd')) : setSheet(k))} />
     ${tooFew
       ? html`<div class="card" style="flex:1 1 auto;justify-content:center;text-align:center"><span class="h2">Te weinig spelers</span><span class="sub">Je hebt ${F} veldspelers nodig${team.keeper ? ' plus een keeper' : ''}. Tik op "spelers".</span></div>`
       : html`
-        <${PlanChoice} match=${match} team=${team} swaps=${swaps} perMoment=${perMoment} onTour=${() => setTour(1)} />
+        <${ModeSwitch} match=${match} team=${team} swaps=${swaps} perMoment=${perMoment} st=${gpSt} onTour=${() => setTour(1)} onSheet=${setSheet} />
         <div class="grow-field"><${PlanView} match=${match} team=${team} compact editable=${!M.isOwn(match, team)}
-          onLocked=${M.isOwn(match, team) ? () => toast('Game plan staat aan: hier alleen bekijken.', { label: 'Uitleg', run: () => setTour(1) }) : null}
+          onLocked=${M.isOwn(match, team) ? () => toast('Je plant zelf: spelers verplaats je in je game plan.', { label: 'Open', run: () => go('/plan') }) : null}
           onTour=${() => { haptic('select'); setTour(1); }}
-          onSwap=${(a, b) => conceptDrop(mutateConcept, team, a, b)}
+          onSwap=${(a, b) => { conceptDrop(mutateConcept, team, a, b); mutateConcept((m) => { m.setup = { ...(m.setup || {}), base: true }; }); }}
           onPinHere=${(t, pairs, no, moves, kind) => {
             mutateConcept((m, d) => M.pinMoment(m, d.teams.find((x) => x.id === m.teamId), t, pairs, 'terug', moves));
             toast(kind === 'form' ? `Andere opstelling vanaf wissel ${no}. Tik het speldje om los te maken.` : kind ? `Plekwissel bij wissel ${no} vastgezet. Tik het speldje om los te maken.` : `Wissel ${no} vastgezet. Tik het speldje om los te maken.`);
@@ -229,15 +234,16 @@ function PrepView({ state, match, team }) {
             toast(`Speldje bij wissel ${no} weg · de app rekent opnieuw`, { label: 'Ongedaan', run: () => mutateConcept((m, d) => { m.pins = prev; M.replan(m, teamOf(m, d)); }) });
           }} /></div>`}
     <div class="prepdock">
-      <button type="button" class="btn primary startbtn" disabled=${tooFew} onClick=${() => (emptyGp ? setSheet('gpleeg') : todo.length ? setSheet('confirm') : start())}>
-        <${Icon} name="play" size=${20} /><span class="sb-t"><b>Start</b><small>tik bij de aftrap</small></span>
+      <button type="button" class=${'btn primary startbtn' + (ready ? ' ready' : '')} disabled=${tooFew} onClick=${() => (emptyGp ? setSheet('gpleeg') : todo.length ? setSheet('confirm') : start())}>
+        <${Icon} name="play" size=${20} /><span class="sb-t"><b>Start</b><small>${ready ? 'klaar voor de aftrap' : 'tik bij de aftrap'}</small></span>
       </button>
       <a class="dockbtn" href="#/seizoen"><${Icon} name="chart" size=${20} /><span>Seizoen</span></a>
       <a class="dockbtn" href="#/team"><${Icon} name="team" size=${20} /><span>Team</span></a>
     </div>
 
-    ${sheet === 'players' && html`<${PlayersSheet} match=${match} team=${team} onClose=${() => setSheet(null)} />`}
-    ${sheet === 'keeper' && html`<${KeeperPickSheet} match=${match} team=${team} counts=${counts} onClose=${() => setSheet(null)} />`}
+    ${sheet === 'players' && html`<${SquadSheet} match=${match} team=${team} counts=${counts} onClose=${() => setSheet(null)} />`}
+    ${sheet === 'base' && html`<${BaseSheet} match=${match} team=${team} onClose=${() => setSheet(null)} />`}
+    ${sheet === 'speeltijd' && html`<${PlayTimeSheet} match=${match} team=${team} onClose=${() => setSheet(null)} onOpenPlan=${() => { setSheet(null); go('/plan'); }} />`}
     ${sheet === 'opp' && html`<${OpponentSheet} match=${match} upcoming=${upcomingFor(team, state.matches)} onClose=${() => setSheet(null)} />`}
     ${sheet === 'menu' && html`<${GameMenu} match=${match} team=${team} onClose=${() => setSheet(null)} onSheet=${setSheet} />`}
     ${tour > 0 && html`<${ModeTour} match=${match} team=${team} step=${tour} setStep=${setTour} />`}
@@ -255,9 +261,9 @@ const MODES = {
     how: ['Sleep hier spelers: bij de start pas je de opstelling aan.', 'Sleep bij een later moment en je zet dat moment vast (speldje); de app rekent de rest opnieuw.', 'Live schuif je de ring om te wisselen; de app past zich aan.'],
   },
   eigen: {
-    name: 'Game plan', ai: false,
-    what: 'Jij bepaalt per blok wie waar speelt, in een tabel of op het veld. De app rekent de gevolgen uit en geeft tips, maar verandert zelf niets.',
-    how: ['Op dit scherm bekijk je het plan; aanpassen doe je in het game plan.', 'Live voert de app precies jouw plan uit.'],
+    name: 'Zelf plannen', ai: false,
+    what: 'Jij bepaalt per blok wie waar speelt, op je game plan (een tabel of het veld). De app rekent de gevolgen uit en geeft tips, maar verandert zelf niets.',
+    how: ['Op dit scherm bekijk je het plan; aanpassen doe je in je game plan.', 'Live voert de app precies jouw plan uit.'],
   },
 };
 function ModeTour({ match, team, step, setStep }) {
@@ -286,50 +292,13 @@ function ModeTour({ match, team, step, setStep }) {
       <ul class="mt-how">${md.how.map((t, k) => html`<li key=${k}>${t}</li>`)}</ul>
       <div class="mt-acts" onClick=${(e) => e.stopPropagation()}>
         ${active && key === 'eigen' && html`<button type="button" class="btn primary block" onClick=${() => { close(); go('/plan'); }}>Open game plan</button>`}
-        ${!active && html`<button type="button" class=${'btn block ' + (key === 'app' ? 'primary' : 'plain')} onClick=${switchTo}>${key === 'app' ? 'Overstappen naar Autopilot' : 'Maak een game plan'}</button>
+        ${!active && html`<button type="button" class=${'btn block ' + (key === 'app' ? 'primary' : 'plain')} onClick=${switchTo}>${key === 'app' ? 'Overstappen naar Autopilot' : 'Ga zelf plannen'}</button>
           <span class="mt-note">${key === 'app' ? 'Je game plan blijft bewaard; je kunt altijd terug.' : 'Autopilot blijft beschikbaar; je kunt altijd terug.'}</span>`}
         ${active && own && html`<button type="button" class="btn plain block" onClick=${() => setStep(2)}>Liever slepen? Bekijk Autopilot</button>`}
       </div>
     </div>
     <span class="mt-tap">${step === 1 ? 'Tik voor de andere manier ›' : 'Tik om te sluiten'}</span>
   </div></${Portal}>`;
-}
-
-function PlayersSheet({ match, team, onClose }) {
-  const active = team.players.filter((p) => p.active !== false);
-  const [present, setPresent] = useState(match.present.slice());
-  const done = () => {
-    const changed = present.join(',') !== match.present.join(',');
-    update((d) => {
-      if (changed) rebuildConcept(d, { present: active.map((p) => p.id).filter((id) => present.indexOf(id) !== -1) });
-      const m = d.matches.find((x) => x.id === d.currentMatchId);
-      m.setup = { ...(m.setup || {}), present: true };
-    });
-    onClose();
-  };
-  return html`<${Sheet} onClose=${done} label="Wie is er">
-    <div class="between"><span class="h2" style="font-size:22px">Wie is er?</span><span class="sub">${present.length} van ${active.length}</span></div>
-    <div class="wrap">${active.map((p) => html`<button type="button" class="chip big" aria-pressed=${present.indexOf(p.id) !== -1 ? 'true' : 'false'}
-      onClick=${() => setPresent(present.indexOf(p.id) !== -1 ? present.filter((x) => x !== p.id) : present.concat([p.id]))}>${p.nick || p.name}</button>`)}</div>
-    <button type="button" class="btn primary block" onClick=${done}>Klaar</button>
-  </${Sheet}>`;
-}
-
-function KeeperPickSheet({ match, team, counts, onClose }) {
-  const pick = (id) => {
-    update((d) => {
-      if (id !== match.keeperId) rebuildConcept(d, { keeperId: id });
-      const m = d.matches.find((x) => x.id === d.currentMatchId);
-      m.setup = { ...(m.setup || {}), keeper: true };
-    });
-    onClose();
-  };
-  return html`<${Sheet} onClose=${() => pick(match.keeperId)} label="Keeper">
-    <span class="h2" style="font-size:22px">Wie keept er?</span>
-    <span class="sub">Voorstel: wie het minst gekeept heeft${team.players.some((p) => p.main === 'K' || (p.prefs || []).indexOf('K') !== -1) ? ' en graag keept' : ''}.</span>
-    <div class="wrap">${team.players.filter((p) => match.present.indexOf(p.id) !== -1).map((p) => html`<button type="button" class="chip big warm" aria-pressed=${match.keeperId === p.id ? 'true' : 'false'} onClick=${() => pick(p.id)}>
-      ${p.nick || p.name}<span class="small">${counts[p.id] ? counts[p.id] + '×' : 'nog niet'}</span></button>`)}</div>
-  </${Sheet}>`;
 }
 
 function OpponentSheet({ match, upcoming = [], onClose }) {
@@ -1110,59 +1079,247 @@ function DoneView({ match, team }) {
 
 // Hoe wissel je deze wedstrijd? Twee manieren naast elkaar, de actieve met een vinkje. Het standaardplan maakt
 // de app: dat voelt ook zo (kleurverloop dat rondloopt). Het game plan bouw je zelf.
-function PlanChoice({ match, team, swaps, perMoment, onTour }) {
+// ---------- klaarzetten in vier stappen: Wedstrijd · Spelers · Basis · Wisselen ----------
+function StepRail({ match, team, st, onStep }) {
+  const setup = match.setup || {};
   const own = M.isOwn(match, team);
-  const plan = match.plan;
-  const [sheet, setSheet] = useState(null);
   const gp = match.gameplan;
-  const st = useMemo(() => (own && gp && gp.base ? M.gpStats(match, team) : null), [match, team, own]);
+  const base = match.baseId && (team.bases || []).find((b) => b.id === match.baseId);
+  const keeper = team.keeper && match.keeperId ? M.nickOf(team, match.keeperId) : null;
   const full = st ? st.blocks.filter((b) => b.ok).length : 0;
-  const pickStd = () => {
-    if (!own) { setSheet('rooster'); return; }
+  const complete = !!st && full === st.blocks.length;
+  const fair = !!st && st.max - st.min <= (M.effRules(match, team).marge || 5) * 60 + 30;
+  const steps = [
+    { k: 'opp', name: 'Wedstrijd', done: !!setup.opponent, sum: match.opponent ? 'tegen ' + match.opponent : 'tegenstander ✓', req: true },
+    { k: 'players', name: 'Spelers', done: !!setup.present && (!team.keeper || !!setup.keeper), sum: `${match.present.length}${keeper ? ' · K ' + keeper : ' spelers'}`, req: true },
+    { k: 'base', name: 'Basis', done: !!(setup.base || (own && gp && gp.base)), sum: base ? base.name : own ? 'op je bord' : 'eigen opstelling' },
+    { k: 'swap', name: 'Wisselen', done: own ? complete && fair : true, sum: own ? (!st ? 'Zelf · leeg' : !complete ? `Zelf · ${full}/${st.blocks.length}` : fair ? 'Zelf · klaar' : 'Zelf · check') : 'Autopilot', ai: !own },
+  ];
+  let fill = -1;
+  for (let i = 0; i < steps.length; i++) { if (steps[i].done) fill = i; else break; }
+  const cur = steps.findIndex((x) => !x.done);
+  return html`<nav class="srail" aria-label="Wedstrijd klaarzetten">
+    <span class="sr-line" aria-hidden="true"><span class="sr-fill" style=${'--f:' + Math.max(0, fill) / (steps.length - 1)}></span></span>
+    ${steps.map((x, i) => html`<button type="button" key=${x.k} class=${'sr-st' + (x.done ? ' done' : '') + (i === cur ? ' cur' : '') + (x.req ? ' req' : '') + (x.ai && x.done ? ' ai' : '')}
+      aria-label=${`Stap ${i + 1}, ${x.name}: ${x.done ? x.sum : 'nog doen'}`} onClick=${() => { haptic('select'); onStep(x.k); }}>
+      <span class="sr-dot">${x.done ? html`<${Icon} name="check" size=${13} />` : html`<b>${i + 1}</b>`}</span>
+      <span class="sr-l">${x.done ? x.sum : x.name}</span>
+    </button>`)}
+  </nav>`;
+}
+
+// ---------- Autopilot of Zelf plannen: één schakelaar, het een of het ander ----------
+function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet }) {
+  const own = M.isOwn(match, team);
+  const [pend, setPend] = useState(null);
+  const [ask, setAsk] = useState(null);
+  const z = pend ? pend === 'z' : own;
+  const plan = match.plan;
+  const gp = match.gameplan;
+  const stash = !!(gp && gp.base) || !!(match.ownStash && ((match.ownStash.pins || []).length || match.ownStash.periodLineups));
+  const bases = (team.bases || []).filter((b) => M.baseFits(team, b));
+  const done = () => { setAsk(null); setPend(null); };
+  const goZelf = () => {
+    if (stash) { done(); switchPlanMode('eigen', true); toast('Zelf plannen staat aan · je game plan is terug.', { label: 'Ongedaan', run: () => switchPlanMode('app', true) }); return; }
+    setAsk('start');
+  };
+  const toZelf = () => {
+    if (own) return;
+    haptic('select');
+    setPend('z');
+    if (!devicePrefs().seenZelf) { setAsk('compare'); return; }
+    goZelf();
+  };
+  const toAuto = () => {
+    if (!own) return;
+    haptic('select');
     switchPlanMode('app', true);
-    toast('Autopilot staat aan. Je game plan blijft bewaard.', { label: 'Ongedaan', run: () => switchPlanMode('eigen', true) });
+    toast('Autopilot staat aan · je game plan blijft bewaard.', { label: 'Ongedaan', run: () => switchPlanMode('eigen', true) });
   };
-  const pickGp = () => { if (!own) switchPlanMode('eigen', true); haptic('select'); go('/plan'); };
+  const seen = () => setDevicePref('seenZelf', true);
   const takeOver = () => {
+    done();
     const res = mutate((m, t) => M.gpFromPlan(m, t));
-    setSheet(null);
-    if (res) {
-      haptic('success');
-      toast(res.fill ? `✦ In blokken kan het eerlijker: een voorzet met ${res.n} blokken per ${M.periodWord(team)} staat klaar.` : `✦ Het plan van Autopilot staat als game plan klaar (${res.n} blokken per ${M.periodWord(team)}).`);
-      go('/plan');
-    }
+    if (res) { haptic('success'); toast(res.fill ? `✦ Voorzet in ${res.n} blokken per ${M.periodWord(team)} staat klaar.` : `✦ Het plan van Autopilot staat klaar als game plan.`); go('/plan'); }
   };
-  const stdRange = M.mins(plan.fair.minPlayed) === M.mins(plan.fair.maxPlayed) ? `${M.mins(plan.fair.minPlayed)}` : `${M.mins(plan.fair.minPlayed)}–${M.mins(plan.fair.maxPlayed)}`;
-  const stdLine = swaps ? `${swaps} ${perMoment > 1 ? 'momenten' : 'wissels'} · ${stdRange} min p.p.` : 'Geen wissels nodig';
-  return html`<section class="pchoice">
-    <div class="pc-head"><span class="pc-q">Hoe wissel je?</span>
-      <span class="pc-tools">
-        <button type="button" class="pc-pt" onClick=${() => { haptic('select'); setSheet('speeltijd'); }}><${Icon} name="chart" size=${15} />Speeltijd</button>
-        <button type="button" class="pc-info" onClick=${() => { haptic('select'); onTour(); }}>Uitleg</button>
-      </span></div>
-    <div class="pc-opts">
-      <button type="button" class=${'pc-opt ai' + (!own ? ' on' : '')} aria-pressed=${!own ? 'true' : 'false'} onClick=${pickStd}>
-        <span class="pc-glow" aria-hidden="true"><span class="ai-sparks"><i></i><i></i><i></i><i></i><i></i><i></i></span></span>
-        ${!own && html`<span class="pc-badge" aria-label="Actief"><${Icon} name="check" size=${13} /></span>`}
-        <span class="pc-top"><span class="pc-ico ai"><${Icon} name="spark" size=${16} /></span><b class="pc-t">Autopilot</b></span>
-        <span class="pc-s">${own ? html`<span class="pc-cta">Gebruik dit<${Icon} name="chev" size=${13} /></span>` : html`${stdLine}${!plan.ok && html` <span class="warnicon" title=${(plan.why || []).map((w) => WHY_TEXT[w]).join(', ')}>!</span>`}`}</span>
-      </button>
-      <button type="button" class=${'pc-opt gp' + (own ? ' on' : '')} aria-pressed=${own ? 'true' : 'false'} onClick=${pickGp}>
-        ${own && html`<span class="pc-badge" aria-label="Actief"><${Icon} name="check" size=${13} /></span>`}
-        <span class="pc-top"><span class="pc-ico"><${Icon} name="edit" size=${16} /></span><b class="pc-t">Game plan</b></span>
-        <span class="pc-s">${own ? (st ? `${full}/${st.blocks.length} blokken · ${M.mins(st.min)}–${M.mins(st.max)} min` : 'Nog niet gemaakt') : html`<span class="pc-build">Zelf bouwen<${Icon} name="chev" size=${13} /></span>`}</span>
-      </button>
-    </div>
-    ${sheet === 'speeltijd' && html`<${PlayTimeSheet} match=${match} team=${team} onClose=${() => setSheet(null)} onOpenPlan=${() => { setSheet(null); go('/plan'); }} />`}
-    ${sheet === 'rooster' && html`<${Sheet} onClose=${() => setSheet(null)} label="Autopilot">
-      <span class="h2" style="font-size:22px"><span class="ai-grad">✦ Autopilot</span></span>
-      <span class="sub">Zo wisselt de app, volgens je teaminstellingen. Per speler: wanneer op welke linie, en wanneer aan de kant.</span>
-      <div class="card" style="box-shadow:none;border:1px solid var(--line)"><${Rooster} match=${match} team=${team} /></div>
-      <button type="button" class="btn block plain" onClick=${takeOver}>Pas aan als game plan</button>
-      <div class="row">
-        <button type="button" class="btn plain grow" onClick=${() => { setSheet(null); go('/plan'); }}>Open de planner</button>
-        <button type="button" class="btn primary grow" onClick=${() => setSheet(null)}>Klaar</button>
+  const empty = () => { done(); switchPlanMode('eigen', true); go('/plan'); };
+  const withBase = (b) => {
+    done();
+    switchPlanMode('eigen', true);
+    // basis als startblok; de rest krijgt een voorzet van de app die je daarna zelf aanpast
+    mutateConcept((m, d) => { const t = d.teams.find((x) => x.id === m.teamId); M.applyBase(m, t, b); M.gpFill(m, t); m.setup = { ...(m.setup || {}), base: true }; });
+    toast(`✦ ${b.name} staat als start; de rest is een voorzet`);
+    go('/plan');
+  };
+  const range = plan && plan.fair ? (M.mins(plan.fair.minPlayed) === M.mins(plan.fair.maxPlayed) ? `${M.mins(plan.fair.minPlayed)}` : `${M.mins(plan.fair.minPlayed)}–${M.mins(plan.fair.maxPlayed)}`) : '';
+  const full = st ? st.blocks.filter((b) => b.ok).length : 0;
+  return html`<section class="modesw">
+    <div class="msw-row">
+      <div class=${'msw' + (z ? ' z' : '')} role="radiogroup" aria-label="Hoe wissel je?">
+        <span class="msw-th" aria-hidden="true"><span class="ai-sparks"><i></i><i></i><i></i><i></i></span></span>
+        <button type="button" role="radio" aria-checked=${z ? 'false' : 'true'} class="msw-a" onClick=${toAuto}><${Icon} name="spark" size=${16} />Autopilot${!z && html`<span class="msw-tag">aanbevolen</span>`}</button>
+        <button type="button" role="radio" aria-checked=${z ? 'true' : 'false'} class="msw-b" onClick=${toZelf}><${Icon} name="edit" size=${15} />Zelf plannen</button>
       </div>
+      <button type="button" class="msw-i" aria-label="Uitleg: Autopilot en Zelf plannen" onClick=${() => { haptic('select'); onTour(); }}><${Icon} name="info" size=${19} /></button>
+    </div>
+    <div class="msum" key=${own ? 'z' : 'a'}>
+      ${own
+        ? html`<button type="button" class="msum-t" onClick=${() => onSheet('speeltijd')}>${st ? html`<${Icon} name="chart" size=${14} />${full}/${st.blocks.length} blokken · ${M.mins(st.min)}–${M.mins(st.max)}′` : 'Je plan is nog leeg'}</button>
+            <button type="button" class="msum-go" onClick=${() => go('/plan')}>${st ? 'Open game plan' : 'Maak je plan'}<${Icon} name="chev" size=${14} /></button>`
+        : html`<button type="button" class="msum-t wide" onClick=${() => onSheet('speeltijd')}>
+            <span>${swaps ? `${swaps} ${perMoment > 1 ? 'momenten' : 'wissels'} · ${range}′ p.p.` : 'Geen wissels nodig'}${plan && !plan.ok && html` <span class="warnicon" title=${(plan.why || []).map((w) => WHY_TEXT[w]).join(', ')}>!</span>`}</span>
+            <span class="msum-go">Speeltijd<${Icon} name="chev" size=${14} /></span></button>`}
+    </div>
+    ${ask === 'compare' && html`<${Sheet} onClose=${() => { seen(); done(); }} label="Zelf plannen of Autopilot">
+      <span class="h2" style="font-size:22px">Zelf plannen?</span>
+      <span class="sub">Zo verschillen de twee manieren. Je kunt altijd terug.</span>
+      <div class="cmp">
+        <div class="cmp-h"><span></span><b class="ai-grad">✦ Autopilot</b><b>Zelf plannen</b></div>
+        ${[
+          ['Wie plant', 'De app, uit je profiel en wie er is', 'Jij, blok voor blok; de app kan een voorzet doen'],
+          ['Wisselen', 'Meestal 1 tegelijk, ongeveer elke 3 min', 'Vaste momenten, vaak de hele bank tegelijk'],
+          ['Tijdens de wedstrijd', 'Rekent mee na een eigen wissel, blessure of goal', 'Volgt je bord precies; ingrijpen doe je live'],
+          ['Werk vooraf', 'Geen', '2 tot 10 minuten'],
+          ['Eerlijk', 'Altijd binnen je regels', 'Ligt bij jou; Controle helpt'],
+        ].map(([a, b, c]) => html`<div class="cmp-r" key=${a}><span>${a}</span><span>${b}</span><span>${c}</span></div>`)}
+      </div>
+      <button type="button" class="btn primary block" onClick=${() => { seen(); goZelf(); }}>Ga verder met Zelf plannen</button>
+      <button type="button" class="btn plain block" onClick=${() => { seen(); done(); }}>Toch Autopilot</button>
+    </${Sheet}>`}
+    ${ask === 'start' && html`<${Sheet} onClose=${done} label="Hoe begin je je plan">
+      <span class="h2" style="font-size:22px">Hoe begin je?</span>
+      <span class="sub">Daarna bepaal je zelf per blok wie waar speelt.</span>
+      <button type="button" class="startopt ai" onClick=${takeOver}><span class="pc-ico ai"><${Icon} name="spark" size=${16} /></span><span class="col" style="gap:2px"><b>Neem Autopilot over</b><span class="small">Het plan van nu, in blokken. Daarna pas je aan.</span></span><${Icon} name="chev" size=${16} /></button>
+      ${bases.slice(0, 3).map((b) => html`<button type="button" key=${b.id} class="startopt" onClick=${() => withBase(b)}><span class="pc-ico"><${Icon} name="team" size=${16} /></span><span class="col" style="gap:2px"><b>Met basis ${b.name}</b><span class="small">${M.formationText(b.lines)} als start, de app doet een voorzet voor de rest.</span></span><${Icon} name="chev" size=${16} /></button>`)}
+      <button type="button" class="startopt" onClick=${empty}><span class="pc-ico"><${Icon} name="edit" size=${16} /></span><span class="col" style="gap:2px"><b>Begin leeg</b><span class="small">Jij zet de startopstelling en de blokken.</span></span><${Icon} name="chev" size=${16} /></button>
     </${Sheet}>`}
   </section>`;
+}
+
+// ---------- spelers en keeper in één stap ----------
+function SquadSheet({ match, team, counts, onClose }) {
+  const active = team.players.filter((p) => p.active !== false);
+  const [present, setPresent] = useState(match.present.slice());
+  const [keeper, setKeeper] = useState(match.keeperId);
+  const kOk = !team.keeper || (keeper && present.indexOf(keeper) !== -1);
+  const done = () => {
+    const ids = active.map((p) => p.id).filter((id) => present.indexOf(id) !== -1);
+    const changed = ids.join(',') !== match.present.join(',') || keeper !== match.keeperId;
+    update((d) => {
+      if (changed) rebuildConcept(d, { present: ids, keeperId: kOk ? keeper : null });
+      const m = d.matches.find((x) => x.id === d.currentMatchId);
+      m.setup = { ...(m.setup || {}), present: true, keeper: !team.keeper || m.keeperId === keeper || !!m.keeperId };
+    });
+    onClose();
+  };
+  const toggle = (id) => setPresent(present.indexOf(id) !== -1 ? present.filter((x) => x !== id) : present.concat([id]));
+  return html`<${Sheet} onClose=${done} label="Spelers en keeper">
+    <div class="between"><span class="h2" style="font-size:22px">Wie is er?</span><span class="sub">${present.length} van ${active.length}</span></div>
+    <div class="wrap">${active.map((p) => html`<button type="button" key=${p.id} class="chip big" aria-pressed=${present.indexOf(p.id) !== -1 ? 'true' : 'false'} onClick=${() => toggle(p.id)}>${p.nick || p.name}</button>`)}</div>
+    ${team.keeper && html`<div class="col" style="gap:6px">
+      <span class="h2" style="font-size:18px">Wie keept?</span>
+      <span class="small">Voorstel: wie het minst gekeept heeft${team.players.some((p) => p.main === 'K' || (p.prefs || []).indexOf('K') !== -1) ? ' en graag keept' : ''}.</span>
+      <div class="wrap">${active.filter((p) => present.indexOf(p.id) !== -1).map((p) => html`<button type="button" key=${'k' + p.id} class="chip big warm" aria-pressed=${keeper === p.id ? 'true' : 'false'} onClick=${() => setKeeper(p.id)}>
+        ${p.nick || p.name}<span class="small">${counts[p.id] ? counts[p.id] + '×' : 'nog niet'}</span></button>`)}</div>
+    </div>`}
+    <button type="button" class="btn primary block" onClick=${done}>Klaar</button>
+  </${Sheet}>`;
+}
+
+// ---------- basisopstellingen: kiezen, bewaren, beheren ----------
+function MiniField({ base }) {
+  return html`<span class="mini-f" aria-hidden="true">${['V', 'M', 'A'].map((l) => html`<span class="mf-r" key=${l}>${Array.from({ length: base.lines[l] || 0 }, (_, i) => html`<i key=${i} class=${'l' + l}></i>`)}</span>`)}</span>`;
+}
+function BaseSheet({ match, team, onClose }) {
+  const bases = team.bases || [];
+  const [naming, setNaming] = useState(null);
+  const [name, setName] = useState('');
+  const [menu, setMenu] = useState(null);
+  const own = M.isOwn(match, team);
+  const nick = (id) => M.nickOf(team, id);
+  const teamOf = (d) => d.teams.find((x) => x.id === match.teamId);
+  const curOf = (d) => d.matches.find((x) => x.id === d.currentMatchId);
+  const lineText = (b) => ['V', 'M', 'A'].map((l) => ({ l, ids: Object.keys(b.slots).filter((k) => k[0] === l && b.slots[k]).map((k) => b.slots[k]) }))
+    .filter((x) => x.ids.length).map((x) => ({ V: 'Voor', M: 'Midden', A: 'Achter' })[x.l] + ': ' + x.ids.map(nick).join(', ')).join(' · ');
+  const absentOf = (b) => Object.values(b.slots).filter((id) => id && match.present.indexOf(id) === -1);
+  const pick = (b) => {
+    let res = null;
+    update((d) => {
+      const t = teamOf(d);
+      let m = curOf(d);
+      if (t.keeper && b.keeperId && b.keeperId !== m.keeperId && m.present.indexOf(b.keeperId) !== -1) { rebuildConcept(d, { keeperId: b.keeperId }); m = curOf(d); }
+      res = M.applyBase(m, t, b);
+      m.setup = { ...(m.setup || {}), base: true };
+    });
+    haptic('success');
+    const r = res || { missing: [], filled: [] };
+    toast(r.missing.length ? `${r.missing.map(nick).join(', ')} ${r.missing.length > 1 ? 'zijn' : 'is'} er niet: ${r.filled.map(nick).join(', ') || 'de app'} neemt de plek${own ? '' : ' · plan opnieuw berekend'}` : `Basis ${b.name} staat klaar${own ? ' als startblok' : ' · plan opnieuw berekend'}`);
+    onClose();
+  };
+  const save = () => {
+    const nm = name.trim();
+    update((d) => {
+      const t = teamOf(d); const m = curOf(d);
+      const b = M.baseFromMatch(m, t, nm);
+      t.bases = (t.bases || []).concat([b]);
+      m.baseId = b.id;
+      m.setup = { ...(m.setup || {}), base: true };
+    });
+    haptic('success');
+    toast(`Basis bewaard · volgende keer kies je hem met één tik`);
+    setNaming(null); setName('');
+  };
+  const replace = (b) => {
+    update((d) => { const t = teamOf(d); const m = curOf(d); const nb = M.baseFromMatch(m, t, b.name); t.bases = (t.bases || []).map((x) => (x.id === b.id ? { ...nb, id: b.id } : x)); m.baseId = b.id; });
+    setMenu(null); toast(`${b.name} bijgewerkt met de opstelling op het veld`);
+  };
+  const rename = (b) => {
+    const nm = name.trim(); if (!nm) return;
+    update((d) => { const t = teamOf(d); t.bases = (t.bases || []).map((x) => (x.id === b.id ? { ...x, name: nm } : x)); });
+    setNaming(null); setName(''); setMenu(null);
+  };
+  const remove = (b) => {
+    const prev = bases.slice();
+    update((d) => { const t = teamOf(d); t.bases = (t.bases || []).filter((x) => x.id !== b.id); const m = curOf(d); if (m.baseId === b.id) m.baseId = null; });
+    setMenu(null);
+    toast(`${b.name} verwijderd`, { label: 'Ongedaan', run: () => update((d) => { teamOf(d).bases = prev; }) });
+  };
+  const useField = () => { update((d) => { const m = curOf(d); m.setup = { ...(m.setup || {}), base: true }; }); onClose(); };
+  return html`<${Sheet} onClose=${onClose} label="Basisopstelling">
+    <span class="h2" style="font-size:22px">Basisopstelling</span>
+    <span class="sub">${bases.length ? 'Kies waarmee je begint. Is iemand er niet, dan zet de app daar wie het best past.' : 'Een basis is een vaste startopstelling die je bewaart en per wedstrijd met één tik kiest.'}</span>
+    ${!bases.length && html`<div class="base-empty">
+      <span class="be-ico"><${Icon} name="team" size=${22} /></span>
+      <b>Nog geen basisopstellingen</b>
+      <span>Laten we er een maken: zet de spelers op het veld zoals je wilt beginnen en bewaar dat hieronder.</span>
+    </div>`}
+    ${bases.length > 0 && html`<div class="base-list">${bases.map((b) => {
+      const fits = M.baseFits(team, b);
+      const absent = absentOf(b);
+      const on = match.baseId === b.id;
+      return html`<div class=${'base-row' + (on ? ' on' : '') + (fits ? '' : ' off')} key=${b.id}>
+        <button type="button" class="base-main" disabled=${!fits} onClick=${() => pick(b)}>
+          <${MiniField} base=${b} />
+          <span class="col grow" style="gap:1px;min-width:0">
+            <span class="base-n"><b>${b.name}</b><span class="base-f">${M.formationText(b.lines)}</span>${on && html`<span class="base-on"><${Icon} name="check" size=${12} />gekozen</span>`}</span>
+            <span class="base-l">${fits ? lineText(b) : `Past niet bij ${team.lines.A + team.lines.M + team.lines.V} in het veld`}</span>
+            ${fits && absent.length > 0 && html`<span class="base-a">${absent.map(nick).join(', ')} ${absent.length > 1 ? 'zijn' : 'is'} er niet · de app vult aan</span>`}
+          </span>
+        </button>
+        <button type="button" class="base-more" aria-label=${'Meer voor ' + b.name} onClick=${() => { setMenu(menu === b.id ? null : b.id); setNaming(null); }}><${Icon} name="more" size=${18} /></button>
+        ${menu === b.id && html`<div class="base-menu">
+          ${naming === b.id
+            ? html`<input class="input" value=${name} placeholder=${b.name} onInput=${(e) => setName(e.target.value)} onKeyDown=${(e) => { if (e.key === 'Enter') rename(b); }} /><button type="button" class="btn primary" onClick=${() => rename(b)}>Bewaar</button>`
+            : html`<button type="button" class="chip" onClick=${() => { setNaming(b.id); setName(b.name); }}>Hernoem</button>
+              <button type="button" class="chip" onClick=${() => replace(b)}>Vervang door het veld</button>
+              <button type="button" class="chip warn" onClick=${() => remove(b)}>Verwijder</button>`}
+        </div>`}
+      </div>`;
+    })}</div>`}
+    ${naming === 'new'
+      ? html`<div class="base-save"><input class="input" value=${name} placeholder=${'Bijv. Sterk begin'} onInput=${(e) => setName(e.target.value)} onKeyDown=${(e) => { if (e.key === 'Enter') save(); }} />
+          <button type="button" class="btn primary" onClick=${save}>Bewaar</button></div>`
+      : html`<button type="button" class=${'btn block ' + (bases.length ? 'plain' : 'primary')} onClick=${() => { setNaming('new'); setName(''); setMenu(null); }}><${Icon} name="plus" size=${18} />Bewaar het veld als basis</button>`}
+    <button type="button" class="btn plain block" onClick=${useField}>Zo beginnen, zonder basis</button>
+  </${Sheet}>`;
 }

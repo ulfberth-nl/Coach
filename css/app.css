@@ -1980,7 +1980,18 @@ html.gp-wide #app { max-width: none; }
 @media (prefers-reduced-motion: reduce) { .gp-step > *, .ai-mark, .gd-kpi, .gd-insrow, .gd-row, .gd-tl li, .gc, .gl, .gh, .pc-opt, .gq-bar i::after, .ai-note, .oz-card, .oz-card::after, .ai-aurora, .ai-sparks i, .pc-glow::before, .pc-glow::after, .gd-aurora, .gr-arc, .btn.ai-go, .btn.busy, .oz-nb.rec::after, .oz-bar span, .gd-bar i, .gp-selbar, .pc-ico.ai svg, .oz-ico.ai svg { animation: none !important; } }
 /* voorbereiden: het veld krimpt mee zodat bank en startknop altijd passen; op lage schermen zonder tijdlijn */
 .grow-field .fieldbox { min-height: 180px; }
-@media (max-height: 720px) { .grow-field .planview.compact .tl, .grow-field .planview.compact .fieldcap { display: none; } .grow-field .fieldbox { min-height: 170px; } }
+@media (max-height: 720px) {
+  .grow-field .planview.compact .fieldcap { display: none; }
+  .grow-field .fieldbox { min-height: 170px; }
+  /* dunne tijdlijn: speldjes blijven zichtbaar en weg te tikken */
+  .grow-field .planview.compact .tl { height: 30px; margin: 0 16px; }
+  .grow-field .planview.compact .tl-line { top: 17px; height: 3px; }
+  .grow-field .planview.compact .tl-dot { top: 13px; width: 8px; height: 8px; margin-left: -4px; }
+  .grow-field .planview.compact .tl-head { top: 8px; width: 18px; height: 18px; margin-left: -9px; border-width: 2.5px; }
+  .grow-field .planview.compact .tl-time, .grow-field .planview.compact .tl-break b { display: none; }
+  .grow-field .planview.compact .tl-break { top: 9px; height: 18px; }
+  .grow-field .planview.compact .tl-pin { top: -2px; width: 18px; height: 18px; margin-left: -9px; }
+}
 @media (max-height: 600px) { .grow-field .fieldbox { min-height: 100px; } }
 /* veel blokken (liggend, kwarten): compacter, alleen 'uit positie' als teken */
 .gp-work.wide .gb.dense { grid-template-columns: 20px repeat(var(--cols), minmax(52px, 1fr)); column-gap: 3px; }
@@ -2289,3 +2300,92 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 .fieldcap .fc-lock { display: inline-flex; vertical-align: -2px; margin-right: 4px; color: var(--muted); }
 .reduce .pt-row, .reduce .pt-p, .reduce .pt-det { animation: none !important; }
 @media (prefers-reduced-motion: reduce) { .pt-row, .pt-p, .pt-det { animation: none !important; } }
+
+/* ---------- v0.25: stappenrail ---------- */
+.srail { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 2px 0 0; flex: 0 0 auto; }
+.sr-line { position: absolute; left: 12.5%; right: 12.5%; top: 14px; height: 3px; border-radius: 3px; background: var(--line-2); overflow: hidden; }
+.sr-fill { position: absolute; inset: 0 auto 0 0; width: calc(var(--f) * 100%); border-radius: 3px; background: linear-gradient(90deg, var(--blue), #4F46E5); transition: width .7s var(--spring-play); }
+.sr-fill::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.7), transparent); translate: -100% 0; animation: srShine 2.6s ease-in-out infinite; }
+@keyframes srShine { 60%, 100% { translate: 100% 0; } }
+.sr-st { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; padding: 0 2px; border: none; background: none; min-height: 48px; }
+.sr-dot { position: relative; z-index: 1; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 99px; background: #fff; border: 2px solid var(--line-2); color: var(--muted); font-size: 13px; font-weight: 900; transition: background .35s, border-color .35s, color .35s, transform .35s var(--spring-play); }
+.sr-dot b { font-family: Inter, system-ui, sans-serif; }
+.sr-st.req .sr-dot { border-color: var(--orange); color: #92400E; background: var(--orange-tint); }
+.sr-st.cur .sr-dot::after { content: ''; position: absolute; inset: -5px; border-radius: 99px; border: 2px solid var(--orange); opacity: 0; animation: srPulse 2.2s ease-out infinite; }
+.sr-st.cur:not(.req) .sr-dot::after { border-color: var(--blue-2); }
+@keyframes srPulse { 0% { opacity: .7; transform: scale(.85); } 100% { opacity: 0; transform: scale(1.3); } }
+.sr-st.done .sr-dot { background: var(--blue); border-color: var(--blue); color: #fff; animation: srPop .45s var(--spring-play); }
+.sr-st.done.ai .sr-dot { background: var(--ai-lin); border-color: transparent; }
+@keyframes srPop { 0% { transform: scale(.6); } 60% { transform: scale(1.12); } }
+.sr-st.done .sr-dot svg { stroke-width: 3; }
+.sr-st.done .sr-dot svg path { stroke-dasharray: 24; stroke-dashoffset: 0; animation: srDraw .5s .12s ease-out both; }
+@keyframes srDraw { from { stroke-dashoffset: 24; } }
+.sr-l { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 700; color: var(--muted); }
+.sr-st.done .sr-l { color: var(--ink); font-weight: 800; }
+.sr-st.cur .sr-l { color: var(--ink); }
+.sr-st:active .sr-dot { transform: scale(.9); }
+.startbtn.ready { animation: readyGlow 2.8s ease-in-out infinite; }
+@keyframes readyGlow { 0%, 100% { box-shadow: 0 8px 22px -10px rgba(31,60,136,.8); } 50% { box-shadow: 0 10px 30px -8px rgba(79,70,229,.85), 0 0 0 4px rgba(79,70,229,.12); } }
+
+/* ---------- v0.25: schakelaar Autopilot | Zelf plannen ---------- */
+.modesw { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
+.msw-row { display: flex; align-items: center; gap: 8px; }
+.msw { position: relative; flex: 1 1 auto; display: grid; grid-template-columns: 1fr 1fr; height: 50px; padding: 4px; border-radius: 99px; background: #fff; box-shadow: 0 0 0 1px var(--line), 0 6px 16px -10px rgba(17,24,39,.25); }
+.msw-th { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 99px; overflow: hidden; border: 1.5px solid transparent;
+  background: linear-gradient(150deg, #FCFBFF, #EEE9FF 60%, #E3F6F1) padding-box, var(--ai-conic) border-box; animation: aiSpin 3s linear infinite;
+  box-shadow: 0 6px 16px -8px rgba(124,92,255,.7); transition: translate .5s var(--spring-play), background .35s, box-shadow .35s; }
+.msw.z .msw-th { translate: 100% 0; background: linear-gradient(var(--navy), var(--navy)) padding-box, linear-gradient(var(--navy), var(--navy)) border-box; animation: none; box-shadow: 0 6px 16px -8px rgba(19,38,94,.8); }
+.msw-th .ai-sparks { transition: opacity .3s; }
+.msw.z .msw-th .ai-sparks { opacity: 0; }
+.msw button { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 6px; border: none; background: none; font-size: 15px; font-weight: 900; color: var(--muted); transition: color .3s; white-space: nowrap; }
+.msw button svg { stroke-width: 2.4; }
+.msw:not(.z) .msw-a { color: var(--ai-ink, #4C1D95); }
+.msw:not(.z) .msw-a svg { color: #7C3AED; animation: twinkle 3.2s ease-in-out infinite; }
+.msw.z .msw-b { color: #fff; }
+.msw-tag { padding: 1px 7px; border-radius: 99px; background: rgba(124,92,255,.14); color: #5B21B6; font-size: 10.5px; font-weight: 900; letter-spacing: .01em; animation: tagIn .4s var(--spring-play) both; }
+@keyframes tagIn { from { opacity: 0; scale: .6; } }
+.msw-i { position: relative; flex: none; display: grid; place-items: center; width: 40px; height: 40px; border: none; border-radius: 99px; background: #fff; color: var(--blue); box-shadow: 0 0 0 1px var(--line); }
+.msw-i::before { content: ''; position: absolute; inset: -4px; }
+.msum { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 4px 0 6px; animation: msumIn .4s var(--spring-soft) both; }
+@keyframes msumIn { from { opacity: 0; translate: 0 6px; } }
+.msum-t { flex: 1 1 auto; min-width: 0; display: inline-flex; align-items: center; gap: 6px; padding: 0; border: none; background: none; font-size: 13.5px; font-weight: 800; color: var(--ink); text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-height: 34px; }
+.msum-t.wide { justify-content: space-between; }
+.msum-t svg { color: var(--muted); flex: none; }
+.msum-go { flex: none; display: inline-flex; align-items: center; gap: 2px; padding: 0 2px 0 10px; border: none; background: none; font-size: 13.5px; font-weight: 800; color: var(--blue); min-height: 34px; }
+.msum-go svg { color: var(--blue) !important; }
+.cmp { display: flex; flex-direction: column; border-radius: 14px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); }
+.cmp-h, .cmp-r { display: grid; grid-template-columns: 82px 1fr 1fr; gap: 8px; padding: 8px 10px; font-size: 12.5px; line-height: 1.35; }
+.cmp-h { background: var(--line-3); font-size: 13px; }
+.cmp-r + .cmp-r, .cmp-h + .cmp-r { border-top: 1px solid var(--line); }
+.cmp-r span:first-child { color: var(--muted); font-weight: 800; }
+.cmp-r { animation: rtInF .35s var(--spring-soft) both; }
+.startopt { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 10px 12px; border-radius: 16px; border: 1px solid var(--line); background: #fff; text-align: left; color: var(--ink); }
+.startopt b { font-size: 15px; }
+.startopt > svg { margin-left: auto; color: var(--muted); flex: none; }
+.startopt.ai { border: 1.5px solid transparent; background: linear-gradient(150deg, #FCFBFF, #F3F0FF) padding-box, var(--ai-conic) border-box; animation: aiSpin 4s linear infinite; }
+
+/* ---------- v0.25: basisopstellingen ---------- */
+.base-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 18px 16px; border-radius: 16px; border: 1.5px dashed var(--line-2); background: var(--line-3); font-size: 13.5px; color: var(--muted); }
+.base-empty b { color: var(--ink); font-size: 16px; }
+.be-ico { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 99px; background: #fff; color: var(--blue); box-shadow: 0 0 0 1px var(--line); animation: srPop .5s var(--spring-play); }
+.base-list { display: flex; flex-direction: column; gap: 8px; }
+.base-row { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; border-radius: 16px; border: 1px solid var(--line); background: #fff; transition: border-color .25s, box-shadow .25s; }
+.base-row.on { border-color: var(--blue-2); box-shadow: 0 0 0 3px rgba(43,87,201,.12); }
+.base-row.off { opacity: .55; }
+.base-main { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 6px 10px 10px; border: none; background: none; text-align: left; color: var(--ink); min-width: 0; }
+.base-n { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 15px; }
+.base-f { padding: 1px 7px; border-radius: 99px; background: var(--line-3); font-size: 11.5px; font-weight: 800; color: var(--muted); font-family: Inter, system-ui, sans-serif; }
+.base-on { display: inline-flex; align-items: center; gap: 3px; color: var(--blue); font-size: 12px; font-weight: 800; }
+.base-l { font-size: 12.5px; color: var(--muted); font-weight: 600; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.base-a { font-size: 12px; font-weight: 800; color: #B45309; }
+.base-more { display: grid; place-items: center; width: 44px; height: 44px; margin-right: 4px; border: none; border-radius: 99px; background: none; color: var(--muted); }
+.base-menu { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; padding: 0 10px 10px; animation: msumIn .3s var(--spring-soft) both; }
+.base-menu .input { flex: 1 1 140px; height: 40px; }
+.chip.warn { color: #B91C1C; border-color: #FCA5A5; }
+.base-save { display: flex; gap: 8px; }
+.mini-f { flex: none; display: flex; flex-direction: column; justify-content: space-around; gap: 4px; width: 46px; height: 54px; padding: 5px 4px; border-radius: 9px; background: var(--field, #2453b8); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.35); }
+.mf-r { display: flex; justify-content: space-evenly; min-height: 8px; }
+.mf-r i { width: 8px; height: 8px; border-radius: 99px; background: #fff; box-shadow: 0 0 0 1.5px currentColor; }
+.mf-r i.lV { color: #F87171; } .mf-r i.lM { color: #FBBF24; } .mf-r i.lA { color: #60A5FA; }
+.reduce .sr-fill, .reduce .sr-fill::after, .reduce .sr-dot, .reduce .sr-dot::after, .reduce .sr-dot svg path, .reduce .msw-th, .reduce .msum, .reduce .startbtn.ready, .reduce .cmp-r, .reduce .startopt.ai, .reduce .be-ico, .reduce .msw-tag { animation: none !important; transition: none !important; }
+@media (prefers-reduced-motion: reduce) { .sr-fill, .sr-fill::after, .sr-dot, .sr-dot::after, .sr-dot svg path, .msw-th, .msum, .startbtn.ready, .cmp-r, .startopt.ai, .be-ico, .msw-tag { animation: none !important; transition: none !important; } }
