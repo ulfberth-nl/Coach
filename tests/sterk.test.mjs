@@ -92,3 +92,25 @@ console.log('focus met invallers ok');
   assert.equal(def2.s7, 'A'); assert.equal(def2.s4, 'M'); assert.equal(def2.s1, 'V');
 }
 console.log('focus met Vaste Waarde ok');
+
+// ---------- 9 spelers (8 in het veld, 5 tegelijk): geen duidelijk sterkere speler korter dan een zwakkere ----------
+{
+  const t9 = store.newTeam();
+  const d9 = [
+    ['s1', 7, 'V', ['V', 'M']], ['s2', 9, 'A', ['A', 'M']], ['s3', 5, null, ['V', 'M', 'A']], ['s4', 7, 'M', ['M', 'A']],
+    ['s5', 3, null, ['A', 'M', 'V']], ['s6', 2, null, ['V', 'M']], ['s7', 3, 'A', ['A', 'V', 'M']], ['s8', 2, null, ['V', 'M']], ['s9', 2, null, ['M']],
+  ];
+  t9.players = d9.map(([id, l, main, prefs]) => ({ id, name: id, nick: id, kracht: lv(l), main, prefs, strengths: [], active: true }));
+  t9.rules.profile = 'sterk';
+  const ids9 = t9.players.map((p) => p.id);
+  const tu = P.tune(t9, 'sterk', ids9, 's8');
+  const m9 = M.createMatch(t9, { opponent: 'T', present: ids9, keeperId: 's8', rules: tu.rules });
+  const c9 = M.timeline(m9, t9).cards;
+  const E9 = t9.periods * M.periodLen(t9);
+  const p9 = {};
+  c9.forEach((c, i) => { const t1 = i + 1 < c9.length ? c9[i + 1].t : E9; for (const id in c.pos) p9[id] = (p9[id] || 0) + t1 - c.t; });
+  const k9 = Object.fromEntries(t9.players.map((p) => [p.id, p.kracht]));
+  assert.ok(m9.plan.ok, 'plan binnen de regels');
+  for (const a in p9) for (const b in p9) if (k9[a] - k9[b] >= 25) assert.ok(p9[a] >= p9[b] - 30, `${a} (sterker) speelt niet korter dan ${b}`);
+}
+console.log('9 spelers ok');

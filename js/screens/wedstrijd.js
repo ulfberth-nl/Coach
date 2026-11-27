@@ -13,7 +13,7 @@ import { switchPlanMode } from './plan.js';
 import { APP_VERSION } from './team.js';
 import { Rooster } from './gameplan.js';
 import { mutate, undoAction, liveAct, SwapSheet, GroupSwapSheet, BenchSheet, GoalSheet, JoinSheet, KeeperSheet } from './live.js';
-import { POS_COLORS, Field, Neon, Roll, Sheet, CallStory, Confirm, Seg, Stepper, Icon, accentFor, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, BenchScroll, beep, flash, unlockAudio, toast, go, Portal } from '../ui.js';
+import { POS_COLORS, Field, Neon, Roll, Sheet, Reveal, CallStory, Confirm, Seg, Stepper, Icon, accentFor, TeamBadge, OppBadge, OpponentInput, ShieldColors, useNow, useWakeLock, useDragSwap, justDragged, BenchScroll, beep, flash, unlockAudio, toast, go, Portal } from '../ui.js';
 
 // slepen in de startopstelling: twee spelers ruilen, of een speler naar een lege plek in een andere linie
 // (dan verandert de opstelling voor deze wedstrijd). Het plan rekent daarna opnieuw.
@@ -203,8 +203,9 @@ function PrepView({ state, match, team }) {
   const todo = [!setup.present && 'wie er is', team.keeper && !setup.keeper && 'de keeper', !setup.opponent && 'de tegenstander'].filter(Boolean);
   const gp = match.gameplan;
   const gpSt = useMemo(() => (M.isOwn(match, team) && gp && gp.base ? M.gpStats(match, team) : null), [match, team]);
-  const ready = !tooFew && !todo.length && !!(setup.base || (gpSt && gp.base)) &&
-    (!M.isOwn(match, team) || (gpSt && gpSt.blocks.every((b) => b.ok) && gpSt.max - gpSt.min <= (M.effRules(match, team).marge || 5) * 60 + 30));
+  // klaar voor de aftrap: spelers, keeper en tegenstander bevestigd; bij Zelf plannen ook een vol en eerlijk game plan
+  const ready = !tooFew && !todo.length &&
+    (!M.isOwn(match, team) || (gpSt && gp.base && gpSt.blocks.every((b) => b.ok) && gpSt.max - gpSt.min <= (M.effRules(match, team).marge || 5) * 60 + 30));
   // aftrap: het veld en het affiche gaan vloeiend over in het live-scherm, het scorebord valt erin
   const start = () => {
     unlockAudio();
@@ -214,7 +215,7 @@ function PrepView({ state, match, team }) {
     <${Affiche} match=${match} team=${team} todo=${!setup.opponent} onClick=${() => setSheet('opp')}>
       <button type="button" class="iconbtn" aria-label="Menu" onClick=${() => setSheet('menu')}><${Icon} name="more" size=${22} /></button>
     </${Affiche}>
-    <${SetupTiles} match=${match} team=${team} onOpen=${setSheet} />
+    <${SquadBar} match=${match} team=${team} onOpen=${setSheet} />
     ${tooFew
       ? html`<div class="card" style="flex:1 1 auto;justify-content:center;text-align:center"><span class="h2">Te weinig spelers</span><span class="sub">Je hebt ${F} veldspelers nodig${team.keeper ? ' plus een keeper' : ''}. Tik op "spelers".</span></div>`
       : html`
@@ -1058,6 +1059,7 @@ function GameMenu({ match, team, live, onClose, onSheet }) {
     ${live && item('Einde ' + M.periodLabel(team, match.clock.period), null, () => onSheet('end'))}
     ${live && item('Stand aanpassen', 'Doelpunten per speler en tegengoals', () => onSheet('score'))}
     ${live && item('Wedstrijdgegevens', 'Tegenstander, tijd, veld', () => onSheet('opp'))}
+    ${!live && !M.isOwn(match, team) && item('Basisopstelling', (team.bases || []).length ? 'Begin met een bewaarde opstelling, of bewaar deze' : 'Bewaar deze opstelling om later met één tik te kiezen', () => onSheet('base'))}
     ${!live && !M.isOwn(match, team) && item('Opstelling opnieuw laten voorstellen', 'Je eigen sleepwerk vervalt', () => { update((d) => rebuildConcept(d, { resetLines: true })); onClose(); })}
     ${live && item('Wedstrijd nu afsluiten', 'Bewaren en naar het overzicht', () => onSheet('finish'))}
     ${live && item('Wedstrijd stoppen en weggooien', 'Niets bewaren', () => onSheet('delete'), true)}
@@ -1097,29 +1099,30 @@ function Avatars({ team, ids, max = 5 }) {
     return html`<i key=${id} style=${`--c:${c};--k:${k}`}>${((p.nick || p.name || '?').trim()[0] || '?').toUpperCase()}</i>`;
   })}${ids.length > max && html`<i class="more" style=${'--k:' + max}>+${ids.length - max}</i>`}</span>`;
 }
-function SetupTiles({ match, team, onOpen }) {
+// Spelers aanmelden: één brede, rustige balk. Nog te doen = warm met een zachte glans; klaar = een groene
+// ring die zich vult, een vinkje en in één regel wie er zijn en wie keept.
+function SquadBar({ match, team, onOpen }) {
   const setup = match.setup || {};
-  const own = M.isOwn(match, team);
-  const gp = match.gameplan;
-  const base = match.baseId && (team.bases || []).find((b) => b.id === match.baseId);
+  const active = team.players.filter((p) => p.active !== false);
   const field = match.present.filter((id) => id !== match.keeperId);
-  const playersOk = !!setup.present && (!team.keeper || !!setup.keeper);
-  const baseOk = !!(setup.base || (own && gp && gp.base));
+  const ok = !!setup.present && (!team.keeper || !!setup.keeper);
   const keeper = team.keeper && match.keeperId ? M.nickOf(team, match.keeperId) : null;
-  const tile = (k, ok, todo, label, body, aria) => html`<button type="button" key=${k} class=${'stile' + (ok ? ' ok' : todo ? ' todo' : ' open')} aria-label=${aria} onClick=${() => { haptic('select'); onOpen(k); }}>
-    <span class="st-lab">${label}${ok && html`<span class="st-ok" aria-hidden="true"><${Icon} name="check" size=${11} /></span>`}</span>
-    <span class="st-body">${body}</span>
+  const title = ok ? `${field.length} ${field.length === 1 ? 'speler' : 'spelers'}` : 'Wie zijn er?';
+  const sub = ok ? (keeper ? html`<span class="kbadge">K</span>${keeper} keept` : team.keeper ? 'nog geen keeper' : `${match.present.length} van ${active.length} aangemeld`)
+    : team.keeper ? 'En wie keept er?' : 'Tik om aan te melden';
+  return html`<button type="button" class=${'sqbar ' + (ok ? 'ok' : 'todo')} onClick=${() => { haptic('select'); onOpen('players'); }}
+    aria-label=${ok ? `Spelers: ${field.length}${keeper ? ', keeper ' + keeper : ''}. Tik om te wijzigen` : 'Spelers aanmelden'}>
+    <span class="sq-ring" aria-hidden="true" style=${'--p:' + (ok ? 100 : 0)}>
+      <svg viewBox="0 0 40 40"><circle class="tr" cx="20" cy="20" r="17" /><circle class="pr" cx="20" cy="20" r="17" pathLength="100" /></svg>
+      <span class="sq-ico" key=${ok ? 'ok' : 'todo'}><${Icon} name=${ok ? 'check' : 'team'} size=${ok ? 17 : 18} /></span>
+    </span>
+    <span class="sq-t" key=${ok ? 't-ok' : 't-todo'}>
+      <span class="sq-lab">Spelers${ok ? '' : html`<i class="sq-dot"></i>`}</span>
+      <b class="num">${title}</b>
+      <small>${sub}</small>
+    </span>
+    <span class="sq-go">${ok ? 'Wijzig' : 'Aanmelden'}<${Icon} name="chev" size=${16} /></span>
   </button>`;
-  return html`<div class="stiles">
-    ${tile('players', playersOk, true, 'Spelers', playersOk
-      ? html`<${Avatars} team=${team} ids=${field} /><span class="st-v">${field.length}${keeper ? html`<span class="st-k"><span class="kbadge">K</span>${keeper}</span>` : ''}</span>`
-      : html`<span class="st-plus"><${Icon} name="team" size=${15} /></span><span class="st-v">Wie zijn er${team.keeper ? ' en wie keept' : ''}?</span>`,
-      playersOk ? `Spelers: ${field.length}${keeper ? ', keeper ' + keeper : ''}` : 'Spelers kiezen')}
-    ${tile('base', baseOk, false, 'Basis', baseOk
-      ? html`${base ? html`<${MiniField} base=${base} />` : html`<span class="st-plus ok"><${Icon} name="field" size=${15} /></span>`}<span class="st-v">${base ? base.name : own ? 'Op je bord' : 'Eigen opstelling'}</span>`
-      : html`<span class="st-plus"><${Icon} name="plus" size=${15} /></span><span class="st-v">${(team.bases || []).length ? 'Kies je basis' : 'Maak een basis'}</span>`,
-      baseOk ? 'Basisopstelling: ' + (base ? base.name : 'eigen opstelling') : 'Basisopstelling kiezen')}
-  </div>`;
 }
 
 // ---------- Autopilot of Zelf plannen: één schakelaar, het een of het ander ----------
@@ -1251,11 +1254,16 @@ function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet }) {
 }
 
 // ---------- spelers en keeper in één stap ----------
+// Wie is er en wie keept. Aanmelden is de hoofdzaak: grote tegels die je aan- en uittikt. De keeper is een
+// rustige regel eronder (de app stelt voor wie het minst keepte); het K-badge vliegt naar wie je kiest.
 function SquadSheet({ match, team, counts, onClose }) {
   const active = team.players.filter((p) => p.active !== false);
   const [present, setPresent] = useState(match.present.slice());
   const [keeper, setKeeper] = useState(match.keeperId);
+  const [pickK, setPickK] = useState(false);
   const kOk = !team.keeper || (keeper && present.indexOf(keeper) !== -1);
+  const grid = useRef(null);
+  const fly = useRef(null);
   const done = () => {
     const ids = active.map((p) => p.id).filter((id) => present.indexOf(id) !== -1);
     const changed = ids.join(',') !== match.present.join(',') || keeper !== match.keeperId;
@@ -1266,15 +1274,73 @@ function SquadSheet({ match, team, counts, onClose }) {
     });
     onClose();
   };
-  const toggle = (id) => setPresent(present.indexOf(id) !== -1 ? present.filter((x) => x !== id) : present.concat([id]));
+  // K-badge: onthoud waar hij stond en laat hem na het tekenen vanaf daar naar de nieuwe keeper vliegen
+  const badgeRect = () => { const el = grid.current && grid.current.querySelector('.sq-kb'); return el ? el.getBoundingClientRect() : null; };
+  const chooseKeeper = (id) => {
+    if (id === keeper) return;
+    fly.current = badgeRect();
+    haptic('select');
+    setKeeper(id);
+  };
+  useLayoutEffect(() => {
+    const from = fly.current;
+    fly.current = null;
+    const el = grid.current && grid.current.querySelector('.sq-kb');
+    if (!from || !el || reduced() || typeof el.animate !== 'function') return;
+    const to = el.getBoundingClientRect();
+    const dx = from.left - to.left, dy = from.top - to.top;
+    try {
+      el.animate([
+        { translate: `${dx}px ${dy}px`, scale: '1' },
+        { translate: `${dx * 0.5}px ${dy * 0.5 - 26}px`, scale: '1.35', offset: 0.5 },
+        { translate: '0 0', scale: '1' }
+      ], { duration: 520, easing: 'cubic-bezier(.3,1.1,.4,1)' });
+    } catch (e) { /* oud toestel */ }
+  }, [keeper]);
+  const toggle = (id) => {
+    const on = present.indexOf(id) !== -1;
+    haptic(on ? 'tap' : 'select');
+    const next = on ? present.filter((x) => x !== id) : present.concat([id]);
+    setPresent(next);
+    // keeper afgemeld: de app stelt meteen een nieuwe voor
+    if (team.keeper && on && id === keeper) { fly.current = badgeRect(); setKeeper(suggestKeeper(team, next, counts)); }
+    if (team.keeper && !on && !keeper) setKeeper(suggestKeeper(team, next, counts));
+  };
+  const nick = (p) => p.nick || p.name;
+  const byId = Object.fromEntries(team.players.map((p) => [p.id, p]));
+  const sugg = team.keeper ? suggestKeeper(team, present, counts) : null;
+  const kp = keeper && byId[keeper];
+  const pool = active.filter((p) => present.indexOf(p.id) !== -1).sort((a, b) => (counts[a.id] || 0) - (counts[b.id] || 0) || nick(a).localeCompare(nick(b)));
+  const timesK = (id) => (counts[id] ? `${counts[id]}× gekeept` : 'nog niet gekeept');
   return html`<${Sheet} onClose=${done} label="Spelers en keeper">
-    <div class="between"><span class="h2" style="font-size:22px">Wie is er?</span><span class="sub">${present.length} van ${active.length}</span></div>
-    <div class="wrap">${active.map((p) => html`<button type="button" key=${p.id} class="chip big" aria-pressed=${present.indexOf(p.id) !== -1 ? 'true' : 'false'} onClick=${() => toggle(p.id)}>${p.nick || p.name}</button>`)}</div>
-    ${team.keeper && html`<div class="col" style="gap:6px">
-      <span class="h2" style="font-size:18px">Wie keept?</span>
-      <span class="small">Voorstel: wie het minst gekeept heeft${team.players.some((p) => p.main === 'K' || (p.prefs || []).indexOf('K') !== -1) ? ' en graag keept' : ''}.</span>
-      <div class="wrap">${active.filter((p) => present.indexOf(p.id) !== -1).map((p) => html`<button type="button" key=${'k' + p.id} class="chip big warm" aria-pressed=${keeper === p.id ? 'true' : 'false'} onClick=${() => setKeeper(p.id)}>
-        ${p.nick || p.name}<span class="small">${counts[p.id] ? counts[p.id] + '×' : 'nog niet'}</span></button>`)}</div>
+    <div class="sq-head">
+      <span class="h2" style="font-size:22px">Wie is er?</span>
+      <span class="sq-count num" aria-live="polite"><b key=${present.length}>${present.length}</b> van ${active.length}</span>
+    </div>
+    <span class="sub" style="margin-top:-6px">Tik om aan of af te melden.</span>
+    <div class="sq-grid" ref=${grid}>${active.map((p, k) => {
+      const on = present.indexOf(p.id) !== -1;
+      const c = p.main && POS_COLORS[p.main] ? POS_COLORS[p.main] : 'var(--blue-2)';
+      return html`<button type="button" key=${p.id} class=${'sq-p' + (on ? ' on' : '') + (team.keeper && keeper === p.id && on ? ' keeps' : '')} style=${`--c:${c};--k:${k}`}
+        aria-pressed=${on ? 'true' : 'false'} onClick=${() => toggle(p.id)}>
+        <span class="sq-n">${nick(p)}</span>
+        <span class="sq-tick" aria-hidden="true"><${Icon} name="check" size=${12} /></span>
+        ${team.keeper && keeper === p.id && on && html`<span class="sq-kb kbadge" aria-label="keept">K</span>`}
+      </button>`;
+    })}</div>
+    ${team.keeper && html`<div class=${'sq-keeper' + (pickK ? ' open' : '')}>
+      <button type="button" class="sq-kline" aria-expanded=${pickK ? 'true' : 'false'} onClick=${() => { haptic('select'); setPickK(!pickK); }}>
+        <span class="sq-kic"><${Icon} name="glove" size=${16} /></span>
+        <span class="col grow" style="gap:0;min-width:0">
+          <span class="sq-kt">Keeper${kp && kOk ? html` · <b>${nick(kp)}</b>` : ''}</span>
+          <small>${kp && kOk ? (keeper === sugg ? 'Voorstel van de app · ' : '') + timesK(keeper) : 'Kies wie er keept'}</small>
+        </span>
+        <span class=${'sq-kgo' + (pickK ? ' up' : '')}>${pickK ? '' : 'Ander'}<${Icon} name="chev" size=${15} /></span>
+      </button>
+      <${Reveal} open=${pickK}><div class="sq-kpick">${pool.map((p) => html`<button type="button" key=${'k' + p.id} class=${'sq-kc' + (keeper === p.id ? ' on' : '')}
+        aria-pressed=${keeper === p.id ? 'true' : 'false'} onClick=${() => chooseKeeper(p.id)}>
+        ${nick(p)}<small>${(counts[p.id] || 0) + '×'}</small>${p.id === sugg && html`<i class="sq-sugg" title="Voorstel">✦</i>`}
+      </button>`)}</div></${Reveal}>
     </div>`}
     <button type="button" class="btn primary block" onClick=${done}>Klaar</button>
   </${Sheet}>`;

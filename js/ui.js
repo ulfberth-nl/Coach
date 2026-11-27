@@ -393,16 +393,26 @@ function recede(on) {
 
 const NO_SHEET_DRAG = 'input, textarea, select, .kr, .seg, [data-pid], .tl, .scrubzone, .no-sheet-drag';
 
-export function Sheet({ onClose, children, label, x = false, footer = null }) {
+export function Sheet({ onClose, children, label, x = false, footer = null, onDismiss = null }) {
   const [closing, setClosing] = useState(false);
   const done = useRef(false);
   const back = useRef(null);
   const sheet = useRef(null);
   const cb = useRef(onClose);
   cb.current = onClose;
-  // sluiten: vanaf waar het venster nu is (ook halverwege een veeg) naar beneden, sneller dan het binnenkwam
-  const close = () => {
+  const dis = useRef(onDismiss);
+  dis.current = onDismiss;
+  // sluiten: vanaf waar het venster nu is (ook halverwege een veeg) naar beneden, sneller dan het binnenkwam.
+  // user = weggetikt, omlaag geveegd of Esc: een venster met invoer beslist dan zelf (bewaren, of tegenhouden)
+  const close = (user = false) => {
     if (done.current) return;
+    if (user && dis.current && dis.current() === false) {
+      const sh = sheet.current, bk = back.current;
+      haptic('no');
+      if (sh) { sh.style.translate = ''; try { sh.animate([{ translate: '0 0' }, { translate: '0 10px' }, { translate: '0 0' }], { duration: 260, easing: 'ease-out' }); } catch (e) { /* oud toestel */ } }
+      if (bk) bk.style.opacity = '';
+      return;
+    }
     done.current = true;
     setClosing(true);
     recede(false);
@@ -421,7 +431,7 @@ export function Sheet({ onClose, children, label, x = false, footer = null }) {
   };
   useEffect(() => { dismissToast(); recede(true); return () => { if (!done.current) recede(false); }; }, []);
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    const onKey = (e) => { if (e.key === 'Escape') close(true); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, []);
@@ -463,7 +473,7 @@ export function Sheet({ onClose, children, label, x = false, footer = null }) {
       sh.classList.remove('dragging');
       const [t0, y0] = x.pts[0], [t1, y1] = x.pts[x.pts.length - 1];
       const v = (y1 - y0) / Math.max(1, t1 - t0);
-      if (x.y1 > sh.offsetHeight * 0.3 || (v > 0.55 && x.y1 > 20)) { close(); return; }
+      if (x.y1 > sh.offsetHeight * 0.3 || (v > 0.55 && x.y1 > 20)) { close(true); return; }
       sh.style.translate = '';
       bk.style.opacity = '';
     };
@@ -481,10 +491,10 @@ export function Sheet({ onClose, children, label, x = false, footer = null }) {
       window.removeEventListener('pointercancel', up);
     };
   }, []);
-  return html`<${Portal}><div ref=${back} class=${'sheet-backdrop' + (closing ? ' closing' : '')} onClick=${(e) => { if (e.target === e.currentTarget) close(); }}>
+  return html`<${Portal}><div ref=${back} class=${'sheet-backdrop' + (closing ? ' closing' : '')} onClick=${(e) => { if (e.target === e.currentTarget) close(true); }}>
     <div ref=${sheet} class=${'sheet' + (footer ? ' has-foot' : '')} role="dialog" aria-modal="true" aria-label=${label}>
       <span class="handle"></span>
-      ${x && html`<button type="button" class="sheet-x" aria-label="Sluiten" onClick=${close}><${Icon} name="x" size=${20} /></button>`}
+      ${x && html`<button type="button" class="sheet-x" aria-label="Sluiten" onClick=${() => close(true)}><${Icon} name="x" size=${20} /></button>`}
       ${children}
       ${footer && html`<div class="sheet-foot">${typeof footer === 'function' ? footer(close) : footer}</div>`}
     </div>
@@ -528,6 +538,7 @@ export function Icon({ name, size = 22 }) {
     swaparrows: 'M19.5 11A7.5 7.5 0 0 0 6.2 6.6L4.5 8.3M4.5 3.8v4.5H9M4.5 13a7.5 7.5 0 0 0 13.3 4.4l1.7-1.7M19.5 20.2v-4.5H15',
     eye: 'M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12zM12 9.3a2.7 2.7 0 100 5.4 2.7 2.7 0 000-5.4z',
     check: 'M5 12.5l4.5 4.5L19 7',
+    glove: 'M8.5 21v-6.8L6 11.6a1.5 1.5 0 0 1 2.2-2l1.1 1.1V5.4a1.3 1.3 0 0 1 2.6 0v4.3V4.3a1.3 1.3 0 0 1 2.6 0v5.4V5.4a1.3 1.3 0 0 1 2.6 0v4.6V7.6a1.3 1.3 0 0 1 2.6 0V14a6.5 6.5 0 0 1-3 5.5V21z',
     edit: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
     spark: 'M12 3.5l1.9 5.2 5.6 1.8-5.6 1.8L12 17.5l-1.9-5.2-5.6-1.8 5.6-1.8zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z',
     shield: 'M12 3l7 3v5.2c0 4.3-2.9 8-7 9.8-4.1-1.8-7-5.5-7-9.8V6z',
@@ -544,7 +555,7 @@ export function Icon({ name, size = 22 }) {
 const landing = {};
 const LANE_NAMES = { V: 'voor', M: 'midden', A: 'achter' };
 
-export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = [], marked = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false, picking = false, hot = null, hotKey = 0, ghosts = null, animate = false, accent = null, badges = null, cheer = null, formable = false, keeperDrag = false }) {
+export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, onEmpty = null, emptyHot = false, neon = [], marked = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false, picking = false, hot = null, hotKey = 0, ghosts = null, animate = false, accent = null, badges = null, cheer = null, formable = false, keeperDrag = false }) {
   // bij slepen (formable) blijft ook een lege linie zichtbaar, zodat je er iemand naartoe kunt slepen
   lines = { V: lines.V || 0, M: lines.M || 0, A: lines.A || 0 };
   const rows = ['V', 'M', 'A'].filter((l) => lines[l] > 0 || formable);
@@ -603,6 +614,12 @@ export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, neon = []
     const g = ghosts && id ? ghosts[id] : null;
     const right = parseFloat(left) > 50;
     const acc = accStyle(id);
+    // lege plek die je kunt aantikken (game plan: eerst een speler kiezen, dan hier neerzetten)
+    if (!id && onEmpty) {
+      return html`<button type="button" class=${'spot empty' + (emptyHot ? ' hot' : '')} key=${'em' + key} data-pid=${'empty:' + key} data-line=${key[0]}
+        style=${`left:${left};top:${top};--ci:${key.slice(1)}`} onClick=${() => onEmpty(key)} aria-label=${'Lege plek ' + LANE_NAMES[key[0]]}>
+        <span class="sp-in"><span class="pill empty" style=${pillStyle}>+</span></span></button>`;
+    }
     const pill = html`<span class=${'pill ' + pillKind(id) + (acc ? ' acc' : '')} style=${pillStyle + acc}>${name}</span>`;
     const ghost = g ? html`<span class=${'ghost ' + g.kind + (g.hot ? ' hot' : '') + (right ? ' right' : '')} aria-hidden="true"><b>${g.name}${g.dir ? html`<small>${g.dir}</small>` : ''}</b></span>` : null;
     // 'e' blijft staan zodat de binnenkom-animatie niet terugvalt op de pop-animatie

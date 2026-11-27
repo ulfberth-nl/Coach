@@ -52,6 +52,8 @@ export function useScrub(ref, fns) {
     let st = null;
     const down = (e) => {
       if (cur.current.skipPills() && e.target.closest('[data-pid]')) return;
+      // de pijlknoppen bij de keeper stappen zelf door de tijd
+      if (e.target.closest('.fstep')) return;
       // een volle bank scrollt zelf opzij
       if (e.target.closest('.scroll.ovf')) return;
       st = { x: e.clientX, y: e.clientY, f0: cur.current.get(), active: false };
@@ -371,6 +373,10 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
               onTap=${() => {}} neon=${changes(cards, i + 1).in} accent=${accentFor(team)} />`
           : html`<${Field} slots=${c.slots} lines=${lines} formable=${canEdit || canPinHere} keeperDrag=${canEdit && !!match.keeperId} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
               onTap=${() => {}} neon=${planner ? nxOuts : []} marked=${planner ? [] : ch.in} dashed=${!planner && ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} ghosts=${planner && !peek && !calm ? ghostsFor(nx, c.pos, nick) : null} />`}
+        ${compact && !peek && cards.length > 1 && html`<button type="button" class=${'fstep prev' + (i === 0 ? ' off' : '')} key="fsp" aria-label="Moment ervoor" disabled=${i === 0}
+            onClick=${() => { haptic('select'); setF(Math.round(getF()) - 1, true); }}><${Icon} name="chev" size=${18} /></button>
+          <button type="button" class=${'fstep next' + (i === cards.length - 1 ? ' off' : '')} key="fsn" aria-label="Moment erna" disabled=${i === cards.length - 1}
+            onClick=${() => { haptic('select'); setF(Math.round(getF()) + 1, true); }}><${Icon} name="chev" size=${18} /></button>`}
         ${planner && peek && nx && html`<span class="peeklabel" role="status"><${Icon} name="eye" size=${15} />${nx.kind === 'lineup' ? 'Opstelling ' + M.periodLabel(team, nx.period) : 'Na wissel ' + swapNoOf(nx)}</span>`}
       </div>
       <div class="benchrow">

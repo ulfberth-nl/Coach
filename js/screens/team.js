@@ -8,7 +8,7 @@ import { PROFILES, PROFILE_ORDER, profileOf, cachedTune, rememberTune, consequen
 import { compute } from '../compute.js';
 import { scheduleRefresh } from '../refresh.js';
 
-export const APP_VERSION = '0.25.4';
+export const APP_VERSION = '0.26.0';
 
 // regels die het wisselprofiel bepaalt; zet je er zelf een, dan wordt het profiel 'Eigen'
 const TUNED = ['marge', 'equalTime', 'evenOften', 'maxBenchOn', 'maxBench', 'minInterval', 'turnsPerPeriod', 'priority', 'strongBias'];
@@ -192,6 +192,13 @@ export function Team({ state }) {
     e.target.value = '';
   };
 
+  // uitlegpagina (installeren en tips) delen met een nieuwe coach
+  const shareGuide = async () => {
+    const url = new URL('installeren.html', location.href.split('#')[0]).href;
+    const text = 'SpaBo Coach: zo zet je de app op je telefoon en zo begin je.';
+    try { if (navigator.share) { await navigator.share({ title: 'SpaBo Coach installeren', text, url }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+    try { await navigator.clipboard.writeText(text + ' ' + url); toast('Link gekopieerd · plak hem in een bericht'); } catch (e) { toast(url); }
+  };
   return html`<main class="screen with-tabs">
     <div class="topbar">
       ${state.teams.length > 1
@@ -331,6 +338,13 @@ export function Team({ state }) {
         d.activeTeamId = d.teams[0].id;
         if (d.currentMatchId && !d.matches.some((m) => m.id === d.currentMatchId)) d.currentMatchId = null;
       }) })}>Team verwijderen</button>`}
+    </section>
+
+    <section class="card">
+      <span class="h2">De app delen</span>
+      <span class="small">Geef je een andere coach de app? Stuur deze link mee: daar staat hoe je hem op je beginscherm zet en hoe je begint.</span>
+      <button type="button" class="btn plain block" onClick=${shareGuide}><${Icon} name="copy" size=${18} /> Link naar de uitleg delen</button>
+      <a class="link" style="align-self:center" href="installeren.html" target="_blank" rel="noopener">Uitleg bekijken</a>
     </section>
 
     <footer class="appver">

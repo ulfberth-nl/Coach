@@ -161,14 +161,17 @@ export function Spelers({ state }) {
     <button type="button" class="link" style="align-self:center" onClick=${() => setStage({ change: true })}>Pincode wijzigen</button>
 
     ${edit && html`<${PlayerEditor} player=${edit} onClose=${() => setEdit(null)}
-      onSave=${(p) => {
+      onSave=${(p, auto) => {
+        let prev = null;
         update((d) => {
           const t = activeTeam(d);
+          prev = JSON.parse(JSON.stringify(t.players));
           if (p.id) { const i = t.players.findIndex((x) => x.id === p.id); if (i !== -1) t.players[i] = p; }
           else t.players.push({ ...p, id: uid() });
         });
         setEdit(null);
-        toast('Opgeslagen');
+        if (auto) toast(p.id ? `${p.nick || p.name} bewaard` : `${p.nick || p.name} toegevoegd`, { label: 'Ongedaan', run: () => update((d) => { activeTeam(d).players = prev; }) });
+        else toast('Opgeslagen');
       }}
       onDelete=${(p) => setConfirm({
         title: (p.nick || p.name) + ' verwijderen?', text: 'Liever bewaren voor het seizoensoverzicht? Zet dan "In de selectie" uit.', yes: 'Verwijderen', danger: true,
@@ -308,13 +311,26 @@ function PlayerEditor({ player, onClose, onSave, onDelete }) {
   const lastMain = useRef(p.main || 'A');
   if (p.main) lastMain.current = p.main;
   const main = p.main || lastMain.current;
+  const problem = () => (!p.name.trim() ? 'Vul een naam in' : !(p.prefs || []).filter((x) => x !== 'K').length && !(p.main && p.main !== 'K') ? 'Kies minstens één veldpositie' : null);
+  const clean = () => ({ ...p, name: p.name.trim(), nick: (p.nick || '').trim().slice(0, 8) || nickDefault });
   const save = () => {
-    const name = p.name.trim();
-    if (!name) { toast('Vul een naam in'); return; }
-    if (!(p.prefs || []).filter((x) => x !== 'K').length && !(p.main && p.main !== 'K')) { toast('Kies minstens één veldpositie'); return; }
-    onSave({ ...p, name, nick: (p.nick || '').trim().slice(0, 8) || nickDefault });
+    const pr = problem();
+    if (pr) { toast(pr); return; }
+    onSave(clean());
   };
-  return html`<${Sheet} onClose=${onClose} label="Speler">
+  // wegtikken of omlaag vegen: wat je invulde blijft bewaard (met Ongedaan in de melding).
+  // Een lege nieuwe speler verdwijnt gewoon; klopt er nog iets niet, dan blijft het venster staan.
+  const dirty = JSON.stringify(p) !== JSON.stringify(player);
+  const keep = useRef(false);
+  const dismiss = () => {
+    if (!dirty) return true;
+    if (!player.id && !p.name.trim()) return true;
+    const pr = problem();
+    if (pr) { toast(pr + ', of tik Annuleren'); return false; }
+    keep.current = true;
+    return true;
+  };
+  return html`<${Sheet} onClose=${() => (keep.current ? onSave(clean(), true) : onClose())} onDismiss=${dismiss} label="Speler">
     <span class="h2" style="font-size:20px">${player.id ? 'Speler aanpassen' : 'Nieuwe speler'}</span>
     <div class="col">
       <label class="label" for="pname">Volledige naam</label>

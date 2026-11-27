@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#1F3C88" />
+  <title>SpaBo Coach installeren · uitleg en tips</title>
+  <meta name="description" content="Zo zet je SpaBo Coach op het beginscherm van je telefoon, en zo stel je hem in en gebruik je hem langs het veld." />
+  <!-- linkvoorbeeld (WhatsApp, iMessage …): algemene tekst en plaatje, geen logo of namen -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="SpaBo Coach" />
+  <meta property="og:locale" content="nl_NL" />
+  <meta property="og:url" content="https://ulfberth-nl.github.io/Coach/installeren.html" />
+  <meta property="og:title" content="SpaBo Coach op je telefoon · installeren en tips" />
+  <meta property="og:description" content="In een minuut op je beginscherm. Daarna werkt hij als een gewone app, ook zonder internet langs het veld." />
+  <meta property="og:image" content="https://ulfberth-nl.github.io/Coach/icons/og-image.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <style>
+    @font-face { font-family: Nunito; font-weight: 700; font-display: swap; src: url(fonts/nunito-latin-700-normal.woff2) format('woff2'); }
+    @font-face { font-family: Nunito; font-weight: 800; font-display: swap; src: url(fonts/nunito-latin-800-normal.woff2) format('woff2'); }
+    @font-face { font-family: Nunito; font-weight: 900; font-display: swap; src: url(fonts/nunito-latin-900-normal.woff2) format('woff2'); }
+    :root { --blue: #1F3C88; --blue-2: #2B57C9; --tint: #E8EEFB; --orange: #F5A524; --orange-tint: #FFF1D6; --ink: #111827; --muted: #4B5563; --line: #E3E8F2; --bg: #F5F7FC; --green: #1f8a3a; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; font-family: Nunito, system-ui, -apple-system, sans-serif; font-weight: 700; color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; line-height: 1.45; }
+    main { max-width: 640px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 14px; }
+    .hero { position: relative; overflow: hidden; padding: 22px 20px 20px; border-radius: 26px; color: #fff; background: radial-gradient(120% 140% at 0% 0%, #2B4FB0 0%, #16307A 50%, #0D1B45 100%); box-shadow: 0 18px 40px -20px rgba(13,27,69,.6); }
+    .hero::after { content: ''; position: absolute; right: -40px; bottom: -60px; width: 220px; height: 220px; border-radius: 50%; border: 2px solid rgba(255,255,255,.12); box-shadow: 0 0 0 30px rgba(255,255,255,.04); }
+    .hero .ico { width: 56px; height: 56px; border-radius: 15px; box-shadow: 0 8px 20px rgba(0,0,0,.25); }
+    h1 { margin: 14px 0 6px; font-size: 27px; line-height: 1.15; font-weight: 900; }
+    .hero p { margin: 0; color: rgba(255,255,255,.85); font-size: 15.5px; }
+    .cta { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; min-height: 48px; padding: 0 20px; border-radius: 99px; background: var(--orange); color: var(--ink); font-size: 16px; font-weight: 900; text-decoration: none; box-shadow: 0 10px 22px -10px rgba(245,165,36,.9); }
+    nav { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px; }
+    nav a { flex: none; min-height: 40px; display: inline-flex; align-items: center; padding: 0 14px; border-radius: 99px; background: #fff; color: var(--blue); font-size: 14px; font-weight: 900; text-decoration: none; box-shadow: 0 0 0 1px var(--line); }
+    section { padding: 18px 18px 16px; border-radius: 22px; background: #fff; box-shadow: 0 1px 2px rgba(17,24,39,.05), 0 6px 20px rgba(31,60,136,.08); scroll-margin-top: 12px; }
+    h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font-size: 20px; font-weight: 900; }
+    h2 .badge { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: var(--tint); color: var(--blue); font-size: 17px; }
+    h3 { margin: 16px 0 6px; font-size: 16px; font-weight: 900; }
+    p { margin: 0 0 8px; color: var(--muted); }
+    ol.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; counter-reset: s; }
+    ol.steps li { position: relative; padding: 10px 12px 10px 48px; border-radius: 16px; background: var(--bg); color: var(--ink); counter-increment: s; }
+    ol.steps li::before { content: counter(s); position: absolute; left: 10px; top: 9px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--blue); color: #fff; font-size: 14px; font-weight: 900; }
+    ol.steps li small { display: block; color: var(--muted); font-size: 13.5px; font-weight: 700; }
+    .key { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 8px; background: #fff; box-shadow: 0 0 0 1px var(--line); font-weight: 900; white-space: nowrap; }
+    .note { display: flex; gap: 10px; margin-top: 10px; padding: 12px; border-radius: 16px; background: var(--orange-tint); color: var(--ink); font-size: 14.5px; }
+    .note b { font-weight: 900; }
+    ul.tips { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    ul.tips li { display: flex; gap: 10px; color: var(--ink); }
+    ul.tips li::before { content: ''; flex: none; width: 8px; height: 8px; margin-top: 8px; border-radius: 50%; background: var(--blue-2); }
+    ul.tips li span { color: var(--muted); }
+    .pos { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: 0; }
+    footer { text-align: center; font-size: 13px; color: var(--muted); }
+    footer a { color: var(--blue); font-weight: 900; }
+    @media (prefers-reduced-motion: no-preference) {
+      section, .hero { animation: rise .5s cubic-bezier(.2,.8,.2,1) both; }
+      section:nth-of-type(2) { animation-delay: .05s; } section:nth-of-type(3) { animation-delay: .1s; }
+      @keyframes rise { from { opacity: 0; translate: 0 12px; } }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <img class="ico" src="icons/icon-192.png" alt="" width="56" height="56" />
+    <h1>SpaBo Coach op je telefoon</h1>
+    <p>De wissel-app voor de staf langs het veld. Zet hem op je beginscherm: dan opent hij als een gewone app en werkt hij ook zonder internet. Alles wat je invult, blijft op je eigen telefoon.</p>
+    <a class="cta" href="./">Open de app ›</a>
+  </header>
+
+  <nav aria-label="Naar">
+    <a href="#iphone">iPhone</a><a href="#android">Android</a><a href="#instellen">Eerste keer</a><a href="#wedstrijd">Wedstrijddag</a><a href="#tips">Tips</a>
+  </nav>
+
+  <section id="iphone">
+    <h2><span class="badge">📱</span>Op je iPhone</h2>
+    <p>Gebruik <b>Safari</b>. Opende je deze link in WhatsApp of Mail? Kies dan eerst <span class="key">Open in Safari</span>.</p>
+    <ol class="steps">
+      <li>Open de app in Safari.<small>Ga naar ulfberth-nl.github.io/Coach</small></li>
+      <li>Tik op <span class="key">•••</span> naast de adresbalk en dan op <span class="key">Deel</span>.<small>Op een oudere iPhone (iOS 18 of eerder) staat de deelknop meteen onderin.</small></li>
+      <li>Scrol naar beneden en tik op <span class="key">Zet op beginscherm</span>.</li>
+      <li>Laat <span class="key">Open als webapp</span> aan staan en tik op <span class="key">Voeg toe</span>.</li>
+    </ol>
+    <div class="note"><span>💡</span><span>Open de app daarna altijd via het icoon op je beginscherm, niet via Safari. Alleen dan blijft je scherm aan tijdens de wedstrijd en voelt hij als een gewone app.</span></div>
+  </section>
+
+  <section id="android">
+    <h2><span class="badge">▶</span>Op Android</h2>
+    <p>Gebruik <b>Chrome</b>.</p>
+    <ol class="steps">
+      <li>Open de app in Chrome.<small>Ga naar ulfberth-nl.github.io/Coach</small></li>
+      <li>Tik rechtsboven op <span class="key">⋮</span>.</li>
+      <li>Tik op <span class="key">Toevoegen aan startscherm</span> of <span class="key">App installeren</span>.</li>
+      <li>Bevestig met <span class="key">Installeren</span>.</li>
+    </ol>
+  </section>
+
+  <section id="instellen">
+    <h2><span class="badge">⚙︎</span>De eerste keer instellen</h2>
+    <p>Een paar minuten werk, één keer per seizoen.</p>
+    <ol class="steps">
+      <li>Ga naar <span class="key">Team</span> en vul de naam en de spelvorm in.<small>Veld of zaal, aantal spelers, met of zonder keeper, de opstelling (bijv. 2-1-2) en hoeveel periodes van hoeveel minuten.</small></li>
+      <li>Voeg je spelers toe bij <span class="key">Spelers</span>.<small>Kies eerst een pincode. Per speler: naam, een korte bijnaam voor op het veld, speelkracht, de rol waarin hij het sterkst is en de posities die hij graag speelt. Speelkracht en voorkeur zie je alleen achter de pincode.</small></li>
+      <li>Kies een wisselprofiel bij <span class="key">Team</span>.<small><b>In balans</b> is een goede start. Iedereen even lang, Rustig wisselen of Sterkste ploeg kan ook; de app stemt de regels per wedstrijd zelf af.</small></li>
+      <li>Zet het programma klaar bij <span class="key">Seizoen</span> met <span class="key">+ Wedstrijd</span>.<small>Tegenstander, datum, tijd en veld. Hier verdeel je ook de taken voor ouders en maak je het bericht voor de groepsapp.</small></li>
+    </ol>
+  </section>
+
+  <section id="wedstrijd">
+    <h2><span class="badge">🏑</span>Op de wedstrijddag</h2>
+    <ol class="steps">
+      <li>Open de app: de eerstvolgende wedstrijd staat klaar.</li>
+      <li>Tik op <span class="key">Spelers</span> en meld aan wie er is.<small>De app stelt een keeper voor (wie het minst keepte); tik <span class="key">Ander</span> om een ander te kiezen.</small></li>
+      <li>Kies hoe je wisselt.<small><b>Autopilot</b>: de app plant alle wissels en rekent mee als er iets verandert. <b>Zelf plannen</b>: je zet de startopstelling op het veld en plant de wissels per blok, op het veld of in de tabel.</small></li>
+      <li>Tik <span class="key">Start</span> bij de aftrap.<small>Bovenin zie je steeds de volgende wissel. Schuif de ring naar links om te wisselen; de app piept en knippert als het tijd is.</small></li>
+      <li>Tik op de stand voor een doelpunt. Na het laatste fluitsignaal sluit je de wedstrijd af.<small>Speeltijd, posities en doelpunten komen vanzelf in het seizoensoverzicht.</small></li>
+    </ol>
+  </section>
+
+  <section id="tips">
+    <h2><span class="badge">✦</span>Handig om te weten</h2>
+    <ul class="tips">
+      <li><div>Vegen over het veld of de pijltjes bij de keeper <span>laten zien wie er straks staat. Sleep een speler om het zelf te bepalen; de app zet er dan een speldje bij.</span></div></li>
+      <li><div>Gaat het anders dan gepland? <span>Wissel gewoon door te slepen. De app rekent de rest van de wedstrijd opnieuw uit.</span></div></li>
+      <li><div>Zet het geluid van je telefoon aan <span>voor de piep bij een wissel. Het scherm blijft vanzelf aan zolang de app open is.</span></div></li>
+      <li><div>Maak af en toe een back-up <span>bij Team → Gegevens. Je gegevens staan alleen op je telefoon; een back-up is je reservekopie.</span></div></li>
+      <li><div>Kleuren in de app: <span><i class="pos" style="background:#d64545"></i> voor, <i class="pos" style="background:#c8962d"></i> midden, <i class="pos" style="background:#2a78d6"></i> achter, <i class="pos" style="background:#1f8a3a"></i> keeper.</span></div></li>
+      <li><div>Laat het scherm met speelkracht niet zien aan ouders of spelers. <span>De app is voor de staf.</span></div></li>
+    </ul>
+  </section>
+
+  <footer>Klaar? <a href="./">Open SpaBo Coach</a></footer>
+</main>
+</body>
+</html>

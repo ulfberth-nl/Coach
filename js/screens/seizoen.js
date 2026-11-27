@@ -1,4 +1,4 @@
-import { html, useMemo, useState } from '../../vendor/preact-htm.js';
+import { html, useMemo, useRef, useState } from '../../vendor/preact-htm.js';
 import { update, activeTeam, uid } from '../store.js';
 import * as M from '../match.js';
 import { Icon, Sheet, Seg, Confirm, toast, POS_COLORS, OpponentInput, ShieldColors, OppBadge } from '../ui.js';
@@ -363,7 +363,17 @@ function ScheduleSheet({ team, matches, entry, onClose }) {
     if (!ok) setShowText(true);
   };
   const tasks = e.tasks || {};
-  return html`<${Sheet} onClose=${onClose} label="Wedstrijd">
+  // wegtikken of omlaag vegen bewaart wat je invulde (een lege nieuwe wedstrijd verdwijnt gewoon)
+  const keep = useRef(false);
+  const dismiss = () => {
+    const a = { ...e }, b = { ...entry };
+    delete a.showText; delete b.showText;
+    if (JSON.stringify(a) === JSON.stringify(b)) return true;
+    if (!e.id && !(e.opponent || '').trim()) return true;
+    keep.current = true;
+    return true;
+  };
+  return html`<${Sheet} onClose=${() => (keep.current ? save(true) : onClose())} onDismiss=${dismiss} label="Wedstrijd">
     <span class="h2" style="font-size:22px">${e.id ? 'Wedstrijd' : 'Nieuwe wedstrijd'}</span>
     <div class="col"><label class="label" for="s-opp">Tegenstander</label><${OpponentInput} id="s-opp" value=${e.opponent || ''} onChange=${(v) => set('opponent', v)} /></div>
     ${(e.opponent || '').trim() && html`<${ShieldColors} name=${e.opponent} />`}

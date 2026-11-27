@@ -473,8 +473,12 @@ function quality(cand, ctx, ids) {
   const tick = (t1) => { if (keyIds.filter((id) => !(id in field)).length >= 2) keyOut += (t1 - t0) / 60; t0 = t1; };
   for (const st of cand.steps) { tick(st.t); field = st.pos; }
   tick(end);
+  cand.inv = inv;
   return W.spread * cand.fair.spread / 60 - W.tilt * tilt + W.inv * inv + W.key * keyOut + cand.m * 0.01;
 }
+// Beste bezetting: een wissel extra mag, als dat een plan geeft waarin geen duidelijk sterkere speler korter speelt
+// dan een zwakkere (of het plan duidelijk beter wordt). Zo'n extra wissel kost dit aantal kwaliteitspunten.
+const EXTRA_SWAP_Q = (typeof globalThis !== 'undefined' && globalThis.__XSQ != null) ? globalThis.__XSQ : 8;
 
 // Hoofdfunctie: maak het plan voor de rest van de wedstrijd vanaf tijd T.
 // ctx: { players, lines, periodLen, periods, rules, stand, firstAt, lineupPending, excludeFair }
@@ -536,7 +540,19 @@ function planRestCore(start, ctx, T, mFrom = 0, mTo = Infinity) {
         if (!bestOkM && (!best || cand.cost < best.cost)) best = cand;
       }
       // beste bezetting: bij dit aantal wissels ook proberen of sterke spelers de korte bankbeurten krijgen
-      if (bestOkM) { for (const v of extra) tryV(v); best = bestOkM; break; }
+      if (bestOkM) {
+        for (const v of extra) tryV(v);
+        best = bestOkM;
+        // speelt er dan nog een duidelijk sterkere speler korter dan een zwakkere, probeer één wissel meer
+        if (ctx.rules.priority === 'bezetting' && bestOkM.inv > 0 && m + 1 <= maxM) {
+          const m0 = bestOkM;
+          bestOkM = null;
+          m++;
+          for (const v of variants.concat(extra)) tryV(v);
+          if (bestOkM && bestOkM.q + EXTRA_SWAP_Q < m0.q) best = bestOkM;
+        }
+        break;
+      }
     }
   }
   if (!best) {
