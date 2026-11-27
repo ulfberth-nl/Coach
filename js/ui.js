@@ -719,9 +719,16 @@ export function useDragSwap(ref, enabled, onSwap, hint, opts = {}) {
     };
     const begin = () => {
       cancelPress();
-      const src = st.el.querySelector('.pill') || st.el;
-      const g = src.cloneNode(true);
-      g.querySelectorAll('.hx').forEach((n) => n.remove());
+      const src = st.el.querySelector('.pill');
+      let g;
+      if (src) { g = src.cloneNode(true); g.querySelectorAll('.hx').forEach((n) => n.remove()); }
+      else {
+        // tegels zonder pil (bank bij Zelf plannen): maak er een echte spelerspil van om mee te slepen
+        g = document.createElement('span');
+        g.className = 'pill' + (st.el.classList.contains('acc') ? ' acc' : '');
+        const ac = st.el.style.getPropertyValue('--acc'); if (ac) g.style.setProperty('--acc', ac);
+        g.textContent = ((st.el.querySelector('.bb-nm, .nm') || st.el).textContent || '').trim();
+      }
       g.classList.add('drag-ghost');
       document.body.appendChild(g);
       const tip = document.createElement('div');

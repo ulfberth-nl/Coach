@@ -4,11 +4,11 @@ import { periodWord } from '../match.js';
 import { suggestKeeper } from './home.js';
 import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, Reveal, toast, STANDS, appInfo } from '../ui.js';
 import { devicePrefs, setDevicePref, onDevicePrefs, osReduced, haptic } from '../motion.js';
-import { PROFILES, PROFILE_ORDER, profileOf, cachedTune, rememberTune, consequences } from '../profiles.js';
+import { PROFILES, PROFILE_ORDER, profileOf, cachedTune, rememberTune, consequences, setProfile } from '../profiles.js';
 import { compute } from '../compute.js';
 import { scheduleRefresh } from '../refresh.js';
 
-export const APP_VERSION = '0.28.0';
+export const APP_VERSION = '0.29.0';
 
 // regels die het wisselprofiel bepaalt; zet je er zelf een, dan wordt het profiel 'Eigen'
 const TUNED = ['marge', 'equalTime', 'evenOften', 'maxBenchOn', 'maxBench', 'minInterval', 'turnsPerPeriod', 'priority', 'strongBias'];
@@ -68,11 +68,13 @@ function useProfiles(team, present, keeper, current, onResult) {
   return [res, busy];
 }
 
-function ProfileCard({ k, on, r, ref0, n, onPick, stale }) {
+function ProfileCard({ k, on, r, ref0, n, onPick, stale, pinned = false, onPin }) {
   const P = PROFILES[k];
   const s = r && r.stats;
   const pp = s ? (s.minP === s.maxP ? s.minP + ' min' : s.minP + '–' + s.maxP + ' min') : '';
-  return html`<div class=${'prof' + (on ? ' on' : '')}>
+  return html`<div class=${'prof' + (on ? ' on' : '') + (pinned ? ' pinned' : '')}>
+    ${onPin && html`<button type="button" class=${'prof-pin' + (pinned ? ' on' : '')} aria-pressed=${pinned ? 'true' : 'false'} aria-label=${pinned ? P.label + ' is de standaard. Tik om los te maken' : 'Zet ' + P.label + ' vast als standaard'} onClick=${onPin}>
+      <${Icon} name="pin" size=${15} />${pinned && html`<span>standaard</span>`}</button>`}
     <button type="button" class="prof-btn" role="radio" aria-checked=${on ? 'true' : 'false'} onClick=${onPick}>
       <span class="prof-radio" aria-hidden="true"></span>
       <span class="prof-txt">
@@ -164,7 +166,13 @@ export function Team({ state }) {
     // al uitgerekend? dan die regels; anders de standaardvariant (de rekendraad stelt hem zo nodig bij)
     const tr = profs[k];
     const rules = tr ? tr.rules : { evenOften: true, equalTime: true, turnsPerPeriod: 0, ...PROFILES[k].variants[1 % PROFILES[k].variants.length] };
-    set((t) => { Object.assign(t.rules, rules, { profile: k }); if (!('strongBias' in rules)) delete t.rules.strongBias; }, { priority: rules.priority || 'eerlijk' });
+    set((t) => setProfile(t, k, rules), { priority: rules.priority || 'eerlijk' });
+  };
+  // standaard vastzetten: hiermee begint elke nieuwe wedstrijd (op het wedstrijdscherm kies je per wedstrijd)
+  const pinDefault = (k) => {
+    haptic('success');
+    update((d) => { const t = activeTeam(d); t.defaultProfile = t.defaultProfile === k ? null : k; });
+    toast(team.defaultProfile === k ? 'Geen vaste standaard meer' : `${PROFILES[k].label} is de standaard voor een nieuwe wedstrijd`);
   };
   const setLines = (k, v) => set((t) => {
     const next = { ...t.lines, [k]: v };
@@ -292,13 +300,17 @@ export function Team({ state }) {
       <span class="small">${r.planMode === 'eigen'
         ? 'Je legt per wedstrijd zelf de puzzel op het liniebord: startopstelling, dan wie waar speelt per blok. De app rekent mee en kan een voorzet doen.'
         : 'De app maakt het plan volgens de instellingen hieronder. Per wedstrijd kun je ook zelf plannen.'}</span>
-      <span class="sub">Kies hoe je wilt wisselen. De app rekent het door voor je ${squad.length} spelers, en per wedstrijd opnieuw met wie er is.</span>
+      <span class="label">Wisselprofiel</span>
+      <span class="sub">Kies hoe je wilt wisselen. De app rekent het door voor je ${squad.length} spelers, en per wedstrijd opnieuw met wie er is. Op het wedstrijdscherm wissel je het profiel per wedstrijd; dat staat hier dan ook aan.</span>
+      <span class=${'prof-defnote' + (team.defaultProfile ? ' set' : '')}><${Icon} name="pin" size=${14} />${team.defaultProfile
+        ? html`<span>Een nieuwe wedstrijd begint met <b>${PROFILES[team.defaultProfile].label}</b>.</span>`
+        : html`<span>Tik de speld bij een profiel om vast te zetten waarmee een nieuwe wedstrijd begint.</span>`}</span>
       <${Reveal} open=${prof === 'eigen'}><div class="prof-eigen">
         <span class="pe-t"><${Icon} name="edit" size=${15} /><span><b>Eigen instellingen gaan voor.</b> De profielen staan uit: de app volgt jouw regels hieronder en stemt niet meer per wedstrijd af.</span></span>
         <button type="button" class="link" onClick=${() => pickProfile('balans')}>Terug naar In balans</button>
       </div></${Reveal}>
       <div class=${'profiles' + (prof === 'eigen' ? ' overruled' : '')} role="radiogroup" aria-label="Wisselprofiel">
-        ${PROFILE_ORDER.map((k) => html`<${ProfileCard} key=${k} k=${k} on=${prof === k} r=${profs[k]} stale=${profBusy} ref0=${profs.balans && profs.balans.stats} n=${squad.length} onPick=${() => pickProfile(k)} />`)}
+        ${PROFILE_ORDER.map((k) => html`<${ProfileCard} key=${k} k=${k} on=${prof === k} r=${profs[k]} stale=${profBusy} ref0=${profs.balans && profs.balans.stats} n=${squad.length} onPick=${() => pickProfile(k)} pinned=${team.defaultProfile === k} onPin=${() => pinDefault(k)} />`)}
       </div>
 
       <${Setting} title="Nieuwe opstelling na de rust" sub="Gratis moment om meerdere spelers te wisselen"><${Switch} label="Nieuwe opstelling na de rust" on=${r.newLineupAtBreak} onChange=${(v) => setRule('newLineupAtBreak', v)} /></${Setting}>

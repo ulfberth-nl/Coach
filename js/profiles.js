@@ -172,6 +172,19 @@ export function cachedTune(team, key, present, keeperId) {
 export function rememberTune(team, key, present, keeperId, result) {
   remember(keyOf(key, team, present, keeperId), result);
 }
+// Regels om een profiel aan te zetten: de al uitgerekende variant voor deze spelers, anders de standaardvariant
+// (de rekendraad stemt hem daarna per wedstrijd af).
+export function profileRules(team, k, present, keeperId) {
+  const P = PROFILES[k];
+  if (!P) return null;
+  const t = present ? cachedTune(team, k, present, keeperId) : undefined;
+  return t ? t.rules : { evenOften: true, equalTime: true, turnsPerPeriod: 0, ...P.variants[1 % P.variants.length] };
+}
+// Profiel aanzetten op een team (in een draft). Het wedstrijdscherm en de Team-pagina gebruiken dezelfde instelling.
+export function setProfile(t, k, rules) {
+  Object.assign(t.rules, rules, { profile: k });
+  if (!('strongBias' in rules)) delete t.rules.strongBias;
+}
 // Regels voor een wedstrijd met deze spelers, als ze al bekend zijn (null = de teamregels).
 // Rekenen gebeurt op de achtergrond (js/refresh.js); de teamregels zijn al afgestemd op de hele selectie.
 export function matchRules(team, present, keeperId) {

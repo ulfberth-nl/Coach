@@ -132,33 +132,8 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   const track = useRef(null);
   const i = Math.max(0, Math.min(cards.length - 1, Math.round(f)));
   const c0 = cards[i];
-  // doorrekenen (Autopilot): de app 'probeert' een paar opstellingen. Elke halve seconde ruilen er twee spelers:
-  // van de bank het veld in of onderling van plek. Daarna schuift alles naar de echte opstelling.
-  const [fake, setFake] = useState(null);
-  useEffect(() => {
-    if (thinking !== 'run' || !compact || reduced()) { setFake(null); return undefined; }
-    const keys = Object.keys(c0.slots || {}).filter((k) => c0.slots[k]);
-    let cur = { slots: { ...c0.slots }, bench: c0.bench.slice() };
-    const step = () => {
-      const slots = { ...cur.slots }, bench = cur.bench.slice();
-      for (let n = 0; n < 2; n++) {
-        const k = keys[Math.floor(Math.random() * keys.length)];
-        if (bench.length && Math.random() < 0.55) {
-          const j = Math.floor(Math.random() * bench.length);
-          const out = slots[k]; slots[k] = bench[j]; bench[j] = out;
-        } else {
-          const k2 = keys[Math.floor(Math.random() * keys.length)];
-          const t = slots[k]; slots[k] = slots[k2]; slots[k2] = t;
-        }
-      }
-      cur = { slots, bench };
-      setFake(cur);
-    };
-    const t0 = setTimeout(step, 120);
-    const iv = setInterval(step, 480);
-    return () => { clearTimeout(t0); clearInterval(iv); };
-  }, [thinking]);
-  const c = fake ? { ...c0, slots: fake.slots, bench: fake.bench, pos: Object.fromEntries(Object.keys(fake.slots).filter((k) => fake.slots[k]).map((k) => [fake.slots[k], k[0]])) } : c0;
+  // doorrekenen (Autopilot): het veld loopt vol met de AI-kleuren en de spelers ploppen daarna op hun plek (alleen css)
+  const c = c0;
   const ch = changes(cards, i);
   const canEdit = !planner && editable && i === 0;
   // homescherm: bij een later wisselmoment = dit moment vastzetten (speldje), net als in de planner
@@ -360,8 +335,9 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   const multi = c.kind === 'swap' && c.ins && c.ins.length > 1;
   const swapText = c.kind === 'swap' ? (multi ? `${c.ins.map(nick).join(', ')} erin` : `${nick(c.in)} erin voor ${nick(c.out)}`) : '';
 
-  // thinking: de app rekent het plan door (spelers schuiven even heen en weer), daarna 'settled'
-  return html`<div class=${'planview col' + (compact ? ' compact' : '') + (thinking === 'run' ? ' thinking' : thinking === 'done' ? ' settled' : '')} style="gap:8px">
+  // thinking: de app rekent het plan door ('run': veld loopt vol), daarna 'done' (spelers ploppen, veld wordt weer gewoon)
+  const flood = compact && !reduced() ? thinking : null;
+  return html`<div class=${'planview col' + (compact ? ' compact' : '') + (flood === 'run' ? ' flood' : flood === 'done' ? ' flooded' : '')} style="gap:8px">
     <div class="tl" ref=${track} aria-label="Tijdlijn">
       <span class="tl-line"></span>
       ${cards.map((cc, k) => (k > 0 && cc.kind === 'lineup' ? html`<span class="tl-break" style=${`left:${dotPct(k - 0.5)}%`}><b>${team.periods === 2 ? 'rust' : 'pauze'}</b></span>` : null))}
@@ -399,7 +375,7 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
         ${peek && nx
           ? html`<${Field} slots=${nx.slots} lines=${nx.lines || lines} keeperId=${nx.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
               onTap=${() => {}} neon=${changes(cards, i + 1).in} accent=${accentFor(team)} />`
-          : html`<${Field} slots=${c.slots} lines=${lines} animate=${!!thinking} formable=${canEdit || canPinHere} keeperDrag=${canEdit && !!match.keeperId} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
+          : html`<${Field} slots=${c.slots} lines=${lines} animate=${false} formable=${canEdit || canPinHere} keeperDrag=${canEdit && !!match.keeperId} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
               onTap=${() => {}} neon=${planner ? nxOuts : []} marked=${planner ? [] : ch.in} dashed=${!planner && ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} ghosts=${planner && !peek && !calm ? ghostsFor(nx, c.pos, nick) : null} />`}
         ${compact && !peek && cards.length > 1 && html`<button type="button" class=${'fstep prev' + (i === 0 ? ' off' : '')} key="fsp" aria-label="Moment ervoor" disabled=${i === 0}
             onClick=${() => { haptic('select'); setF(Math.round(getF()) - 1, true); }}><${Icon} name="chev" size=${18} /></button>

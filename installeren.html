@@ -23,7 +23,8 @@
     @font-face { font-family: Nunito; font-weight: 700; font-display: swap; src: url(fonts/nunito-latin-700-normal.woff2) format('woff2'); }
     @font-face { font-family: Nunito; font-weight: 800; font-display: swap; src: url(fonts/nunito-latin-800-normal.woff2) format('woff2'); }
     @font-face { font-family: Nunito; font-weight: 900; font-display: swap; src: url(fonts/nunito-latin-900-normal.woff2) format('woff2'); }
-    :root { --blue: #1F3C88; --blue-2: #2B57C9; --tint: #E8EEFB; --orange: #F5A524; --orange-tint: #FFF1D6; --ink: #111827; --muted: #4B5563; --line: #E3E8F2; --bg: #F5F7FC; --green: #1f8a3a; }
+    :root { --blue: #1F3C88; --blue-2: #2B57C9; --tint: #E8EEFB; --orange: #F5A524; --orange-tint: #FFF1D6; --ink: #111827; --muted: #4B5563; --line: #E3E8F2; --bg: #F5F7FC; --green: #1f8a3a; --field: #2650B8;
+      --ai: linear-gradient(115deg, #7C5CFF, #3B82F6 45%, #14B8A6 80%, #22C55E); }
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
     body { margin: 0; font-family: Nunito, system-ui, -apple-system, sans-serif; font-weight: 700; color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; line-height: 1.45; }
@@ -33,28 +34,72 @@
     .hero .ico { width: 56px; height: 56px; border-radius: 15px; box-shadow: 0 8px 20px rgba(0,0,0,.25); }
     h1 { margin: 14px 0 6px; font-size: 27px; line-height: 1.15; font-weight: 900; }
     .hero p { margin: 0; color: rgba(255,255,255,.85); font-size: 15.5px; }
-    .cta { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; min-height: 48px; padding: 0 20px; border-radius: 99px; background: var(--orange); color: var(--ink); font-size: 16px; font-weight: 900; text-decoration: none; box-shadow: 0 10px 22px -10px rgba(245,165,36,.9); }
+    .cta { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; min-height: 48px; padding: 0 20px; border-radius: 99px; background: var(--orange); color: var(--ink); font-size: 16px; font-weight: 900; text-decoration: none; box-shadow: 0 10px 22px -10px rgba(245,165,36,.9); }
     nav { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px; }
     nav a { flex: none; min-height: 40px; display: inline-flex; align-items: center; padding: 0 14px; border-radius: 99px; background: #fff; color: var(--blue); font-size: 14px; font-weight: 900; text-decoration: none; box-shadow: 0 0 0 1px var(--line); }
-    section { padding: 18px 18px 16px; border-radius: 22px; background: #fff; box-shadow: 0 1px 2px rgba(17,24,39,.05), 0 6px 20px rgba(31,60,136,.08); scroll-margin-top: 12px; }
-    h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font-size: 20px; font-weight: 900; }
-    h2 .badge { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: var(--tint); color: var(--blue); font-size: 17px; }
-    h3 { margin: 16px 0 6px; font-size: 16px; font-weight: 900; }
+    section { padding: 18px 16px 16px; border-radius: 22px; background: #fff; box-shadow: 0 1px 2px rgba(17,24,39,.05), 0 6px 20px rgba(31,60,136,.08); scroll-margin-top: 12px; }
+    h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 4px; font-size: 20px; font-weight: 900; }
+    h2 .badge { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: var(--tint); color: var(--blue); }
+    h2 .badge svg { width: 19px; height: 19px; }
+    .lead { margin: 0 0 12px; color: var(--muted); font-size: 15px; }
     p { margin: 0 0 8px; color: var(--muted); }
-    ol.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; counter-reset: s; }
-    ol.steps li { position: relative; padding: 10px 12px 10px 48px; border-radius: 16px; background: var(--bg); color: var(--ink); counter-increment: s; }
-    ol.steps li::before { content: counter(s); position: absolute; left: 10px; top: 9px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--blue); color: #fff; font-size: 14px; font-weight: 900; }
-    ol.steps li small { display: block; color: var(--muted); font-size: 13.5px; font-weight: 700; }
-    .key { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 8px; background: #fff; box-shadow: 0 0 0 1px var(--line); font-weight: 900; white-space: nowrap; }
-    .note { display: flex; gap: 10px; margin-top: 10px; padding: 12px; border-radius: 16px; background: var(--orange-tint); color: var(--ink); font-size: 14.5px; }
-    .note b { font-weight: 900; }
-    ul.tips { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-    ul.tips li { display: flex; gap: 10px; color: var(--ink); }
-    ul.tips li::before { content: ''; flex: none; width: 8px; height: 8px; margin-top: 8px; border-radius: 50%; background: var(--blue-2); }
-    ul.tips li span { color: var(--muted); }
-    .pos { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: 0; }
+    .key { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 8px; background: #fff; box-shadow: 0 0 0 1px var(--line); font-weight: 900; white-space: nowrap; color: var(--ink); }
+    .note { display: flex; gap: 10px; margin-top: 12px; padding: 12px; border-radius: 16px; background: var(--orange-tint); color: var(--ink); font-size: 14.5px; }
+    svg { display: block; }
+
+    /* stappen als tegels met een pictogram */
+    .flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; padding: 0; list-style: none; counter-reset: s; }
+    .flow li { position: relative; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 14px 6px 10px; border-radius: 16px; background: var(--bg); text-align: center; font-size: 13.5px; font-weight: 900; line-height: 1.2; counter-increment: s; }
+    .flow li::before { content: counter(s); position: absolute; top: 6px; left: 7px; display: grid; place-items: center; width: 19px; height: 19px; border-radius: 50%; background: var(--blue); color: #fff; font-size: 11px; }
+    .flow .pic { display: grid; place-items: center; width: 50px; height: 50px; border-radius: 14px; background: #fff; color: var(--blue-2); box-shadow: 0 0 0 1px var(--line), 0 6px 14px -8px rgba(31,60,136,.4); }
+    .flow .pic svg { width: 28px; height: 28px; }
+    .flow .pic.hl { color: #fff; background: var(--blue-2); }
+    .flow small { display: block; margin-top: 1px; color: var(--muted); font-size: 11.5px; font-weight: 800; }
+    .flow.two { grid-template-columns: repeat(3, 1fr); }
+
+    /* eerste keer: kaart met plaatje links, korte tekst rechts */
+    .cards { display: flex; flex-direction: column; gap: 10px; }
+    .card { display: grid; grid-template-columns: 92px 1fr; gap: 14px; align-items: center; padding: 12px; border-radius: 18px; background: var(--bg); }
+    .card .art { width: 92px; height: 92px; border-radius: 16px; overflow: hidden; background: #fff; box-shadow: 0 0 0 1px var(--line); display: grid; place-items: center; }
+    .card b { display: block; font-size: 16px; font-weight: 900; line-height: 1.25; }
+    .card .num { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 6px; border-radius: 50%; background: var(--blue); color: #fff; font-size: 12px; vertical-align: 2px; }
+    .card p { margin: 4px 0 0; font-size: 14px; line-height: 1.4; }
+    .card .hi { color: var(--ink); }
+
+    /* wedstrijddag */
+    .motto { margin: 2px 0 14px; font-size: 18px; font-weight: 900; line-height: 1.25; background: var(--ai); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .phones { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+    .phone { margin: 0; }
+    .phone .frame { position: relative; padding: 6px; border-radius: 30px; background: #0D1B45; box-shadow: 0 16px 30px -18px rgba(13,27,69,.8); }
+    .phone img { display: block; width: 100%; height: auto; border-radius: 24px; }
+    .phone figcaption { margin-top: 8px; text-align: center; font-size: 13px; font-weight: 900; color: var(--ink); line-height: 1.25; }
+    .phone figcaption small { display: block; font-weight: 800; color: var(--muted); }
+    .ways { display: grid; grid-template-columns: 1.35fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .way { position: relative; padding: 14px 12px 12px; border-radius: 18px; background: var(--bg); }
+    .way b { display: block; font-size: 16px; font-weight: 900; }
+    .way span { display: block; margin-top: 3px; font-size: 13px; line-height: 1.35; color: var(--muted); }
+    .way.ai { border: 2px solid transparent; background: linear-gradient(#fff, #fff) padding-box, var(--ai) border-box; box-shadow: 0 10px 24px -16px rgba(124,92,255,.8); }
+    .way.ai b { color: #4C2FD6; }
+    .way .tag { position: absolute; top: -10px; left: 12px; padding: 1px 8px; border-radius: 99px; border: 1.5px solid transparent; background: linear-gradient(#fff, #fff) padding-box, var(--ai) border-box; color: #5B21B6; font-size: 11px; font-weight: 900; }
+    .day { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .day li { display: flex; align-items: center; gap: 12px; font-size: 15.5px; font-weight: 900; }
+    .day li i { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--tint); color: var(--blue); font-style: normal; }
+    .day li i svg { width: 18px; height: 18px; }
+    .day li span small { display: block; font-size: 13.5px; font-weight: 800; color: var(--muted); }
+
+    /* waarom deze app */
+    .usp { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .usp div { padding: 12px; border-radius: 16px; background: var(--bg); }
+    .usp i { display: grid; place-items: center; width: 36px; height: 36px; margin-bottom: 8px; border-radius: 11px; background: #fff; color: var(--blue-2); box-shadow: 0 0 0 1px var(--line); font-style: normal; }
+    .usp i svg { width: 20px; height: 20px; }
+    .usp i.ai { color: #fff; background: var(--ai); box-shadow: none; }
+    .usp b { display: block; font-size: 15px; font-weight: 900; line-height: 1.2; }
+    .usp span { display: block; margin-top: 3px; font-size: 13px; line-height: 1.35; color: var(--muted); }
+    .mini { margin: 12px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
+    .mini li b { color: var(--ink); }
     footer { text-align: center; font-size: 13px; color: var(--muted); }
     footer a { color: var(--blue); font-weight: 900; }
+    @media (max-width: 360px) { .flow { grid-template-columns: repeat(2, 1fr); } .usp { grid-template-columns: 1fr; } .card { grid-template-columns: 72px 1fr; } .card .art { width: 72px; height: 72px; } .card .art svg { width: 64px; height: 64px; } }
     @media (prefers-reduced-motion: no-preference) {
       section, .hero { animation: rise .5s cubic-bezier(.2,.8,.2,1) both; }
       section:nth-of-type(2) { animation-delay: .05s; } section:nth-of-type(3) { animation-delay: .1s; }
@@ -63,72 +108,147 @@
   </style>
 </head>
 <body>
+<!-- pictogrammen: één keer getekend, overal hergebruikt (geen externe bestanden) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-compass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M15.5 8.5l-2 5-5 2 2-5z" fill="currentColor" fill-opacity=".25" /></symbol>
+    <symbol id="i-dots" viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="18.5" cy="12" r="2" /></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v11M8.5 6.5L12 3l3.5 3.5" /></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h14M5 11h9" /><path d="M8 16l4 4 4-4" /></symbol>
+    <symbol id="i-addhome" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="4" /><path d="M12 8.5v7M8.5 12h7" /></symbol>
+    <symbol id="i-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="7" width="19" height="10" rx="5" fill="currentColor" fill-opacity=".18" /><circle cx="16.5" cy="12" r="3.3" fill="currentColor" /></symbol>
+    <symbol id="i-vdots" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5.5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="18.5" r="2" /></symbol>
+    <symbol id="i-install" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="3" /><path d="M12 7v7M9 11l3 3 3-3" /></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M8 12.5l2.8 2.8L16.5 9.5" /></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="6" y="2.5" width="12" height="19" rx="3" /><path d="M10.5 18.5h3" /></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 0 0-2-1.2L14.2 3h-4.4l-.4 2.6a7 7 0 0 0-2 1.2l-2.3-.9-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-.9a7 7 0 0 0 2 1.2l.4 2.6h4.4l.4-2.6a7 7 0 0 0 2-1.2l2.3.9 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z" /></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9zM18.5 15l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z" /></symbol>
+    <symbol id="i-team" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="3.2" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><circle cx="16.8" cy="9" r="2.6" /><path d="M16 14.2a4.6 4.6 0 0 1 5 4.8" /></symbol>
+    <symbol id="i-watch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="13.5" r="7.5" /><path d="M10 2.5h4M12 13.5V9.5M18.5 6.5l1.2-1.2" /></symbol>
+    <symbol id="i-hand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11m0-1V4a1.5 1.5 0 0 1 3 0v6m0-.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-.6a6 6 0 0 1-4.6-2.2L3.6 15a1.5 1.5 0 0 1 2.3-1.9L9 16V11" /></symbol>
+    <symbol id="i-wifi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.6 16a5 5 0 0 1 6.8 0" /><circle cx="12" cy="19.3" r="1.2" fill="currentColor" /><path d="M3 3l18 18" /></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="10.5" width="14" height="10" rx="3" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3M12 14.5v2.5" /></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 19.5l1.3-3.8A8 8 0 1 1 8.6 19z" /><path d="M9 11h6M9 14h4" stroke-linecap="round" /></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V12M10 20V6M15 20v-9M20 20V9M3 20.5h18" /></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.5.9l10.2-6.5a1 1 0 0 0 0-1.7L9.5 4.6A1 1 0 0 0 8 5.5z" /></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4M5 4.5h11l-2 3.5 2 3.5H5" /></symbol>
+  </defs>
+</svg>
 <main>
   <header class="hero">
     <img class="ico" src="icons/icon-192.png" alt="" width="56" height="56" />
     <h1>SpaBo Coach op je telefoon</h1>
-    <p>De wissel-app voor de staf langs het veld. Zet hem op je beginscherm: dan opent hij als een gewone app en werkt hij ook zonder internet. Alles wat je invult, blijft op je eigen telefoon.</p>
+    <p>De wissel-app voor de staf langs het veld. Eerlijk wisselen zonder gepuzzel: de app rekent het voor je uit. Werkt zonder internet en alles blijft op je eigen telefoon.</p>
     <a class="cta" href="./">Open de app ›</a>
   </header>
 
   <nav aria-label="Naar">
-    <a href="#iphone">iPhone</a><a href="#android">Android</a><a href="#instellen">Eerste keer</a><a href="#wedstrijd">Wedstrijddag</a><a href="#tips">Tips</a>
+    <a href="#iphone">iPhone</a><a href="#android">Android</a><a href="#instellen">Eerste keer</a><a href="#wedstrijd">Wedstrijddag</a><a href="#waarom">Waarom deze app</a>
   </nav>
 
   <section id="iphone">
-    <h2><span class="badge">📱</span>Op je iPhone</h2>
-    <p>Gebruik <b>Safari</b>. Opende je deze link in WhatsApp of Mail? Kies dan eerst <span class="key">Open in Safari</span>.</p>
-    <ol class="steps">
-      <li>Open de app in Safari.<small>Ga naar ulfberth-nl.github.io/Coach</small></li>
-      <li>Tik op <span class="key">•••</span> naast de adresbalk en dan op <span class="key">Deel</span>.<small>Op een oudere iPhone (iOS 18 of eerder) staat de deelknop meteen onderin.</small></li>
-      <li>Scrol naar beneden en tik op <span class="key">Zet op beginscherm</span>.</li>
-      <li>Laat <span class="key">Open als webapp</span> aan staan en tik op <span class="key">Voeg toe</span>.</li>
+    <h2><span class="badge"><svg><use href="#i-phone" /></svg></span>Op je iPhone</h2>
+    <p class="lead">In Safari, in een minuut. Opende je deze link in WhatsApp? Kies eerst <span class="key">Open in Safari</span>.</p>
+    <ol class="flow">
+      <li><span class="pic"><svg><use href="#i-compass" /></svg></span>Open de app in Safari</li>
+      <li><span class="pic"><svg><use href="#i-dots" /></svg></span>Tik op •••<small>naast de adresbalk</small></li>
+      <li><span class="pic"><svg><use href="#i-share" /></svg></span>Tik op Deel</li>
+      <li><span class="pic"><svg><use href="#i-more" /></svg></span>Tik op Toon meer</li>
+      <li><span class="pic"><svg><use href="#i-addhome" /></svg></span>Zet op beginscherm</li>
+      <li><span class="pic hl"><svg><use href="#i-toggle" /></svg></span>Voeg toe<small>Open als webapp aan</small></li>
     </ol>
-    <div class="note"><span>💡</span><span>Open de app daarna altijd via het icoon op je beginscherm, niet via Safari. Alleen dan blijft je scherm aan tijdens de wedstrijd en voelt hij als een gewone app.</span></div>
+    <div class="note"><span>💡</span><span>Open de app daarna via het icoon op je beginscherm. Dan blijft je scherm aan tijdens de wedstrijd. Op iOS 18 of ouder staat Deel meteen onderin Safari.</span></div>
   </section>
 
   <section id="android">
-    <h2><span class="badge">▶</span>Op Android</h2>
-    <p>Gebruik <b>Chrome</b>.</p>
-    <ol class="steps">
-      <li>Open de app in Chrome.<small>Ga naar ulfberth-nl.github.io/Coach</small></li>
-      <li>Tik rechtsboven op <span class="key">⋮</span>.</li>
-      <li>Tik op <span class="key">Toevoegen aan startscherm</span> of <span class="key">App installeren</span>.</li>
-      <li>Bevestig met <span class="key">Installeren</span>.</li>
+    <h2><span class="badge"><svg><use href="#i-phone" /></svg></span>Op Android</h2>
+    <p class="lead">In Chrome.</p>
+    <ol class="flow two">
+      <li><span class="pic"><svg><use href="#i-vdots" /></svg></span>Tik op ⋮<small>rechtsboven</small></li>
+      <li><span class="pic"><svg><use href="#i-install" /></svg></span>App installeren<small>of Toevoegen aan startscherm</small></li>
+      <li><span class="pic hl"><svg><use href="#i-check" /></svg></span>Installeren</li>
     </ol>
   </section>
 
   <section id="instellen">
-    <h2><span class="badge">⚙︎</span>De eerste keer instellen</h2>
-    <p>Een paar minuten werk, één keer per seizoen.</p>
-    <ol class="steps">
-      <li>Ga naar <span class="key">Team</span> en vul de naam en de spelvorm in.<small>Veld of zaal, aantal spelers, met of zonder keeper, de opstelling (bijv. 2-1-2) en hoeveel periodes van hoeveel minuten.</small></li>
-      <li>Voeg je spelers toe bij <span class="key">Spelers</span>.<small>Kies eerst een pincode. Per speler: naam, een korte bijnaam voor op het veld, speelkracht, de rol waarin hij het sterkst is en de posities die hij graag speelt. Speelkracht en voorkeur zie je alleen achter de pincode.</small></li>
-      <li>Kies een wisselprofiel bij <span class="key">Team</span>.<small><b>In balans</b> is een goede start. Iedereen even lang, Rustig wisselen of Sterkste ploeg kan ook; de app stemt de regels per wedstrijd zelf af.</small></li>
-      <li>Zet het programma klaar bij <span class="key">Seizoen</span> met <span class="key">+ Wedstrijd</span>.<small>Tegenstander, datum, tijd en veld. Hier verdeel je ook de taken voor ouders en maak je het bericht voor de groepsapp.</small></li>
-    </ol>
+    <h2><span class="badge"><svg><use href="#i-gear" /></svg></span>De eerste keer instellen</h2>
+    <p class="lead">Vier dingen, één keer per seizoen.</p>
+    <div class="cards">
+      <div class="card">
+        <span class="art"><svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
+          <rect x="6" y="4" width="68" height="72" rx="10" fill="#2650B8" />
+          <rect x="11" y="9" width="58" height="62" rx="5" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.5" />
+          <path d="M27 9a13 13 0 0 0 26 0M27 71a13 13 0 0 1 26 0" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.5" />
+          <g fill="#fff"><rect x="18" y="19" width="16" height="7" rx="3.5" /><rect x="46" y="19" width="16" height="7" rx="3.5" /><rect x="32" y="35" width="16" height="7" rx="3.5" /><rect x="18" y="51" width="16" height="7" rx="3.5" /><rect x="46" y="51" width="16" height="7" rx="3.5" /></g>
+          <rect x="32" y="63" width="16" height="7" rx="3.5" fill="#111827" /><rect x="33.5" y="64.5" width="4" height="4" rx="1" fill="#1f8a3a" />
+        </svg></span>
+        <div><b><span class="num">1</span>Team en spelvorm</b><p>Ga naar <span class="key">Team</span> en vul de naam en de spelvorm in: veld of zaal, aantal spelers, met of zonder keeper, de opstelling (bijv. 2-1-2) en hoeveel periodes van hoeveel minuten.</p></div>
+      </div>
+      <div class="card">
+        <span class="art"><svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
+          <g font-family="Nunito, sans-serif" font-weight="900" font-size="9.5">
+            <rect x="8" y="9" width="64" height="15" rx="7.5" fill="#F5F7FC" stroke="#E3E8F2" /><path d="M15 9.5v14" stroke="#d64545" stroke-width="4" stroke-linecap="round" /><text x="22" y="19.5" fill="#111827">Sam</text><text x="52" y="19.5" fill="#1f8a3a">★★★</text>
+            <rect x="8" y="30" width="64" height="15" rx="7.5" fill="#F5F7FC" stroke="#E3E8F2" /><path d="M15 30.5v14" stroke="#c8962d" stroke-width="4" stroke-linecap="round" /><text x="22" y="40.5" fill="#111827">Noor</text><text x="56" y="40.5" fill="#1f8a3a">★★</text>
+            <rect x="8" y="51" width="64" height="15" rx="7.5" fill="#F5F7FC" stroke="#E3E8F2" /><path d="M15 51.5v14" stroke="#2a78d6" stroke-width="4" stroke-linecap="round" /><text x="22" y="61.5" fill="#111827">Mo</text><text x="60" y="61.5" fill="#1f8a3a">★</text>
+          </g>
+        </svg></span>
+        <div><b><span class="num">2</span>Spelers met hun sterke punten</b><p>Vul je spelers in met wat ze goed kunnen. <span class="hi">Zo rekent Autopilot een goede opstelling door.</span> Dit staat achter een pincode.</p></div>
+      </div>
+      <div class="card">
+        <span class="art"><svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
+          <defs><linearGradient id="g-ai" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C5CFF" /><stop offset=".5" stop-color="#3B82F6" /><stop offset="1" stop-color="#14B8A6" /></linearGradient></defs>
+          <rect x="8" y="12" width="64" height="22" rx="11" fill="#E8EEFB" />
+          <g fill="#2B57C9"><rect x="16" y="20" width="9" height="6" rx="3" /><rect x="28" y="20" width="9" height="6" rx="3" /><rect x="40" y="20" width="9" height="6" rx="3" /><rect x="52" y="20" width="9" height="6" rx="3" /></g>
+          <rect x="8" y="44" width="64" height="22" rx="11" fill="#fff" stroke="url(#g-ai)" stroke-width="2" />
+          <g fill="url(#g-ai)"><rect x="16" y="50" width="9" height="10" rx="3" /><rect x="28" y="53" width="9" height="7" rx="3" /><rect x="40" y="48" width="9" height="12" rx="3" /><rect x="52" y="54" width="9" height="6" rx="3" /></g>
+          <path d="M66 36l1.3 3.6 3.7 1.3-3.7 1.3L66 46l-1.3-3.8-3.7-1.3 3.7-1.3z" fill="#7C5CFF" />
+        </svg></span>
+        <div><b><span class="num">3</span>Hoe wil je wisselen?</b><p>Op gelijke speeltijd, of met wat meer focus op de sterkste opstelling. <span class="hi">Bij beide krijg je het sterkste wisselplan.</span></p></div>
+      </div>
+      <div class="card">
+        <span class="art"><svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
+          <rect x="8" y="10" width="40" height="38" rx="7" fill="#fff" stroke="#E3E8F2" stroke-width="1.5" /><rect x="8" y="10" width="40" height="11" rx="7" fill="#1F3C88" /><rect x="8" y="16" width="40" height="5" fill="#1F3C88" />
+          <text x="28" y="40.5" text-anchor="middle" font-family="Nunito, sans-serif" font-weight="900" font-size="15" fill="#111827">14</text>
+          <path d="M34 42h34a6 6 0 0 1 6 6v14a6 6 0 0 1-6 6H44l-7 6v-6h-3a6 6 0 0 1-6-6V48a6 6 0 0 1 6-6z" fill="#25D366" />
+          <g stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M36 50h28M36 56h22M36 62h14" /></g>
+        </svg></span>
+        <div><b><span class="num">4</span>Agenda erin, berichten eruit</b><p>Zet je wedstrijden in de agenda bij <span class="key">Seizoen</span>. <span class="hi">De app maakt automatisch de WhatsApp-berichten om ouders en spelers te informeren</span>, met taken en verzameltijd.</p></div>
+      </div>
+    </div>
   </section>
 
   <section id="wedstrijd">
-    <h2><span class="badge">🏑</span>Op de wedstrijddag</h2>
-    <ol class="steps">
-      <li>Open de app: de eerstvolgende wedstrijd staat klaar.</li>
-      <li>Tik op <span class="key">Spelers</span> en meld aan wie er is.<small>De app stelt een keeper voor (wie het minst keepte); tik <span class="key">Ander</span> om een ander te kiezen.</small></li>
-      <li>Kies hoe je wisselt.<small><b>Autopilot</b>: de app plant alle wissels en rekent mee als er iets verandert. <b>Zelf plannen</b>: je zet de startopstelling op het veld en plant de wissels per blok, op het veld of in de tabel.</small></li>
-      <li>Tik <span class="key">Start</span> bij de aftrap.<small>Bovenin zie je steeds de volgende wissel. Schuif de ring naar links om te wisselen; de app piept en knippert als het tijd is.</small></li>
-      <li>Tik op de stand voor een doelpunt. Na het laatste fluitsignaal sluit je de wedstrijd af.<small>Speeltijd, posities en doelpunten komen vanzelf in het seizoensoverzicht.</small></li>
+    <h2><span class="badge"><svg><use href="#i-flag" /></svg></span>Op de wedstrijddag</h2>
+    <p class="motto">Minder gedoe met wisselen, meer bezig met het spel.</p>
+    <div class="phones">
+      <figure class="phone"><div class="frame"><img src="uitleg/home.jpg" alt="Wedstrijdscherm met Autopilot: de opstelling en wie er op de bank zit" width="450" height="974" decoding="async" /></div><figcaption>Autopilot staat klaar<small>de opstelling en alle wissels</small></figcaption></figure>
+      <figure class="phone"><div class="frame"><img src="uitleg/live.jpg" alt="Tijdens de wedstrijd: klok, stand en de volgende wissel" width="450" height="974" decoding="async" /></div><figcaption>Tijdens de wedstrijd<small>de app zegt wie wanneer wisselt</small></figcaption></figure>
+    </div>
+    <div class="ways">
+      <div class="way ai"><span class="tag">✦ aanbevolen</span><b>✦ Autopilot</b><span>De app maakt het wisselplan: eerlijk en sterk. Jij hoeft niets te puzzelen.</span></div>
+      <div class="way"><b>Zelf plannen</b><span>Liever zelf? Zet de puzzel per blok, de app rekent mee.</span></div>
+    </div>
+    <ol class="day">
+      <li><i><svg><use href="#i-team" /></svg></i><span>Meld aan wie er is<small>De app kiest een keeper</small></span></li>
+      <li><i><svg><use href="#i-play" /></svg></i><span>Tik Start bij de aftrap<small>Je ziet steeds de volgende wissel; de app piept als het tijd is</small></span></li>
+      <li><i><svg><use href="#i-hand" /></svg></i><span>Gaat het anders? Sleep zelf<small>Autopilot rekent de rest van de wedstrijd weer door</small></span></li>
     </ol>
   </section>
 
-  <section id="tips">
-    <h2><span class="badge">✦</span>Handig om te weten</h2>
-    <ul class="tips">
-      <li><div>Vegen over het veld of de pijltjes bij de keeper <span>laten zien wie er straks staat. Sleep een speler om het zelf te bepalen; de app zet er dan een speldje bij.</span></div></li>
-      <li><div>Gaat het anders dan gepland? <span>Wissel gewoon door te slepen. De app rekent de rest van de wedstrijd opnieuw uit.</span></div></li>
-      <li><div>Zet het geluid van je telefoon aan <span>voor de piep bij een wissel. Het scherm blijft vanzelf aan zolang de app open is.</span></div></li>
-      <li><div>Maak af en toe een back-up <span>bij Team → Gegevens. Je gegevens staan alleen op je telefoon; een back-up is je reservekopie.</span></div></li>
-      <li><div>Kleuren in de app: <span><i class="pos" style="background:#d64545"></i> voor, <i class="pos" style="background:#c8962d"></i> midden, <i class="pos" style="background:#2a78d6"></i> achter, <i class="pos" style="background:#1f8a3a"></i> keeper.</span></div></li>
-      <li><div>Laat het scherm met speelkracht niet zien aan ouders of spelers. <span>De app is voor de staf.</span></div></li>
+  <section id="waarom">
+    <h2><span class="badge"><svg><use href="#i-spark" /></svg></span>Waarom deze app</h2>
+    <div class="usp">
+      <div><i class="ai"><svg><use href="#i-spark" /></svg></i><b>Autopilot rekent alles door</b><span>Eerlijke speeltijd en sterke linies, ook als er iets verandert.</span></div>
+      <div><i><svg><use href="#i-watch" /></svg></i><b>Speeltijd in één oogopslag</b><span>Per speler, vooraf en na afloop.</span></div>
+      <div><i><svg><use href="#i-hand" /></svg></i><b>Wisselen is slepen</b><span>Eén beweging, de app doet de rest.</span></div>
+      <div><i><svg><use href="#i-wifi" /></svg></i><b>Werkt zonder internet</b><span>Langs het veld geen bereik nodig.</span></div>
+      <div><i><svg><use href="#i-lock" /></svg></i><b>Blijft op je telefoon</b><span>Geen account, geen cloud. Gratis.</span></div>
+      <div><i><svg><use href="#i-chart" /></svg></i><b>Seizoen vanzelf bijgehouden</b><span>Speeltijd, posities en doelpunten.</span></div>
+    </div>
+    <ul class="mini">
+      <li><b>Geluid aan</b> voor de piep bij een wissel.</li>
+      <li><b>Maak af en toe een back-up</b> bij Team → Gegevens.</li>
+      <li><b>Voor de staf:</b> laat de speelkracht niet zien aan ouders of spelers.</li>
     </ul>
   </section>
 

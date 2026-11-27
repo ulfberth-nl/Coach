@@ -5,7 +5,7 @@ import * as M from '../match.js';
 import { PlanView } from '../planview.js';
 import { keeperCounts, suggestKeeper, WHY_TEXT } from './home.js';
 import { nextScheduled, todayISO } from './seizoen.js';
-import { matchRules, PROFILES, profileOf } from '../profiles.js';
+import { matchRules, PROFILES, PROFILE_ORDER, profileOf, profileRules, setProfile, cachedTune } from '../profiles.js';
 import { compute } from '../compute.js';
 import { PlayTimeSheet } from '../playtime.js';
 import { scheduleRefresh } from '../refresh.js';
@@ -72,6 +72,12 @@ export function newConcept(d) {
   d.matches = d.matches.filter((x) => x.started || x.id !== d.currentMatchId);
   const e = nextScheduled(t, d.matches);
   const plan = scheduleSelection(t, e, present, keeperId);
+  // een nieuwe wedstrijd begint met het profiel dat op de Team-pagina als standaard vastgezet is
+  if (t.defaultProfile && PROFILES[t.defaultProfile] && profileOf(t.rules) !== t.defaultProfile) {
+    const r = profileRules(t, t.defaultProfile, plan.present, plan.keeperId);
+    setProfile(t, t.defaultProfile, r);
+    t.rules.priority = r.priority || 'eerlijk';
+  }
   // het wisselprofiel rekent opnieuw uit met wie er deze wedstrijd is
   const m = M.createMatch(t, { present: plan.present, keeperId: plan.keeperId, priority: t.rules.priority, rules: matchRules(t, plan.present, plan.keeperId) });
   m.setup = { present: false, keeper: !t.keeper || !!(e && e.keeperId), opponent: false };
@@ -247,6 +253,8 @@ function PrepView({ state, match, team }) {
     return () => clearTimeout(tm);
   }, [think && think.k, think && think.phase]);
   const byHand = () => { manual.current = Date.now(); };
+  // ander wisselprofiel gekozen: de app rekent zichtbaar door (het nieuwe plan komt uit de rekendraad)
+  const kick = () => { if (!(thinkRef.current && thinkRef.current.phase === 'run')) setThink({ k: Date.now(), phase: 'run', shuffle: true }); };
   // aftrap: het veld en het affiche gaan vloeiend over in het live-scherm, het scorebord valt erin
   const start = () => {
     unlockAudio();
@@ -263,8 +271,8 @@ function PrepView({ state, match, team }) {
     ${tooFew
       ? html`<div class="card" style="flex:1 1 auto;justify-content:center;text-align:center"><span class="h2">Te weinig spelers</span><span class="sub">Je hebt ${F} veldspelers nodig${team.keeper ? ' plus een keeper' : ''}. Tik op "spelers".</span></div>`
       : html`
-        <${ModeSwitch} match=${match} team=${team} swaps=${swaps} perMoment=${perMoment} st=${gpSt} onTour=${() => setTour(1)} onSheet=${setSheet} think=${think} onReplay=${replay} />
-        <div class="grow-field"><${PlanView} match=${match} team=${team} compact editable=${!M.isOwn(match, team)} thinking=${think && (think.phase === 'done' || think.shuffle) ? think.phase : null}
+        <${ModeSwitch} match=${match} team=${team} swaps=${swaps} perMoment=${perMoment} st=${gpSt} onTour=${() => setTour(1)} onSheet=${setSheet} think=${think} onReplay=${replay} onKick=${kick} />
+        <div class="grow-field"><${PlanView} match=${match} team=${team} compact editable=${!M.isOwn(match, team)} thinking=${think && think.shuffle ? think.phase : null}
           onLocked=${M.isOwn(match, team) ? () => toast('Je plant zelf: spelers verplaats je in je game plan.', { label: 'Open', run: () => go('/plan') }) : null}
           onTour=${() => { haptic('select'); setTour(1); }}
           onSwap=${(a, b) => { byHand(); conceptDrop(mutateConcept, team, a, b); mutateConcept((m) => { m.setup = { ...(m.setup || {}), base: true }; }); }}
@@ -299,7 +307,7 @@ function PrepView({ state, match, team }) {
     ${sheet === 'base' && html`<${BaseSheet} match=${match} team=${team} onClose=${() => setSheet(null)} />`}
     ${sheet === 'speeltijd' && html`<${PlayTimeSheet} match=${match} team=${team} onClose=${() => setSheet(null)} onOpenPlan=${() => { setSheet(null); go('/plan'); }} />`}
     ${sheet === 'opp' && html`<${OpponentSheet} match=${match} upcoming=${upcomingFor(team, state.matches)} onClose=${() => setSheet(null)} />`}
-    ${sheet === 'menu' && html`<${GameMenu} match=${match} team=${team} onClose=${() => setSheet(null)} onSheet=${setSheet} />`}
+    ${sheet === 'menu' && html`<${GameMenu} match=${match} team=${team} onClose=${() => setSheet(null)} onSheet=${setSheet} onTour=${() => { haptic('select'); setTour(1); }} />`}
     ${tour > 0 && html`<${ModeTour} match=${match} team=${team} step=${tour} setStep=${setTour} />`}
     ${sheet === 'confirm' && html`<${Confirm} title="Toch starten?" text=${'Nog niet bevestigd: ' + todo.join(', ') + '.'} yes="Start" onYes=${start} onClose=${() => setSheet(null)} />`}
     ${sheet === 'gpleeg' && html`<${Confirm} title="Je game plan is nog leeg" text="Er staan nog geen wissels gepland. Maak eerst je game plan, of kies Autopilot." yes="Toch starten" onYes=${start} onClose=${() => setSheet(null)} />`}
@@ -1081,7 +1089,7 @@ function LiveView({ match, team }) {
 
 
 // ---------- menu (⋯) ----------
-function GameMenu({ match, team, live, onClose, onSheet }) {
+function GameMenu({ match, team, live, onClose, onSheet, onTour = null }) {
   const now = useNow(500);
   const el = M.elapsedInPeriod(match, now);
   const adj = (delta) => mutate((m, t) => M.adjustClock(m, t, delta));
@@ -1100,8 +1108,7 @@ function GameMenu({ match, team, live, onClose, onSheet }) {
       </div>
       <button type="button" class="link" onClick=${() => { mutate((m, t) => M.setClock(m, t, 0)); toast('Klok op 0:00'); }}>Klok op 0:00 zetten</button>
     </div>`}
-    ${!live && !M.isOwn(match, team) && html`<div class="col"><span class="label">Voorrang deze wedstrijd</span>
-      <${Seg} label="Voorrang" value=${match.priority} onChange=${(v) => update((d) => rebuildConcept(d, { priority: v }))} options=${[['eerlijk', 'Eerlijkheid'], ['bezetting', 'Beste bezetting']]} /></div>`}
+    ${!live && onTour && item('Uitleg', 'Autopilot en Zelf plannen naast elkaar', () => { onClose(); onTour(); })}
     ${item(M.isOwn(match, team) ? 'Game plan' : 'Autopilot', M.isOwn(match, team) ? 'Je liniebord: wie speelt waar, per blok' : 'Alle wissels en het rooster per speler', () => go('/plan'))}
     ${live && item('Einde ' + M.periodLabel(team, match.clock.period), null, () => onSheet('end'))}
     ${live && item('Stand aanpassen', 'Doelpunten per speler en tegengoals', () => onSheet('score'))}
@@ -1202,6 +1209,18 @@ function strengthShares(match, team) {
   const v = Math.round((sum.V / tot) * 100), mm = Math.round((sum.M / tot) * 100);
   return { V: v, M: mm, A: 100 - v - mm };
 }
+// stopwatch: boog = gemiddelde speeltijd als deel van de wedstrijd; een wijzer loopt rustig rond
+function Watch({ frac, warn }) {
+  const C = 2 * Math.PI * 11.5;
+  return html`<span class=${'ptw' + (warn ? ' warn' : '')} aria-hidden="true"><svg viewBox="0 0 34 34">
+    <rect class="ptw-crown" x="14.5" y="0.5" width="5" height="3.5" rx="1.2" />
+    <rect class="ptw-crown" x="26.2" y="4.4" width="3.6" height="3" rx="1" transform="rotate(45 28 5.9)" />
+    <circle class="ptw-tr" cx="17" cy="19" r="11.5" />
+    <circle class="ptw-fl" cx="17" cy="19" r="11.5" style=${`stroke-dasharray:${C.toFixed(2)};--off:${(C * (1 - frac)).toFixed(2)}`} />
+    <g class="ptw-hand"><line x1="17" y1="19" x2="17" y2="11.5" /></g>
+    <circle class="ptw-c" cx="17" cy="19" r="1.8" />
+  </svg></span>`;
+}
 function PlayBtn({ match, team, think, st, own, onOpen }) {
   const plan = match.plan;
   const open = !own && !!think;
@@ -1226,20 +1245,15 @@ function PlayBtn({ match, team, think, st, own, onOpen }) {
   const pk = profileOf(team.rules);
   const prof = own ? (M.planStyle(match, team) === 'sterk' ? ['Sterkste opstelling', 'Sterkst'] : ['Gebalanceerd', 'Gebalanceerd'])
     : [PROFILES[pk] ? PROFILES[pk].label : 'Eigen instellingen', PROF_SHORT[pk] || 'Eigen regels'];
-  const byId = Object.fromEntries(team.players.map((p) => [p.id, p]));
-  const ids = secs ? Object.keys(secs).sort((a, b) => secs[a] - secs[b]) : [];
-  const max = Math.max(1, ...vals);
+  // in rust: een stopwatch met de gemiddelde speeltijd als boog (groen = binnen de marge, oranje = erbuiten)
+  const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+  const frac = vals.length ? Math.min(1, avg / Math.max(1, M.matchEnd(team))) : 0;
+  const warn = vals.length > 1 && Math.max(...vals) - Math.min(...vals) > (M.effRules(match, team).marge || 5) * 60 + 30;
   return html`<button type="button" class=${'ptbtn' + (own ? ' own' : '') + (open ? ' open ' + think.phase : '')} onClick=${() => { haptic('select'); onOpen(); }}
-    aria-label=${(secs ? `Speeltijd per speler: ${range.replace('′', '')} minuten` : 'Speeltijd per speler') + `, ${prof[0]}. Tik voor details`}>
-    <span class="ptb-bg" aria-hidden="true">${ids.map((id, k) => {
-      const p = byId[id] || {};
-      const c = p.main && p.main !== 'K' && POS_COLORS[p.main] ? POS_COLORS[p.main] : NO_ROLE;
-      return html`<i key=${id} style=${`--h:${Math.max(0.2, secs[id] / max).toFixed(3)};--c:${c};--k:${k}`}></i>`;
-    })}</span>
+    aria-label=${(secs ? `Speeltijd per speler: ${range.replace('′', '')} minuten` : 'Speeltijd per speler') + (warn ? ', buiten de marge' : '') + '. Tik voor de speeltijd per speler'}>
     <span class="ptb-sum">
-      <span class="ptb-prof"><i class="ptb-dot"></i><span class="pl-full">${prof[0]}</span><span class="pl-short">${prof[1]}</span></span>
-      <b class="num">${range}</b>
-      <small>speeltijd</small>
+      <${Watch} frac=${frac} warn=${warn} />
+      <span class="ptb-txt"><small>Speeltijd</small><b class="num">${range}</b></span>
     </span>
     ${open && html`<span class="ptb-lines" aria-hidden="true">
       <span class="ptb-t">${think.phase === 'run' ? html`<span class="ai-grad">✦ ${prof[0]} · doorrekenen…</span>` : `Kracht per linie · ${prof[0]}`}</span>
@@ -1248,7 +1262,7 @@ function PlayBtn({ match, team, think, st, own, onOpen }) {
   </button>`;
 }
 
-function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet, think = null, onReplay = null }) {
+function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet, think = null, onReplay = null, onKick = null }) {
   const own = M.isOwn(match, team);
   const [pend, setPend] = useState(null);
   const [ask, setAsk] = useState(null);
@@ -1350,7 +1364,7 @@ function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet, think 
           <${Icon} name="edit" size=${15} />Zelf plannen${own && html`<span class=${'msw-st ' + (gpState.ok ? 'ok' : 'todo')} key=${gpState.key} aria-hidden="true">${gpState.ok ? html`<${Icon} name="check" size=${11} />` : gpState.short}</span>`}
         </button>
       </div>
-      <button type="button" class="msw-i" aria-label="Uitleg: Autopilot en Zelf plannen" onClick=${() => { haptic('select'); onTour(); }}><${Icon} name="info" size=${19} /></button>
+      <${ProfileChip} match=${match} team=${team} ai=${!z} onKick=${onKick} />
     </div>
     ${ask === 'compare' && html`<${Sheet} onClose=${() => { seen(); done(); }} label="Zelf plannen of Autopilot">
       <span class="h2" style="font-size:22px">Zelf plannen?</span>
@@ -1376,6 +1390,67 @@ function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet, think 
       <button type="button" class="startopt" onClick=${empty}><span class="pc-ico"><${Icon} name="edit" size=${16} /></span><span class="col" style="gap:2px"><b>Begin leeg</b><span class="small">Jij zet de startopstelling en de blokken.</span></span><${Icon} name="chev" size=${16} /></button>
     </${Sheet}>`}
   </section>`;
+}
+
+// ---------- wisselprofiel op het wedstrijdscherm ----------
+// Dezelfde instelling als op de Team-pagina: wissel je hier, dan staat het daar ook zo (en andersom).
+// Een nieuwe wedstrijd begint weer met de standaard die op de Team-pagina vastgezet is.
+const CHIP = { gelijk: 'Even lang', balans: 'In balans', rustig: 'Rustig', sterk: 'Sterkste ploeg', eigen: 'Eigen regels' };
+function ProfileChip({ match, team, ai, onKick }) {
+  const [open, setOpen] = useState(false);
+  const pk = profileOf(team.rules);
+  const name = PROFILES[pk] ? PROFILES[pk].label : 'Eigen regels';
+  return html`<button type="button" class=${'profchip' + (ai ? ' ai' : '')} aria-haspopup="dialog" aria-label=${'Wisselprofiel: ' + name + '. Tik om te kiezen'}
+      onClick=${() => { haptic('select'); setOpen(true); }}>
+      <small>Profiel</small><b key=${pk}>${CHIP[pk] || 'Eigen regels'}</b><span class="profchip-ch" aria-hidden="true"><${Icon} name="chev" size=${14} /></span>
+    </button>
+    ${open && html`<${ProfileSheet} match=${match} team=${team} onKick=${onKick} onClose=${() => setOpen(false)} />`}`;
+}
+function ProfileSheet({ match, team, onKick, onClose }) {
+  const pk = profileOf(team.rules);
+  const def = team.defaultProfile && PROFILES[team.defaultProfile] ? team.defaultProfile : null;
+  const pick = (k) => {
+    if (k === pk) { haptic('tap'); onClose(); return; }
+    const prevRules = JSON.parse(JSON.stringify(team.rules));
+    const prevPr = match.priority;
+    update((d) => {
+      const t = d.teams.find((x) => x.id === team.id);
+      const m = d.matches.find((x) => x.id === match.id);
+      if (!t) return;
+      const r = profileRules(t, k, m ? m.present : null, m ? m.keeperId : null);
+      setProfile(t, k, r);
+      if (m && !m.started) m.priority = r.priority || 'eerlijk';
+    });
+    scheduleRefresh({ force: true });
+    haptic('select');
+    if (onKick) onKick();
+    onClose();
+    toast(`Wisselprofiel: ${PROFILES[k].label}`, { label: 'Ongedaan', run: () => {
+      update((d) => { const t = d.teams.find((x) => x.id === team.id); const m = d.matches.find((x) => x.id === match.id); if (t) t.rules = prevRules; if (m && !m.started) m.priority = prevPr; });
+      scheduleRefresh({ force: true });
+    } });
+  };
+  return html`<${Sheet} onClose=${onClose} label="Wisselprofiel">
+    <span class="h2" style="font-size:22px">Wisselprofiel</span>
+    <span class="sub">Hoe Autopilot wisselt. Kies je een ander profiel, dan rekent de app direct opnieuw.</span>
+    <div class="pfs" role="radiogroup" aria-label="Wisselprofiel">
+      ${PROFILE_ORDER.map((k) => {
+        const P = PROFILES[k];
+        const tr = cachedTune(team, k, match.present, match.keeperId);
+        const s = tr && tr.stats;
+        const pp = s ? (s.minP === s.maxP ? s.minP + '′' : s.minP + '–' + s.maxP + '′') : '';
+        return html`<button type="button" key=${k} role="radio" aria-checked=${pk === k ? 'true' : 'false'} class=${'pfs-o' + (pk === k ? ' on' : '')} onClick=${() => pick(k)}>
+          <span class="prof-radio" aria-hidden="true"></span>
+          <span class="pfs-t"><b>${P.label}${def === k && html`<i class="pfs-def"><${Icon} name="pin" size=${11} />standaard</i>`}</b>
+            <span class="small">${P.sub}</span>
+            ${s && html`<span class="pfs-mini num">${s.moments} wissels · ${pp} p.p. · max ${Math.round(s.maxStint)}′ bank</span>`}</span>
+        </button>`;
+      })}
+    </div>
+    ${pk === 'eigen' && html`<span class="small">Nu gelden je eigen regels van de Team-pagina.</span>`}
+    ${def && def !== pk && html`<span class="small">Een nieuwe wedstrijd begint weer met ${PROFILES[def].label} (je standaard).</span>`}
+    <a class="btn plain block" href="#/team" onClick=${onClose}>Uitleg en standaard op de Team-pagina</a>
+  </${Sheet}>`;
 }
 
 // ---------- spelers en keeper in één stap ----------

@@ -326,6 +326,8 @@ select.input { appearance: none; -webkit-appearance: none; }
 /* de gesleepte speler zweeft boven de vinger; erboven staat wat er gaat gebeuren */
 .drag-ghost { position: fixed; z-index: 100; pointer-events: none; translate: -50% calc(-100% - 30px); scale: 1.15; box-shadow: 0 14px 30px rgba(17,24,39,.38) !important; transition: box-shadow var(--t-small) ease; }
 .drag-ghost.locked { box-shadow: 0 0 0 3px var(--orange), 0 14px 30px rgba(17,24,39,.38) !important; }
+.drag-ghost.acc { box-shadow: inset 3px 0 0 #fff, inset 8px 0 0 var(--acc), 0 14px 30px rgba(17,24,39,.38) !important; }
+.drag-ghost.acc.locked { box-shadow: inset 3px 0 0 #fff, inset 8px 0 0 var(--acc), 0 0 0 3px var(--orange), 0 14px 30px rgba(17,24,39,.38) !important; }
 .drag-tip { position: fixed; z-index: 101; pointer-events: none; translate: -50% calc(-100% - 74px); padding: 5px 12px; border-radius: 999px; background: var(--ink); color: #fff; font-size: 13px; font-weight: 900; white-space: nowrap; box-shadow: 0 8px 20px rgba(17,24,39,.3); opacity: 0; scale: .8; transition: opacity var(--t-out-small) ease, scale var(--t-out-small) ease; }
 .drag-tip.on { opacity: 1; scale: 1; transition: opacity var(--t-small) ease, scale var(--t-screen) var(--spring-play); }
 .drag-src { opacity: .35 !important; }
@@ -2613,18 +2615,40 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 .msw.done .msw-th::before { content: ''; position: absolute; inset: 0; z-index: 1; background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.9) 50%, transparent 65%); translate: -120% 0; animation: mswShine .9s .1s ease-out forwards; }
 @keyframes mswShine { to { translate: 120% 0; } }
 
-/* spelers schuiven heen en weer terwijl de app rekent, en vallen daarna op hun plek */
-@keyframes thinkShuffle { 0%, 100% { translate: 0 0; } 25% { translate: -16px -3px; } 50% { translate: 8px 0; } 75% { translate: 18px 3px; } }
-.planview.thinking .fieldbox::after { content: ''; position: absolute; inset: 0; z-index: 2; border-radius: 20px; pointer-events: none; background: linear-gradient(180deg, transparent 0%, rgba(167,139,250,.18) 45%, rgba(255,255,255,.28) 50%, rgba(45,212,191,.16) 55%, transparent 100%); background-size: 100% 260%; animation: thinkScan 1.2s ease-in-out infinite; }
-@keyframes thinkScan { from { background-position: 0 130%; } to { background-position: 0 -30%; } }
-.planview.thinking .benchrow .benchpill { animation: thinkHop .7s ease-in-out infinite alternate; }
-.planview.thinking .benchrow .benchpill:nth-child(2n) { animation-delay: -.35s; }
-@keyframes thinkHop { to { translate: 0 -4px; } }
-.planview.settled .field .spot:not(.keeperspot) .pill { animation: thinkSettle .7s var(--spring-play) both; }
-@keyframes thinkSettle { 0% { scale: .92; box-shadow: 0 0 0 0 rgba(124,92,255,.55); } 60% { scale: 1.04; } 100% { scale: 1; box-shadow: 0 0 0 10px rgba(124,92,255,0); } }
-.reduce .planview.thinking .field .spot .sp-in, .reduce .planview.thinking .benchrow .benchpill, .reduce .planview.thinking .fieldbox::after, .reduce .planview.settled .field .pill, .reduce .ptv.wob i, .reduce .msw.thinking .msw-a svg { animation: none !important; }
+/* doorrekenen (Autopilot, v0.29): het veld loopt van onder naar boven vol met de AI-kleuren; de belijning blijft
+   zichtbaar. Spelers zakken weg als het water ze bereikt en ploppen daarna van achter naar voor op hun plek. */
+.planview.flood .field::before, .planview.flooded .field::before { content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 80%, rgba(255,255,255,.5) 0 1.4px, transparent 2.4px) 0 0 / 46px 54px,
+    radial-gradient(circle at 70% 30%, rgba(255,255,255,.38) 0 1.1px, transparent 2.1px) 0 0 / 64px 70px,
+    linear-gradient(110deg, transparent 30%, rgba(255,255,255,.22) 48%, transparent 66%) 0 0 / 260% 100%,
+    linear-gradient(0deg, #14B8A6 0%, #3B82F6 46%, #7C5CFF 100%);
+  clip-path: inset(100% 0 0 0); }
+.planview.flood .field::before { animation: fldRise 2.3s cubic-bezier(.3,.1,.3,1) forwards, fldFlow 2.3s linear infinite; }
+@keyframes fldRise { 0% { clip-path: inset(100% 0 0 0); } 22% { clip-path: inset(62% 0 0 0); } 40% { clip-path: inset(53% 0 0 0); } 62% { clip-path: inset(29% 0 0 0); } 78% { clip-path: inset(17% 0 0 0); } 100% { clip-path: inset(0 0 0 0); } }
+@keyframes fldFlow { to { background-position: 0 -108px, 0 -70px, -100% 0, 0 0; } }
+.planview.flood .field::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 100%; z-index: 0; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='14' viewBox='0 0 80 14'%3E%3Cpath d='M0 9 C10 3 20 3 30 8 S50 13 60 7 S75 3 80 9 V14 H0Z' fill='%23ffffff' fill-opacity='.55'/%3E%3Cpath d='M0 10 C12 6 22 6 32 9.5 S52 13 62 9 S76 6 80 10' fill='none' stroke='%23ffffff' stroke-width='1.6'/%3E%3C/svg%3E") repeat-x 0 0 / 80px 14px, linear-gradient(180deg, rgba(255,255,255,.45), rgba(255,255,255,0) 30px) 0 10px / 100% 40px no-repeat;
+  translate: 0 100%; animation: fldCrest 2.3s cubic-bezier(.3,.1,.3,1) forwards, fldWave .8s linear infinite; }
+@keyframes fldCrest { 0% { translate: 0 100%; } 22% { translate: 0 calc(62% - 10px); } 40% { translate: 0 calc(53% - 10px); } 62% { translate: 0 calc(29% - 10px); } 78% { translate: 0 calc(17% - 10px); } 100% { translate: 0 -24px; } }
+@keyframes fldWave { to { background-position: 80px 0, 0 10px; } }
+.planview.flooded .field::before { clip-path: none; animation: fldDrain 1.25s ease-out forwards; }
+@keyframes fldDrain { 0% { opacity: 1; filter: brightness(1.35) saturate(1.1); } 18% { opacity: 1; filter: brightness(1); } 100% { opacity: 0; } }
+.planview.flood .field .sp-in, .planview.flood .field .keeperspot > * { animation: fldHide .34s cubic-bezier(.5,0,.75,0) forwards; }
+.planview.flood .field .keeperspot > * { animation-delay: .05s; }
+.planview.flood .field .spot[data-line="A"] .sp-in { animation-delay: calc(.32s + var(--ci, 0) * 30ms); }
+.planview.flood .field .spot[data-line="M"] .sp-in { animation-delay: calc(.78s + var(--ci, 0) * 30ms); }
+.planview.flood .field .spot[data-line="V"] .sp-in { animation-delay: calc(1.3s + var(--ci, 0) * 30ms); }
+.planview.flood .field .exitspot { display: none; }
+@keyframes fldHide { to { scale: .35; opacity: 0; } }
+.planview.flooded .field .sp-in, .planview.flooded .field .keeperspot > * { animation: fldPop .62s var(--spring-play) both; }
+.planview.flooded .field .spot[data-line="A"] .sp-in { animation-delay: calc(.08s + var(--ci, 0) * 45ms); }
+.planview.flooded .field .spot[data-line="M"] .sp-in { animation-delay: calc(.2s + var(--ci, 0) * 45ms); }
+.planview.flooded .field .spot[data-line="V"] .sp-in { animation-delay: calc(.32s + var(--ci, 0) * 45ms); }
+@keyframes fldPop { from { scale: .25; opacity: 0; } to { scale: 1; opacity: 1; } }
+.reduce .ptv.wob i, .reduce .msw.thinking .msw-a svg { animation: none !important; }
 .reduce .msw.thinking .msw-fill { animation-duration: .01s !important; }
-@media (prefers-reduced-motion: reduce) { .planview.thinking .field .spot .sp-in, .planview.thinking .benchrow .benchpill, .planview.thinking .fieldbox::after, .planview.settled .field .pill, .ptv.wob i, .msw.thinking .msw-a svg { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .ptv.wob i, .msw.thinking .msw-a svg { animation: none !important; } }
 .pt-skel { display: flex; align-items: center; gap: 6px; height: 22px; }
 .pt-skel i { height: 12px; border-radius: 99px; background: linear-gradient(90deg, #E6EAF3 0%, #F4F6FB 40%, #E6EAF3 80%); background-size: 200% 100%; animation: ptSkel 1s linear infinite; }
 .pt-skel i:first-child { width: 38px; } .pt-skel i:last-child { width: 84px; }
@@ -2646,27 +2670,11 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 /* in rust: staafjes over de hele knop als zachte achtergrond (kort links, lang rechts), die rustig ademen; af en toe
    trekt er een lichtstreep overheen. Ervoor het profiel, het bereik en 'speeltijd'. */
 .ptbtn { container-type: inline-size; isolation: isolate; }
-.ptb-bg { position: absolute; inset: 0; z-index: -1; display: flex; align-items: flex-end; gap: 2px; padding: 0 6px; transition: opacity .3s ease; }
-.ptb-bg i { flex: 1 1 0; height: calc(var(--h) * 64%); border-radius: 5px 5px 2px 2px; transform-origin: bottom;
-  background: linear-gradient(to top, color-mix(in srgb, var(--c) 46%, transparent), color-mix(in srgb, var(--c) 10%, transparent));
-  animation: ptBreath 3.6s ease-in-out infinite; animation-delay: calc(var(--k) * -0.45s); transition: height .7s var(--spring-soft); }
 @keyframes ptBreath { 0%, 100% { scale: 1 1; } 50% { scale: 1 .9; } }
-.ptb-bg::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 0%, rgba(255,255,255,.75) 50%, transparent 100%); background-size: 40% 100%; background-repeat: no-repeat; background-position: -60% 0; animation: ptSweep 5.5s ease-in-out 1.5s infinite; }
 @keyframes ptSweep { 0%, 55% { background-position: -60% 0; } 85%, 100% { background-position: 160% 0; } }
-.ptbtn.open .ptb-bg { opacity: 0; }
-.ptb-sum { position: relative; flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 0; min-width: 0; transition: opacity .2s ease; }
+.ptb-sum { position: relative; flex: 1 1 auto; display: flex; align-items: center; gap: 7px; min-width: 0; transition: opacity .2s ease; }
 .ptbtn.open .ptb-sum { position: absolute; opacity: 0; pointer-events: none; }
-.ptb-prof { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 11px; font-weight: 900; line-height: 14px; color: var(--ai-ink, #4C2FD6); white-space: nowrap; }
-.ptbtn.own .ptb-prof { color: var(--blue); }
-.ptb-prof .pl-full { display: none; } .ptb-prof .pl-short { overflow: hidden; text-overflow: ellipsis; }
-@container (min-width: 128px) { .ptb-prof .pl-full { display: inline; overflow: hidden; text-overflow: ellipsis; } .ptb-prof .pl-short { display: none; } }
-.ptb-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: linear-gradient(135deg, #7C5CFF, #14B8A6); animation: ptDot 2.4s ease-in-out infinite; }
-.ptbtn.own .ptb-dot { background: var(--blue); }
 @keyframes ptDot { 0%, 100% { box-shadow: 0 0 0 0 rgba(124,92,255,.5); } 50% { box-shadow: 0 0 0 4px rgba(124,92,255,0); } }
-.ptb-sum b { font-size: 18px; font-weight: 900; line-height: 22px; white-space: nowrap; text-shadow: 0 0 6px #fff, 0 0 2px #fff; }
-.ptb-sum small { font-size: 11px; font-weight: 800; line-height: 13px; color: var(--muted); text-shadow: 0 0 4px #fff; }
-.reduce .ptb-bg i, .reduce .ptb-bg::after, .reduce .ptb-dot { animation: none !important; }
-@media (prefers-reduced-motion: reduce) { .ptb-bg i, .ptb-bg::after, .ptb-dot { animation: none !important; } }
 .ptb-lines { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 4px; animation: sqText .35s .12s var(--ease-out) both; }
 .ptb-t { font-size: 12px; font-weight: 900; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ptbtn.done .ptb-t { color: #15803D; }
@@ -2874,3 +2882,62 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 .bfv-bench.st .bb-i em { color: var(--muted); }
 /* laatste label (verdediging) mag naar links uitlopen in plaats van afgekapt te worden */
 .ptb-c:last-child small { overflow: visible; text-overflow: clip; direction: rtl; text-align: left; padding-left: 0; padding-right: 4px; }
+
+/* v0.29: wisselprofiel als standaard vastzetten (speld), en de koppeling met het wedstrijdscherm */
+.prof { position: relative; }
+.prof .prof-btn { padding-right: 52px; }
+.prof.pinned .prof-btn { padding-right: 118px; }
+.prof-pin { position: absolute; z-index: 1; top: 8px; right: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 40px; height: 34px; padding: 0 10px; border: none; border-radius: 99px; background: transparent; color: #A3ADC2; font: inherit; font-size: 12px; font-weight: 900; transition: background-color var(--t-small) ease, color var(--t-small) ease; }
+.prof-pin svg { rotate: 35deg; transition: rotate var(--t-screen) var(--spring-play); }
+.prof-pin.on { color: #fff; background: var(--blue); box-shadow: 0 4px 10px -4px rgba(31,60,136,.6); }
+.prof-pin.on svg { rotate: 0deg; }
+.prof-defnote { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: 14px; background: var(--bg); color: var(--muted); font-size: 13.5px; line-height: 1.35; }
+.prof-defnote svg { flex: none; margin-top: 2px; }
+.prof-defnote.set { color: var(--ink); background: var(--blue-tint); }
+.prof-defnote.set svg { color: var(--blue); }
+/* v0.29: wisselprofiel naast de schakelaar (waar eerst de ⓘ stond) */
+.profchip { position: relative; flex: none; display: flex; align-items: center; gap: 4px; width: 108px; height: 50px; margin-top: 8px; padding: 0 8px 0 12px; border: 1.5px solid transparent; border-radius: 18px; background: linear-gradient(#fff, #fff) padding-box, linear-gradient(var(--line), var(--line)) border-box; box-shadow: 0 6px 16px -10px rgba(17,24,39,.25); font: inherit; text-align: left; color: var(--ink); }
+.profchip.ai { background: linear-gradient(#fff, #fff) padding-box, var(--ai-lin) border-box; box-shadow: 0 6px 16px -10px rgba(124,92,255,.45); }
+/* 'profiel' staat als label op de rand, net als '✦ aanbevolen' bij de schakelaar */
+.profchip small { position: absolute; top: -9px; left: 10px; padding: 1px 7px; border-radius: 99px; background: #fff; box-shadow: 0 0 0 1.5px var(--line); font-size: 10.5px; font-weight: 900; letter-spacing: .02em; line-height: 1.25; color: var(--muted); pointer-events: none; }
+.profchip.ai small { color: #5B21B6; box-shadow: 0 0 0 1.5px #C4B5FD; }
+.profchip b { flex: 1 1 auto; min-width: 0; font-size: 13.5px; font-weight: 900; line-height: 1.1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; animation: pchipIn .4s var(--spring-play) both; }
+@keyframes pchipIn { from { opacity: 0; translate: 0 5px; } }
+.profchip-ch { flex: none; display: grid; place-items: center; color: var(--blue); }
+.profchip-ch svg { rotate: 90deg; }
+.profchip.ai .profchip-ch { color: #6D4AFF; }
+.msw-row .msw { min-width: 0; }
+@media (max-width: 420px) { .msw-b:has(.msw-st) > svg:first-child { display: none; } .msw button { font-size: 14.5px; } }
+.pfs { display: flex; flex-direction: column; gap: 8px; }
+.pfs-o { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 16px; background: #fff; font: inherit; color: inherit; text-align: left; transition: border-color var(--t-small) ease, background-color var(--t-small) ease; }
+.pfs-o.on { border-color: var(--blue); background: linear-gradient(180deg, var(--blue-tint), #fff 90px); }
+.pfs-o.on .prof-radio { border-color: var(--blue); }
+.pfs-o.on .prof-radio::after { scale: 1; }
+.pfs-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pfs-t b { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 16px; font-weight: 900; }
+.pfs-def { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 99px; font-style: normal; font-size: 11px; font-weight: 900; color: var(--blue); background: var(--blue-tint); }
+.pfs-mini { font-size: 12.5px; font-weight: 800; color: var(--blue); }
+.reduce .profchip b { animation: none; }
+
+/* v0.29: Speeltijd in rust = stopwatch + bereik. De boog is de gemiddelde speeltijd als deel van de wedstrijd
+   (groen binnen de marge, oranje erbuiten); de wijzer loopt rustig rond en de boog glanst af en toe. */
+.ptbtn { padding-left: 9px; padding-right: 8px; }
+.ptw { flex: none; width: 34px; height: 34px; }
+.ptw svg { width: 100%; height: 100%; overflow: visible; }
+.ptw-crown { fill: var(--blue); }
+.ptbtn:not(.own) .ptw-crown { fill: #6D4AFF; }
+.ptw-tr { fill: none; stroke: #E6EAF3; stroke-width: 4; }
+.ptw-fl { fill: none; stroke: #16A34A; stroke-width: 4; stroke-linecap: round; stroke-dashoffset: var(--off); transform: rotate(-90deg); transform-origin: 17px 19px; transition: stroke-dashoffset .8s var(--ease-out), stroke .3s ease; animation: ptwIn 1s var(--ease-out) both, ptwGlow 4.5s 1.2s ease-in-out infinite; }
+.ptw.warn .ptw-fl { stroke: #EA8A0C; }
+@keyframes ptwIn { from { stroke-dashoffset: 72.3; } }
+@keyframes ptwGlow { 0%, 70%, 100% { filter: none; } 82% { filter: drop-shadow(0 0 3px rgba(22,163,74,.75)); } }
+.ptw-hand line { stroke: var(--ink); stroke-width: 1.8; stroke-linecap: round; }
+.ptw-hand { transform-origin: 17px 19px; animation: ptwTick 12s steps(60) infinite; }
+@keyframes ptwTick { to { rotate: 360deg; } }
+.ptw-c { fill: var(--ink); }
+.ptb-txt { display: flex; flex-direction: column; min-width: 0; }
+.ptb-txt small { font-size: 11.5px; font-weight: 900; line-height: 14px; color: var(--muted); white-space: nowrap; }
+.ptb-txt b { font-size: 16px; font-weight: 900; line-height: 20px; white-space: nowrap; letter-spacing: -.02em; }
+@container (max-width: 104px) { .ptb-txt b { font-size: 15px; } .ptw { width: 30px; height: 30px; } .ptb-sum { gap: 5px; } }
+.reduce .ptw-fl, .reduce .ptw-hand { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .ptw-fl, .ptw-hand { animation: none !important; } }
