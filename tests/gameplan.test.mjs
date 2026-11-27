@@ -59,24 +59,30 @@ assert.ok(match.gameplan.grid.every((p) => sameLines(p, start)), 'eerste blok lo
 assert.equal(match.plan.steps.filter((s) => s.type === 'swap').length, 0, 'zelfde blokken: geen wissels');
 assert.ok(sameLines(match.events[0].pos, start), 'startopstelling = eerste blok');
 
-// ---------- een blok aanpassen werkt niet door ----------
+// ---------- een blok aanpassen: blokken die je nog niet aanraakte lopen mee (v0.27) ----------
 const bench = field.filter((id) => !(id in start));
 const outV = Object.keys(start).find((id) => start[id] === 'V');
 const b1 = { ...start }; delete b1[outV]; b1[bench[0]] = 'V';
 M.gpSetBlock(match, team, 1, b1);
-assert.ok(sameLines(match.gameplan.grid[2], start), 'blok 3 blijft zoals het was');
+assert.ok(sameLines(match.gameplan.grid[2], b1), 'blok 3 loopt mee met blok 2');
 let st = M.gpStats(match, team);
 assert.equal(st.blocks[1].swaps, 1);
-assert.equal(st.blocks[2].swaps, 1, 'terug naar de basis is ook een wissel');
+assert.equal(st.blocks[2].swaps, 0, 'geen wissel terug');
 let sw = match.plan.steps.filter((s) => s.type === 'swap');
-assert.deepEqual(sw.map((s) => [s.t, s.out, s.in]), [[blocks[1].t, outV, bench[0]], [blocks[2].t, bench[0], outV]]);
+assert.deepEqual(sw.map((s) => [s.t, s.out, s.in]), [[blocks[1].t, outV, bench[0]]]);
+// een blok dat de coach al zette, blijft staan en stopt het meelopen
+const b0back = { ...start };
+M.gpSetBlock(match, team, 3, b0back);
+M.gpSetBlock(match, team, 1, b1);
+assert.ok(sameLines(match.gameplan.grid[3], start), 'eigen blok blijft staan');
+M.gpSetBlock(match, team, 3, b1);
 // doortrekken tot het eind van de periode
 const n = M.gpExtend(match, team, 1, false);
 assert.equal(n, 2);
 assert.ok(sameLines(match.gameplan.grid[3], b1));
 st = M.gpStats(match, team);
 assert.equal(st.blocks[2].swaps + st.blocks[3].swaps, 0);
-assert.equal(st.kids[bench[0]].blocks, 3, 'drie blokken gespeeld');
+assert.equal(st.kids[bench[0]].blocks, blocks.length - 1, 'speelt vanaf blok 2 tot het eind (loopt mee)');
 
 // ---------- onvolledig blok telt als ongewijzigd ----------
 const inc = { ...b1 }; delete inc[bench[0]];

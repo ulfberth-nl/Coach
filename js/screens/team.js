@@ -3,12 +3,12 @@ import { update, activeTeam, currentMatch, newTeam, exportData, importData } fro
 import { periodWord } from '../match.js';
 import { suggestKeeper } from './home.js';
 import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, Reveal, toast, STANDS, appInfo } from '../ui.js';
-import { devicePrefs, setDevicePref, onDevicePrefs, osReduced } from '../motion.js';
+import { devicePrefs, setDevicePref, onDevicePrefs, osReduced, haptic } from '../motion.js';
 import { PROFILES, PROFILE_ORDER, profileOf, cachedTune, rememberTune, consequences } from '../profiles.js';
 import { compute } from '../compute.js';
 import { scheduleRefresh } from '../refresh.js';
 
-export const APP_VERSION = '0.26.3';
+export const APP_VERSION = '0.27.0';
 
 // regels die het wisselprofiel bepaalt; zet je er zelf een, dan wordt het profiel 'Eigen'
 const TUNED = ['marge', 'equalTime', 'evenOften', 'maxBenchOn', 'maxBench', 'minInterval', 'turnsPerPeriod', 'priority', 'strongBias'];
@@ -91,6 +91,19 @@ function ProfileCard({ k, on, r, ref0, n, onPick, stale }) {
 }
 
 // logo verkleinen tot 256 px zodat het licht blijft in de opslag
+// Voorkeursindelingen voor N veldspelers: elke linie minstens één, de meest evenwichtige eerst (achter vóór voor).
+export function formationsFor(n) {
+  const out = [];
+  if (n < 3) { for (let a = 0; a <= n; a++) for (let m = 0; m <= n - a; m++) out.push({ A: a, M: m, V: n - a - m }); return out.slice(0, 4); }
+  for (let a = 1; a <= n - 2; a++) for (let m = 1; m <= n - a - 1; m++) { const v = n - a - m; if (v >= 1 && a <= 5 && m <= 5 && v <= 5) out.push({ A: a, M: m, V: v }); }
+  const avg = n / 3;
+  const dev = (f) => Math.abs(f.A - avg) + Math.abs(f.M - avg) + Math.abs(f.V - avg);
+  return out.sort((x, y) => dev(x) - dev(y) || (y.A - y.V) - (x.A - x.V) || y.M - x.M).slice(0, 6);
+}
+function FormMini({ f }) {
+  return html`<span class="mini-f" aria-hidden="true">${['V', 'M', 'A'].map((l) => html`<span class="mf-r" key=${l}>${Array.from({ length: f[l] || 0 }, (_, i) => html`<i key=${i} class=${'l' + l}></i>`)}</span>`)}</span>`;
+}
+
 function readLogo(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -160,6 +173,20 @@ export function Team({ state }) {
     t.formation = `${next.A}-${next.M}-${next.V}`;
   });
   const F = team.lines.A + team.lines.M + team.lines.V;
+  // aantal veldspelers: erbij gaat naar de kleinste linie (eerst midden), eraf van de grootste (eerst midden)
+  const setField = (n) => set((t) => {
+    const l = { ...t.lines };
+    let cur = l.A + l.M + l.V;
+    while (cur < n) { const k = ['M', 'A', 'V'].reduce((b, x) => (l[x] < l[b] ? x : b), 'M'); l[k]++; cur++; }
+    while (cur > n) { const k = ['M', 'V', 'A'].reduce((b, x) => (l[x] > l[b] ? x : b), 'M'); if (l[k] <= 0) break; l[k]--; cur--; }
+    t.lines = l;
+    t.formation = `${l.A}-${l.M}-${l.V}`;
+  });
+  const setForm = (f) => set((t) => { t.lines = { A: f.A, M: f.M, V: f.V }; t.formation = `${f.A}-${f.M}-${f.V}`; });
+  const forms = formationsFor(F);
+  const fKey = (f) => `${f.A}-${f.M}-${f.V}`;
+  if (!forms.some((f) => fKey(f) === fKey(team.lines))) forms.unshift({ ...team.lines });
+  const [ownForm, setOwnForm] = useState(false);
 
   const download = () => {
     const blob = new Blob([exportData()], { type: 'application/json' });
@@ -237,11 +264,22 @@ export function Team({ state }) {
       ${locked && html`<span class="small" style="color:var(--ink)">Tijdens een wedstrijd kun je de spelvorm niet aanpassen.</span>`}
       <fieldset disabled=${locked} style="border:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px">
         <${Seg} label="Veld of zaal" value=${team.type} onChange=${(v) => set((t) => { t.type = v; const f = t.lines.A + t.lines.M + t.lines.V; t.rules.perMoment = v === 'zaal' ? Math.min(5, f) : 1; })} options=${[['veld', 'Veld'], ['zaal', 'Zaal']]} />
+        <div class="sv-head">
+          <span class="sv-big num">${F}${team.keeper ? html`<span> + keeper</span>` : html`<span> veldspelers</span>`}</span>
+          <span class="small">${F + (team.keeper ? 1 : 0)} tegen ${F + (team.keeper ? 1 : 0)}</span>
+        </div>
+        <${Setting} title="Veldspelers" sub="zonder keeper"><${Stepper} label="Veldspelers" value=${F} min=${1} max=${10} onChange=${setField} /></${Setting}>
         <${Setting} title="Met keeper"><${Switch} label="Met keeper" on=${team.keeper} onChange=${(v) => set((t) => { t.keeper = v; })} /></${Setting}>
-        <${Setting} title="Achter"><${Stepper} label="Achter" value=${team.lines.A} min=${0} max=${5} onChange=${(v) => setLines('A', v)} /></${Setting}>
-        <${Setting} title="Midden"><${Stepper} label="Midden" value=${team.lines.M} min=${0} max=${5} onChange=${(v) => setLines('M', v)} /></${Setting}>
-        <${Setting} title="Voor"><${Stepper} label="Voor" value=${team.lines.V} min=${0} max=${5} onChange=${(v) => setLines('V', v)} /></${Setting}>
-        <span class="small">${F + (team.keeper ? 1 : 0)} tegen ${F + (team.keeper ? 1 : 0)} · opstelling ${team.lines.A}-${team.lines.M}-${team.lines.V}${team.keeper ? ' plus keeper' : ''}</span>
+        <span class="label" style="margin-top:6px">Voorkeursindeling over de linies</span>
+        <div class="sv-forms" role="radiogroup" aria-label="Voorkeursindeling">${forms.map((f) => html`<button type="button" key=${fKey(f)} role="radio" aria-checked=${fKey(f) === fKey(team.lines) ? 'true' : 'false'}
+          class=${'sv-f' + (fKey(f) === fKey(team.lines) ? ' on' : '')} onClick=${() => { haptic('select'); setForm(f); }}><${FormMini} f=${f} /><b class="num">${fKey(f)}</b></button>`)}</div>
+        <span class="small">Achter-midden-voor. Hiermee begint Autopilot en zo staan nieuwe wedstrijden klaar. In de wedstrijd kun je ervan afwijken door een speler naar een andere linie te slepen; de app rekent dan mee.</span>
+        <button type="button" class="link" style="align-self:flex-start" onClick=${() => setOwnForm(!ownForm)}>${ownForm ? 'Klaar' : 'Zelf per linie instellen'}</button>
+        <${Reveal} open=${ownForm}><div class="col" style="gap:6px">
+          <${Setting} title="Achter"><${Stepper} label="Achter" value=${team.lines.A} min=${0} max=${5} onChange=${(v) => setLines('A', v)} /></${Setting}>
+          <${Setting} title="Midden"><${Stepper} label="Midden" value=${team.lines.M} min=${0} max=${5} onChange=${(v) => setLines('M', v)} /></${Setting}>
+          <${Setting} title="Voor"><${Stepper} label="Voor" value=${team.lines.V} min=${0} max=${5} onChange=${(v) => setLines('V', v)} /></${Setting}>
+        </div></${Reveal}>
         <${Setting} title="Aantal periodes" sub=${team.periods === 2 ? 'helften' : team.periods === 4 ? 'kwarten' : 'periodes'}><${Stepper} label="Aantal periodes" value=${team.periods} min=${1} max=${4} onChange=${(v) => set((t) => { t.periods = v; })} /></${Setting}>
         <${Setting} title="Minuten per periode"><${Stepper} label="Minuten per periode" value=${team.periodMin} min=${5} max=${45} onChange=${(v) => set((t) => { t.periodMin = v; })} /></${Setting}>
       </fieldset>

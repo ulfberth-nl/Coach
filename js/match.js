@@ -1694,6 +1694,10 @@ export function gpSetBlock(match, team, b, pos, src = 'coach') {
   if (!gp.base && b === 0 && gpComplete(match, team, pos)) {
     for (let k = 1; k < gp.grid.length; k++) { gp.grid[k] = { ...pos }; gp.src[k] = 'base'; }
     gp.base = true;
+  } else if (gp.base) {
+    // blokken die je nog niet aanraakte, lopen mee met dit blok (zoals een wissel blijft staan tot je weer wisselt),
+    // tot het eerste blok dat jij of de app al invulde
+    for (let k = b + 1; k < gp.grid.length && gp.src[k] === 'base'; k++) gp.grid[k] = { ...pos };
   }
   gpSync(match, team);
 }

@@ -1263,7 +1263,8 @@ function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet, think 
     setAsk('start');
   };
   const toZelf = () => {
-    if (own) return;
+    // staat Zelf plannen al aan: dan is een tik 'naar mijn game plan'
+    if (own) { haptic('select'); go('/plan'); return; }
     haptic('select');
     setPend('z');
     if (!devicePrefs().seenZelf) { setAsk('compare'); return; }
@@ -1332,20 +1333,25 @@ function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet, think 
   }, []);
   const range = plan && plan.fair ? (M.mins(plan.fair.minPlayed) === M.mins(plan.fair.maxPlayed) ? `${M.mins(plan.fair.minPlayed)}` : `${M.mins(plan.fair.minPlayed)}–${M.mins(plan.fair.maxPlayed)}`) : '';
   const full = st ? st.blocks.filter((b) => b.ok).length : 0;
+  // status van het game plan in de knop zelf: leeg, nog niet alle blokken vol, buiten de marge, of klaar
+  const marge = (M.effRules(match, team).marge || 5) * 60;
+  const gpState = !st ? { ok: false, short: 'leeg', say: 'plan is nog leeg', key: 'e' }
+    : full < st.blocks.length ? { ok: false, short: `${full}/${st.blocks.length}`, say: `${full} van ${st.blocks.length} blokken vol`, key: 'f' + full }
+    : st.max - st.min > marge + 30 ? { ok: false, short: '!', say: 'speeltijd buiten de marge', key: 'm' }
+    : { ok: true, key: 'ok' };
   return html`<section class="modesw">
     <div class="msw-row">
       <div class=${'msw' + (z ? ' z' : '') + (!z && think ? ' ' + (think.phase === 'run' ? 'thinking' : 'done') : '')} role="radiogroup" aria-label="Hoe wissel je?" ref=${swRef} aria-busy=${!z && think && think.phase === 'run' ? 'true' : 'false'}>
         <span class="msw-tag" aria-hidden="true">✦ aanbevolen</span>
         <span class="msw-th" aria-hidden="true"><span class="ai-sparks"><i></i><i></i><i></i><i></i></span>${!z && think && html`<span class="msw-fill" key=${'f' + think.k}></span>`}</span>
         <button type="button" role="radio" aria-checked=${z ? 'false' : 'true'} class="msw-a" onClick=${toAuto}><${Icon} name="spark" size=${16} />Autopilot</button>
-        <button type="button" role="radio" aria-checked=${z ? 'true' : 'false'} class="msw-b" onClick=${toZelf}><${Icon} name="edit" size=${15} />Zelf plannen</button>
+        <button type="button" role="radio" aria-checked=${z ? 'true' : 'false'} class="msw-b" onClick=${toZelf}
+          aria-label=${'Zelf plannen' + (own ? (gpState.ok ? ', plan klaar' : ', ' + gpState.say) + '. Tik om je game plan te openen' : '')}>
+          <${Icon} name="edit" size=${15} />Zelf plannen${own && html`<span class=${'msw-st ' + (gpState.ok ? 'ok' : 'todo')} key=${gpState.key} aria-hidden="true">${gpState.ok ? html`<${Icon} name="check" size=${11} />` : gpState.short}</span>`}
+        </button>
       </div>
       <button type="button" class="msw-i" aria-label="Uitleg: Autopilot en Zelf plannen" onClick=${() => { haptic('select'); onTour(); }}><${Icon} name="info" size=${19} /></button>
     </div>
-    ${own && html`<div class="msum" key="z">
-      <button type="button" class="msum-t" onClick=${() => onSheet('speeltijd')}>${st ? html`<${Icon} name="chart" size=${14} />${full}/${st.blocks.length} blokken vol` : 'Je plan is nog leeg'}</button>
-      <button type="button" class="msum-go" onClick=${() => go('/plan')}>${st ? 'Open game plan' : 'Maak je plan'}<${Icon} name="chev" size=${14} /></button>
-    </div>`}
     ${ask === 'compare' && html`<${Sheet} onClose=${() => { seen(); done(); }} label="Zelf plannen of Autopilot">
       <span class="h2" style="font-size:22px">Zelf plannen?</span>
       <span class="sub">Zo verschillen de twee manieren. Je kunt altijd terug.</span>

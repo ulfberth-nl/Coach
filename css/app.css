@@ -2688,3 +2688,115 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 .setuprow .sq-t { overflow: hidden; }
 .setuprow .sq-t b, .setuprow .sq-lab { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .setuprow { align-items: stretch; }
+
+/* ---------- v0.27: status van het game plan in de knop Zelf plannen ---------- */
+.msw-st { display: inline-grid; place-items: center; min-width: 20px; height: 20px; margin-left: 4px; padding: 0 6px; border-radius: 99px; font-size: 11px; font-weight: 900; letter-spacing: 0; animation: mswSt .45s var(--spring-play) both; }
+.msw-st.todo { color: var(--ink); background: var(--orange); box-shadow: 0 0 0 2px rgba(255,255,255,.25); }
+.msw-st.ok { width: 20px; padding: 0; color: #fff; background: #16A34A; box-shadow: 0 0 0 2px rgba(255,255,255,.3); }
+.msw-st.ok svg { stroke-width: 3.4; }
+.msw:not(.z) .msw-st { display: none; }
+@keyframes mswSt { from { scale: .3; opacity: 0; } to { scale: 1; opacity: 1; } }
+.reduce .msw-st { animation: none; }
+
+/* ---------- v0.27: spelvorm als 'N + keeper' en voorkeursindeling ---------- */
+.sv-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 4px 2px 2px; }
+.sv-big { font-size: 26px; font-weight: 900; color: var(--blue); }
+.sv-big span { font-size: 17px; font-weight: 900; color: var(--ink); }
+.sv-forms { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.sv-f { display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 6px 10px 6px 6px; border: none; border-radius: 14px; color: var(--ink); background: var(--line-3); transition: background .25s ease, box-shadow .25s ease; }
+.sv-f .mini-f { width: 30px; height: 36px; padding: 3px; gap: 2px; border-radius: 7px; }
+.sv-f .mf-r i { width: 5px; height: 5px; box-shadow: 0 0 0 1px currentColor; }
+.sv-f b { font-size: 15px; font-weight: 900; }
+.sv-f.on { background: #fff; box-shadow: 0 0 0 2px var(--blue-2), 0 8px 18px -12px rgba(31,60,136,.6); }
+
+/* ---------- v0.27: Opzet: drie manieren om te beginnen ---------- */
+.oz-three { display: flex; flex-direction: column; gap: 8px; }
+.oz-row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 84px; padding: 12px; border-radius: 18px; border: 1.5px solid var(--line); background: #fff; text-align: left; color: var(--ink); overflow: hidden; transition: border-color var(--t-small) ease, box-shadow var(--t-small) ease, background var(--t-small) ease; }
+.oz-row > * { position: relative; z-index: 1; }
+.oz-row .oz-ico { flex: none; }
+.oz-row .oz-check { flex: none; }
+.oz-rt { font-size: 11px; font-weight: 900; letter-spacing: .02em; color: var(--muted); }
+.oz-row .oz-t { font-size: 16px; font-weight: 900; }
+.oz-row .oz-d { font-size: 13px; font-weight: 700; color: var(--muted); line-height: 1.35; }
+.oz-row.ai-tile { border: 1.5px solid transparent; background: linear-gradient(#fff, #fff) padding-box, var(--ai-conic) border-box; animation: aiSpin 5s linear infinite; }
+.oz-row.ai-tile.on { background: linear-gradient(160deg, #FCFBFF, #F1EDFF 55%, #E7F7F4) padding-box, var(--ai-conic) border-box; box-shadow: 0 16px 34px -16px rgba(124,92,255,.75), 0 0 0 4px rgba(124,92,255,.12); animation: aiSpin 2.4s linear infinite; }
+.oz-row.ai-tile .ai-aurora { position: absolute; z-index: 0; }
+.oz-row.ai-tile.on .ai-aurora { opacity: 1; }
+.oz-row.plain.on { border-color: var(--blue); box-shadow: 0 10px 24px -16px rgba(31,60,136,.6); }
+.oz-row.plain.on .oz-ico { background: var(--blue); color: #fff; }
+.oz-row.on .oz-check { background: var(--blue); border-color: var(--blue); color: #fff; animation: pop .35s var(--spring-play) both; }
+.oz-row.ai-tile.on .oz-check { background: var(--ai-lin); border-color: transparent; }
+.reduce .oz-row.ai-tile { animation: none; }
+
+/* ---------- v0.27: Zelf plannen op het veld past in één scherm ---------- */
+.gplan.fit { height: 100dvh; min-height: 0; overflow: hidden; gap: 8px; padding-bottom: calc(84px + var(--safe-b)); }
+.gplan.fit .plbar { min-height: 44px; }
+.gplan.fit .gp-prog { position: relative; top: auto; padding: 6px 10px 2px; }
+.gplan.fit .gp-step { flex: 1 1 auto; min-height: 0; gap: 6px; }
+.gplan.fit .gp-board { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+.gplan.fit .bfv.inline { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+.gplan.fit .bfv-zone { flex: 1 1 auto; min-height: 0; gap: 6px; }
+.gplan.fit .bfv-field, .gplan.fit .bfv.inline:not(.start) .bfv-field { flex: 1 1 0; height: auto; min-height: 170px; }
+.gplan.fit .bfv-hint { display: none; }
+.gplan.fit .bfv-top { min-height: 40px; }
+.gplan.fit .gp-vsw { padding: 3px; } .gplan.fit .gp-vsw button { min-height: 34px; font-size: 13.5px; }
+.gplan.fit .gv-thumb { top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); }
+.bfv-field { position: relative; }
+.bfv-field > .gp-imp { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 4; width: auto; box-shadow: 0 10px 24px -12px rgba(17,24,39,.5); animation: impIn .4s var(--spring-soft) both, impOut .5s ease-in 6s forwards; }
+@keyframes impIn { from { opacity: 0; translate: 0 10px; } }
+@keyframes impOut { to { opacity: 0; translate: 0 8px; pointer-events: none; visibility: hidden; } }
+
+/* basisopstelling als één regel boven het veld */
+.gpb-row { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px; margin: 0 -2px; flex: none; }
+.gpb-row .gpb-c { min-height: 40px; padding: 4px 12px 4px 4px; gap: 6px; border-radius: 14px; }
+.gpb-row .gpb-c .mini-f { width: 24px; height: 30px; padding: 2px; gap: 1px; border-radius: 6px; }
+.gpb-row .gpb-c .mf-r i { width: 4px; height: 4px; box-shadow: 0 0 0 1px currentColor; }
+.gpb-row .gpb-c b { font-size: 13.5px; }
+.gpb-row .gpb-c small { font-size: 11.5px; }
+.gpb-row .gpb-c.save { padding-left: 10px; }
+.gpb-row .gpb-none { align-self: center; font-size: 12.5px; }
+.gpb-name { flex: none; }
+
+/* kerncijfers van het plan boven het veld, met een kort verschil na elke zet */
+.bfv-kpi { flex: none; display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 6px; }
+.bfv-kpi .kp { position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; min-width: 0; min-height: 44px; padding: 4px 10px; border: none; border-radius: 14px; text-align: left; color: var(--ink); background: #fff; box-shadow: 0 0 0 1px var(--line); }
+.bfv-kpi .kp small { font-size: 10.5px; font-weight: 900; color: var(--muted); white-space: nowrap; }
+.bfv-kpi .kp b { font-size: 15px; font-weight: 900; white-space: nowrap; }
+.bfv-kpi .kp.ok b { color: var(--ink); }
+.bfv-kpi .kp.warn { background: #FFF6EA; box-shadow: 0 0 0 1px rgba(245,165,36,.55); }
+.bfv-kpi .kp.warn b { color: #9A4A07; }
+.bfv-kpi .kp.go { align-items: center; padding: 4px 12px; color: var(--blue); background: var(--blue-tint); box-shadow: none; }
+.bfv-kpi .kp.go small { color: var(--blue); }
+.kd { position: absolute; top: -7px; right: 4px; padding: 1px 6px; border-radius: 99px; font-style: normal; font-size: 11px; font-weight: 900; color: #fff; animation: kdIn 2.4s ease both; }
+.kd.good { background: #16A34A; } .kd.bad { background: #EA580C; }
+@keyframes kdIn { 0% { opacity: 0; translate: 0 6px; scale: .7; } 12% { opacity: 1; translate: 0 0; scale: 1.1; } 20% { scale: 1; } 80% { opacity: 1; } 100% { opacity: 0; translate: 0 -4px; } }
+/* minuten onder de spelers en op de bank */
+.bf-tag .mn { padding: 0 5px; border-radius: 99px; font-style: normal; font-size: 10.5px; font-weight: 900; color: #fff; background: rgba(17,24,39,.55); }
+.bf-tag .mn.ok { background: #15803D; } .bf-tag .mn.low { background: #EA580C; } .bf-tag .mn.high { background: #2563EB; }
+.benchpill .t.ok { color: #15803D; } .benchpill .t.low { color: #C2410C; } .benchpill .t.high { color: #1D4ED8; }
+.benchpill .t.run { margin-left: 4px; color: var(--muted); } .benchpill .t.run.warn { color: #C2410C; }
+.benchrow.over { box-shadow: inset 0 0 0 2px rgba(245,165,36,.6); border-radius: 16px; }
+.dr-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.reduce .kd, .reduce .bfv-field > .gp-imp { animation: none !important; }
+.bf-over { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 4; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.bf-over > * { pointer-events: auto; }
+.bf-over > .gp-imp { position: static; width: auto; box-shadow: 0 10px 24px -12px rgba(17,24,39,.5); animation: impIn .4s var(--spring-soft) both, impOut .5s ease-in 6s forwards; }
+.bfv.inline .bfv-sel { min-height: 44px; padding: 4px 6px 4px 8px; box-shadow: 0 10px 24px -12px rgba(17,24,39,.6); }
+.bfv.inline .bfv-sel .gsb-lvl { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bfv.inline .bfv-sel .gsb-strip { max-width: 34%; }
+/* lage schermen: alles een tikje compacter, zodat het veld groot genoeg blijft */
+@media (max-height: 760px) {
+  .gplan.fit { gap: 6px; }
+  .gplan.fit .gp-prog { padding: 4px 8px 4px; }
+  .gplan.fit .gp-prog .gq-l { display: none; }
+  .gplan.fit .gp-prog .gq { min-height: 12px; gap: 0; }
+  .gplan.fit .gp-vsw button { min-height: 30px; font-size: 13px; }
+  .gplan.fit .bfv-top { min-height: 34px; }
+  .gplan.fit .bfv-t small { display: none; }
+  .gplan.fit .bfv-t b { font-size: 15.5px; }
+  .gplan.fit .bfv-kpi .kp { min-height: 38px; padding: 2px 8px; }
+  .gplan.fit .bfv-kpi .kp b { font-size: 14px; }
+  .gplan.fit .bfv-pts { min-height: 0; }
+  .gplan.fit .bfp { padding: 3px 10px; font-size: 12px; }
+  .gplan.fit .gpb-row .gpb-c { min-height: 36px; }
+}
