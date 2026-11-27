@@ -6,7 +6,7 @@ import * as M from '../match.js';
 import { fitOf } from '../ownplanner.js';
 import { Icon, Sheet, Field, Portal, toast, go as goHash, accentFor, useDragSwap, BenchScroll } from '../ui.js';
 import { PlayTime } from '../playtime.js';
-import { haptic, reduced } from '../motion.js';
+import { haptic, reduced, devicePrefs, setDevicePref } from '../motion.js';
 import { mutate } from './live.js';
 import { NextBar, MiniScore } from './plan.js';
 
@@ -57,7 +57,7 @@ export function GamePlan({ match, team }) {
   const live = match.started && !match.finished;
   const gp = match.gameplan;
   const saved = match.ownSteps && match.ownSteps.at;
-  const [at, setAt] = useState(live ? 'wissels' : KEYS.indexOf(saved) !== -1 ? saved : gp && gp.base ? 'wissels' : 'opzet');
+  const [at, setAt] = useState(live ? 'wissels' : KEYS.indexOf(saved) !== -1 ? saved : gp && gp.base ? 'start' : 'opzet');
   const [dir, setDir] = useState(1);
   const [focus, setFocus] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -100,9 +100,11 @@ export function GamePlan({ match, team }) {
       await think(() => mutate((m, t) => { M.gpEnsure(m, t, n); M.gpFill(m, t); }), 900);
       setBusy(false);
       haptic('success');
-      toast('✦ Voorzet staat klaar. Pas aan wat je wilt.');
-      mutate((m) => { m.ownSteps = { ...(m.ownSteps || {}), done: { opzet: true, start: true }, at: 'wissels' }; });
-      setDir(1); setAt('wissels'); setFocus(null);
+      toast('✦ Voorzet staat klaar. Kijk eerst naar de startopstelling.');
+      // altijd eerst de startopstelling: daar begint je plan, daarna de wissels
+      mutate((m) => { m.ownSteps = { ...(m.ownSteps || {}), done: { opzet: true }, at: 'start' }; });
+      setDir(1); setAt('start'); setFocus(null);
+      requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'auto' }));
       return;
     }
     mutate((m, t) => { M.gpEnsure(m, t, n); M.gpSync(m, t); });
@@ -150,17 +152,16 @@ export function GamePlan({ match, team }) {
 
   // op het veld (startopstelling, of wissels op het veld): alles past in één scherm, zodat slepen nooit de pagina verschuift
   const fit = !wide && gp && (at === 'start' || (at === 'wissels' && gp.base && (view === 'veld' || ((live || match.finished) && view === 'veld'))));
-  return html`<main class=${'screen planner gplan' + (live ? ' is-live' : '') + (wide && board ? ' wide' : '') + (fit ? ' fit' : '')}>
+  return html`<main class=${'screen planner gplan' + (live ? ' is-live' : '') + (wide && board ? ' wide' : '') + (fit ? ' fit' : '') + (vsw ? ' ws' : '')}>
     <div class="topbar plbar">
       <a class="iconbtn" href="#/" aria-label="Terug naar de wedstrijd"><${Icon} name="back" /></a>
-      <span class="h2 grow">Game plan</span>
+      ${vsw || html`<span class="h2 grow">Game plan</span>`}
       ${wide && board && steps}
       ${wide && board && !live && nextBtn(true)}
       <${MiniScore} match=${match} team=${team} />
     </div>
     ${!(wide && board) && steps}
     ${live && gp && html`<p class="gp-livenote">Dit is je plan. Wisselen doe je in het live-scherm; daar volgt <b>Wissel nu</b> dit plan precies.</p>`}
-    ${vsw}
     <div class=${'gp-step ' + (dir > 0 ? 'fwd' : 'back')} key=${at}>${body}</div>
     ${!live && !(wide && board) && html`<div class="rt-foot">
       ${idx > 0 ? html`<button type="button" class="btn plain" onClick=${prev}>Vorige</button>` : html`<a class="btn plain" href="#/">Later</a>`}
@@ -215,7 +216,7 @@ function Opzet({ match, team, begin, setBegin, pickN, setPickN, recN }) {
   // tot dan glinsteren de keuzes. Bij een wijziging daarna (speelstijl) gaat het sneller.
   const firstRec = useRef(true);
   useEffect(() => {
-    setRec(null);
+    // de vorige uitkomst blijft staan tot de nieuwe er is: anders verspringt de pagina als je een tegel kiest
     const wait = reduced() ? 0 : firstRec.current ? 560 : 140;
     firstRec.current = false;
     if (recN) recN.current = null;
@@ -925,6 +926,23 @@ function WinsSheet({ match, team, onClose, onApplied }) {
 // Een blok op het veld. Schuiven zoals live: bank op veld = wissel, veld op veld = ruilen van linie, naar een
 // lege plek (+) = andere opstelling. Een wijziging geldt alleen voor dit blok. Veeg over het veld naar het blok
 // ervoor of erna; de gekozen speler blijft gekozen. Zelfde ongedaan-knop als het bord.
+// Ronde meter: volloopt tot de waarde; een streepje markeert het doel. Kleur: goed (groen), te weinig (oranje),
+// te veel (blauw), let op (oranje).
+function Ring({ frac, mark = null, state = 'ok', center, label, sub }) {
+  const R = 21, C = 2 * Math.PI * R;
+  const f = Math.max(0, Math.min(1, frac || 0));
+  // het svg staat al een kwartslag gedraaid (begin bovenaan), dus de hoek telt vanaf rechts zoals de vulling
+  const a = mark == null ? null : Math.max(0, Math.min(1, mark)) * 2 * Math.PI;
+  return html`<span class=${'pc-ring ' + state}>
+    <span class="pc-g"><svg viewBox="0 0 52 52" aria-hidden="true">
+      <circle class="tr" cx="26" cy="26" r=${R} />
+      <circle class="fl" cx="26" cy="26" r=${R} style=${`stroke-dasharray:${C.toFixed(1)};--off:${(C * (1 - f)).toFixed(1)}`} />
+      ${a != null && html`<line class="mk" x1=${26 + Math.cos(a) * 17} y1=${26 + Math.sin(a) * 17} x2=${26 + Math.cos(a) * 26} y2=${26 + Math.sin(a) * 26} />`}
+    </svg><b class=${'num' + (String(center).length > 3 ? ' long' : '')}>${center}</b></span>
+    <span class="pc-l"><small>${label}</small><em>${sub}</em></span>
+  </span>`;
+}
+
 // inline = op de pagina zelf (Zelf plannen: startopstelling en wissels op het veld), anders als laag over het bord.
 // start = de startopstelling: alleen het eerste blok, zonder bladeren.
 function BlockField({ match, team, b, setB, combine, apply, undo, canUndo, pushHist, sel, setSel, need, readOnly, impactEl, onClose, inline = false, start = false, head = null, onFill = null, busy = false, wins = 0, onWins = null }) {
@@ -1057,6 +1075,7 @@ function BlockField({ match, team, b, setB, combine, apply, undo, canUndo, pushH
   }, [b]);
   const [dir, setDir] = useState(0);
   const go = (d) => { const n = b + d; if (n < 0 || n >= blocks.length) { haptic('no'); return; } haptic('select'); setDir(d); setB(n); };
+  useEffect(() => { if (inline && sel && !devicePrefs().seenAttnTip) setDevicePref('seenAttnTip', true); }, [sel]);
   const tapField = (id) => {
     if (readOnly) return;
     if (over > 0 && id in pos) { const np = { ...pos }; delete np[id]; apply(b, { pos: np, kind: 'bench' }); if (sel === id) setSel(null); return; }
@@ -1075,42 +1094,39 @@ function BlockField({ match, team, b, setB, combine, apply, undo, canUndo, pushH
   const minLvl = (id) => { const k = stats.kids[id]; if (!stats.target) return ''; const d = k.sec - stats.target; return d < -marge / 2 ? 'low' : d > marge / 2 ? 'high' : 'ok'; };
   // hoe lang zit een bankspeler in dit blok al aaneen aan de kant
   const benchRun = (id) => { let run = 0; for (let k = b; k >= 0; k--) { const g = gp.grid[k]; if (!g) continue; if (id in g) break; run += blocks[k].len; } return run; };
+  // vier of meer naast elkaar: alleen wat telt, anders lopen de labels in elkaar
+  const crowd = Math.max(view.lines.V || 0, view.lines.M || 0, view.lines.A || 0) >= 4;
   const below = (id) => {
-    const c = chg(id), f = fitOf(players[id], pos[id]);
-    const mt = inline && !start ? html`<i class=${'mn ' + minLvl(id)}>${mins(stats.kids[id].sec)}′</i>` : null;
+    const c = chg(id), f0 = fitOf(players[id], pos[id]), f = crowd && f0 !== 'buiten' ? null : f0;
+    const mt = inline && !start ? html`<i class=${'mn ' + minLvl(id)}>${mins(stats.kids[id].sec)}′</i>${attnOf(id) && html`<i class="at" title=${attnOf(id)}>!</i>`}` : null;
     if (!c && (f === 'neutraal' || !f) && !mt) return null;
-    return html`<span class="bf-tag">${c === 'in' ? html`<i class="in">erin</i>` : c === 'mv' ? html`<i class="mv">was ${wasAt(id)}</i>` : ''}${f && f !== 'neutraal' && html`<i class=${'fit ' + f}>${fitGlyph(f)}</i>`}${mt}</span>`;
+    return html`<span class="bf-tag">${c === 'in' ? html`<i class="in">${crowd ? 'in' : 'erin'}</i>` : c === 'mv' ? html`<i class="mv">${crowd ? '' : 'was '}${wasAt(id)}</i>` : ''}${f && f !== 'neutraal' && html`<i class=${'fit ' + f}>${fitGlyph(f)}</i>`}${mt}</span>`;
   };
-  // kerncijfers van het hele plan, met een kort verschil na elke zet
-  const totSec = ids.reduce((a, id) => a + stats.kids[id].sec, 0);
-  const pctIn = totSec ? Math.round(100 * (1 - ids.reduce((a, id) => a + stats.kids[id].out, 0) / totSec)) : 100;
-  const kv = { spread: stats.max - stats.min, min: stats.min, max: stats.max, kant: stats.maxBench, kr: pctIn };
-  const prevK = useRef(null);
-  const [flash, setFlash] = useState(null);
-  const kkey = JSON.stringify(kv);
-  useEffect(() => {
-    const p = prevK.current;
-    prevK.current = kv;
-    if (!p || p.min === undefined) return undefined;
-    const d = { sp: Math.round((kv.spread - p.spread) / 60), kant: Math.round((kv.kant - p.kant) / 60), kr: kv.kr - p.kr };
-    if (!d.sp && !d.kant && !d.kr) return undefined;
-    setFlash({ ...d, k: Date.now() });
-    const tm = setTimeout(() => setFlash(null), 2400);
-    return () => clearTimeout(tm);
-  }, [kkey]);
-  const dl = (v, unit, goodDown) => (v ? html`<em class=${'kd ' + ((goodDown ? v < 0 : v > 0) ? 'good' : 'bad')} key=${flash.k}>${v > 0 ? '+' : '−'}${Math.abs(v)}${unit}</em>` : null);
   const [drawer, setDrawer] = useState(false);
-  const kpis = inline && !start && html`<div class="bfv-kpi" role="group" aria-label="Het hele plan">
-    <button type="button" class=${'kp' + (kv.spread > marge + 30 ? ' warn' : ' ok')} onClick=${() => { haptic('select'); setDrawer(true); }}>
-      <small>Speeltijd</small><b class="num">${mins(stats.min)}–${mins(stats.max)}′</b>${flash && dl(flash.sp, '′', true)}</button>
-    <button type="button" class=${'kp' + (rule && kv.kant > rule + 1 ? ' warn' : ' ok')} onClick=${() => { haptic('select'); setDrawer(true); }}>
-      <small>Langst kant</small><b class="num">${mins(kv.kant)}′</b>${flash && dl(flash.kant, '′', true)}</button>
-    <button type="button" class=${'kp' + (M.planStyle(match, team) === 'sterk' && kv.kr < 90 ? ' warn' : ' ok')} onClick=${() => { haptic('select'); setDrawer(true); }}>
-      <small>In kracht</small><b class="num">${kv.kr}%</b>${flash && dl(flash.kr, '%', false)}</button>
-    <button type="button" class="kp go" onClick=${() => { haptic('select'); setDrawer(true); }} aria-label="Spelers: speeltijd en details"><${Icon} name="team" size=${17} /><small>Spelers</small></button>
-  </div>`;
+
   const rel = bl.t - bl.p * L, rel1 = bl.t1 - bl.p * L;
   const sk = sel ? stats.kids[sel] : null;
+  // reset: dit blok weer zoals het blok ervoor eindigde (en wat erna nog niet aangeraakt is, loopt weer mee)
+  const prevPos = b > 0 ? (() => { let k = b - 1; while (k >= 0 && !gp.grid[k]) k--; return k >= 0 ? gp.grid[k] : null; })() : null;
+  const changed = !!prevPos && JSON.stringify(Object.keys(pos).sort().map((id) => id + pos[id])) !== JSON.stringify(Object.keys(prevPos).sort().map((id) => id + prevPos[id]));
+  const resetBlock = () => {
+    const before = snap(gp);
+    mutate((m, t) => M.gpResetBlock(m, t, b));
+    pushHist(before);
+    haptic('select');
+    toast(bl.i === 0 && bl.p > 0 ? `Terug naar hoe de ${M.periodLabel(team, bl.p - 1)} eindigde` : 'Terug naar hoe het blok ervoor eindigde', restore(before));
+  };
+  // waar moet de coach naar kijken: te weinig of te veel speeltijd, te lang aan de kant, veel buiten zijn kracht
+  const attnOf = (id) => {
+    const k = stats.kids[id];
+    if (!k) return null;
+    if (minLvl(id) === 'low') return 'weinig speeltijd';
+    if (minLvl(id) === 'high') return 'veel speeltijd';
+    if (rule && k.maxRun > rule + 1) return 'lang aan de kant';
+    if (k.out >= 2 * 60 && M.planStyle(match, team) === 'sterk') return 'buiten zijn kracht';
+    return null;
+  };
+  const attnN = start ? 0 : ids.filter(attnOf).length;
   const topBar = start ? null : html`<div class="bfv-top">
       ${!inline && html`<button type="button" class="iconbtn" onClick=${onClose} aria-label="Terug naar de tabel"><${Icon} name="back" /></button>`}
       <button type="button" class="bfv-arr" onClick=${() => go(-1)} disabled=${b === 0} aria-label="Blok ervoor"><${Icon} name="chev" size=${18} /></button>
@@ -1119,11 +1135,37 @@ function BlockField({ match, team, b, setB, combine, apply, undo, canUndo, pushH
         <small>${b === 0 ? 'Startopstelling' : (bl.i === 0 && bl.p > 0 ? 'Na de ' + breakWord(team) : 'Blok ' + (b + 1) + ' van ' + blocks.length) + (b + 1 < blocks.length && gp.src[b + 1] === 'base' ? ' · loopt door tot je weer wisselt' : ' · alleen dit blok')}</small>
       </div>
       <button type="button" class="bfv-arr next" onClick=${() => go(1)} disabled=${b === blocks.length - 1} aria-label="Blok erna"><${Icon} name="chev" size=${18} /></button>
+      ${!readOnly && b > 0 && html`<button type="button" class="bfv-reset" onClick=${resetBlock} disabled=${!changed} aria-label="Zoals het blok ervoor eindigde" title="Zoals het blok ervoor eindigde"><${Icon} name="reset" size=${17} /></button>`}
       ${!readOnly && html`<button type="button" class="gp-undo" onClick=${undo} disabled=${!canUndo} aria-label="Ongedaan maken"><${Icon} name="undo" size=${18} /></button>`}
     </div>
     <div class="bfv-dots" role="tablist" aria-label="Blokken">${blocks.map((x) => { const s = stats.blocks[x.b]; return html`<button type="button" key=${x.b} role="tab" aria-selected=${x.b === b ? 'true' : 'false'}
       class=${'bfd' + (x.b === b ? ' on' : '') + (s.ok ? ' ok' : s.empty ? '' : ' half') + (x.i === 0 && x.p > 0 ? ' seam' : '') + (sel && gp.grid[x.b] && sel in gp.grid[x.b] ? ' me' : '')}
       onClick=${() => { if (x.b !== b) { setDir(x.b > b ? 1 : -1); haptic('select'); setB(x.b); } }} aria-label=${blockAt0(team, x)}><i></i></button>`; })}</div>`;
+  // spelerskaart (op het veld): drie ringen (speeltijd met het doel, langst aan de kant, in zijn kracht), waar hij
+  // per blok speelt, en een tip als er iets is om naar te kijken
+  const cardEl = inline && sel && sk && !start && (() => {
+    const p = players[sel] || {};
+    const scale = Math.max(stats.target + marge, sk.sec, 1);
+    const lv = minLvl(sel);
+    const kantMax = rule || 15 * 60;
+    const pct = sk.sec ? Math.round(100 * (1 - sk.out / sk.sec)) : 100;
+    const why = attnOf(sel);
+    const tip = why === 'weinig speeltijd' ? 'Speelt te weinig: zet hem in een blok erin.' : why === 'veel speeltijd' ? 'Speelt veel: laat hem een blok rusten.'
+      : why === 'lang aan de kant' ? 'Zit te lang aaneen aan de kant: haal hem eerder terug.' : why === 'buiten zijn kracht' ? 'Speelt vaak buiten zijn kracht: zet hem op ★.' : null;
+    const main = p.main && p.main !== 'K' ? p.main : null;
+    return html`<div class=${'pcard' + (sel in pos && pos[sel] === 'A' ? ' top' : '')} role="dialog" aria-label=${'Cijfers van ' + nick(sel)} key=${'pc' + sel}>
+      <div class="pc-h"><span class="gsb-av" style=${main ? '--pc:var(--pos-' + main + ')' : ''}>${nick(sel).slice(0, 1)}</span>
+        <span class="col grow" style="gap:0;min-width:0"><b>${nick(sel)}</b><small>${main ? '★ ' + LNAME[main] + ' · ' : ''}${sk.blocks}/${blocks.length} blokken · ${sel in pos ? LNAME[pos[sel]] + ' in dit blok' : 'op de bank in dit blok'}</small></span>
+        <button type="button" class="gsb-x" onClick=${() => { haptic('select'); setSel(null); }} aria-label="Sluiten"><${Icon} name="x" size=${16} /></button></div>
+      <div class="pc-rings">
+        <${Ring} frac=${sk.sec / scale} mark=${stats.target / scale} state=${lv || 'ok'} center=${mins(sk.sec) + '′'} label="Speeltijd" sub=${'doel ' + mins(stats.target) + '′'} />
+        <${Ring} frac=${sk.maxRun / kantMax} mark=${rule ? 1 : null} state=${rule && sk.maxRun > rule + 1 ? 'warn' : 'ok'} center=${mins(sk.maxRun) + '′'} label="Langst kant" sub=${rule ? 'max ' + mins(rule) + '′' : 'aaneen'} />
+        <${Ring} frac=${pct / 100} state=${pct < 80 ? 'warn' : 'ok'} center=${pct + '%'} label="In kracht" sub=${sk.out >= 60 ? mins(sk.out) + '′ buiten' : 'op zijn plek'} />
+      </div>
+      <div class="pc-strip" aria-label="Waar hij per blok speelt">${blocks.map((x) => { const l = gp.grid[x.b] && gp.grid[x.b][sel]; return html`<i key=${x.b} class=${(l ? 'l' + l : 'off') + (x.b === b ? ' now' : '') + (x.i === 0 && x.p > 0 ? ' seam' : '')}></i>`; })}</div>
+      ${tip && html`<p class="pc-tip"><${Icon} name="spark" size=${13} />${tip}</p>`}
+    </div>`;
+  })();
   const selEl = sel && sk && !start && html`<div class="bfv-sel"><span class="gsb-av">${nick(sel).slice(0, 1)}</span>
       <span class="col" style="gap:0;min-width:0"><b>${nick(sel)}</b><span class=${'gsb-lvl ' + minLvl(sel)}>${mins(sk.sec)}′${stats.target ? ` (doel ${mins(stats.target)}′)` : ''} · ${sk.blocks}/${blocks.length} blokken${sk.maxRun > 0 ? ` · kant ${mins(sk.maxRun)}′` : ''}${sk.out >= 60 ? ` · ${mins(sk.out)}′ buiten kracht` : ''}</span></span>
       <span class="gsb-strip">${blocks.map((x) => { const l = gp.grid[x.b] && gp.grid[x.b][sel]; return html`<i key=${x.b} class=${(l ? 'l' + l : 'off') + (x.b === b ? ' now' : '') + (x.i === 0 && x.p > 0 ? ' seam' : '')}></i>`; })}</span>
@@ -1134,7 +1176,7 @@ function BlockField({ match, team, b, setB, combine, apply, undo, canUndo, pushH
   const body = html`
     ${head}
     ${topBar}
-    ${kpis}
+    ${inline && !start && ok && attnN > 0 && !devicePrefs().seenAttnTip && html`<div class="bfv-pts"><span class="bfp tip"><b>!</b> Tik een speler met een uitroepteken: je ziet zijn cijfers en wat je kunt doen.</span></div>`}
     ${(() => { const list = startPts || (inline ? (!ok ? pts.slice(0, 1) : []) : pts.slice(0, 2)); return list.length ? html`<div class="bfv-pts" key=${'p' + b}>${list.map((x, k) => html`<span key=${k} class=${'bfp ' + x.cls}>${x.t}</span>`)}</div>` : null; })()}
     ${!inline && selEl}
     <div class="bfv-zone" ref=${zone}>
@@ -1145,16 +1187,30 @@ function BlockField({ match, team, b, setB, combine, apply, undo, canUndo, pushH
           selected=${!over && sel && sel in pos ? sel : null} muted=${!over && sel && sel in pos ? Object.keys(pos).filter((x) => x !== sel) : []}
           dashed=${over ? Object.keys(pos) : []}
           below=${start ? null : below} accent=${accentFor(team)} formable=${!readOnly} />
-        ${inline && (selEl || impactEl) && html`<div class="bf-over">${selEl || impactEl}</div>`}
+        ${inline && (cardEl || impactEl) && html`<div class=${'bf-over' + (cardEl && sel in pos && pos[sel] === 'A' ? ' top' : '')}>${cardEl || impactEl}</div>`}
       </div>
-      <div class=${'benchrow' + (over ? ' over' : '')} data-pid="zone:bench">
+      ${inline ? html`<div class=${'bfv-bench' + (over ? ' over' : '') + (start ? ' st' : '')} data-pid="zone:bench">
+        <div class="bb-head"><span class="label">Bank${start && bench.length ? html` <span class="num bb-c">${bench.length}</span>` : ''}</span>
+          ${!start && html`<button type="button" class=${'bb-spelers' + (attnN ? ' attn' : '')} onClick=${() => { haptic('select'); setDrawer(true); }}>
+            <${Icon} name="team" size=${16} /><span>Spelers</span>${attnN > 0 && html`<b class="num">${attnN}</b>`}</button>`}</div>
+        <div class="bb-grid">
+          ${bench.map((id) => { const ac = accentFor(team)(id); const run = start ? 0 : benchRun(id); const out = !start && chg(id) === 'out'; const pm = start && (team.players.find((x) => x.id === id) || {}).main; return html`<button type="button" key=${id} data-pid=${id}
+            class=${'bb-p' + (ac ? ' acc' : '') + (sel === id ? ' on' : '') + (out ? ' wasout' : '')} style=${ac ? '--acc:' + ac : ''}
+            onClick=${() => { if (!readOnly) { haptic('select'); setSel(sel === id ? null : id); } }}>
+            <span class="bb-n"><span class="bb-nm">${nick(id)}</span>${!start && attnOf(id) && html`<i class="at">!</i>`}</span>
+            ${start ? html`<span class="bb-i"><em>${pm && pm !== 'K' ? '★ ' + LNAME[pm] : 'overal'}</em></span>`
+              : html`<span class="bb-i">${out && html`<em class="out">eruit</em>`}<em class=${minLvl(id)}>${mins(stats.kids[id].sec)}′</em>${(rule && run > rule + 1) || run > bl.len ? html`<em class=${'run' + (rule && run > rule + 1 ? ' warn' : '')}>kant ${mins(run)}′</em>` : ''}</span>`}
+          </button>`; })}
+          ${!bench.length && html`<span class="small">${start ? 'iedereen staat' : 'iedereen speelt'}</span>`}
+        </div>
+      </div>` : html`<div class=${'benchrow' + (over ? ' over' : '')} data-pid="zone:bench">
         <span class="label">Bank</span>
         <${BenchScroll}>
           ${bench.map((id) => { const ac = accentFor(team)(id); const run = start ? 0 : benchRun(id); return html`<button type="button" key=${id} data-pid=${id} class=${'benchpill' + (ac ? ' acc' : '') + (sel === id ? ' bf-on' : '') + (chg(id) === 'out' ? ' wasout' : '')} style=${ac ? '--acc:' + ac : ''}
             onClick=${() => { if (!readOnly) { haptic('select'); setSel(sel === id ? null : id); } }}>${nick(id)}${!start && html`<span class=${'t ' + (chg(id) === 'out' ? '' : minLvl(id))}>${chg(id) === 'out' ? 'eruit' : `${mins(stats.kids[id].sec)}′`}</span>${rule && run > rule + 1 ? html`<span class="t run warn">kant ${mins(run)}′</span>` : run >= 2 * blocks[b].len ? html`<span class="t run">kant ${mins(run)}′</span>` : ''}`}</button>`; })}
           ${!bench.length && html`<span class="small">${start ? 'iedereen staat' : 'iedereen speelt'}</span>`}
         </${BenchScroll}>
-      </div>
+      </div>`}
     </div>
     ${!inline && impactEl}
     ${drawer && html`<${Sheet} onClose=${() => setDrawer(false)} label="Spelers en speeltijd">
@@ -1338,7 +1394,12 @@ function Controle({ match, team, goTo }) {
   </section>
 
   <section class="gd-card">
-    <header class="gd-h"><b>Wisselmomenten</b><span class="gd-hs">${k.swaps.n} wissels · ${k.swaps.moments} momenten</span></header>
+    <header class="gd-h"><b>Rooster per speler</b><span class="gd-hs">wie waar speelt, de hele wedstrijd</span></header>
+    <${Rooster} match=${match} team=${team} cards=${cards} onKid=${(id) => goTo(0, id)} />
+  </section>
+
+  <section class="gd-card">
+    <header class="gd-h"><b>Wisselschema</b><span class="gd-hs">${k.swaps.n} wissels · ${k.swaps.moments} momenten</span></header>
     <ol class="gd-tl">
       ${moments.map((mo, i) => {
         const b = blockAt(mo.t);
@@ -1356,10 +1417,5 @@ function Controle({ match, team, goTo }) {
       })}
       ${!moments.length && html`<li class="gd-tlrest"><span class="gd-tlrest-l">Geen wissels gepland.</span></li>`}
     </ol>
-  </section>
-
-  <section class="gd-card gd-deep">
-    <button type="button" class="rt-dh" aria-expanded=${open === 'rooster' ? 'true' : 'false'} onClick=${() => toggle('rooster')}><span>Rooster per speler</span><${Icon} name="chev" size=${16} /></button>
-    <div class=${'rt-dbody' + (open === 'rooster' ? ' open' : '')}><div><${Rooster} match=${match} team=${team} cards=${cards} onKid=${(id) => goTo(0, id)} /></div></div>
   </section>`;
 }

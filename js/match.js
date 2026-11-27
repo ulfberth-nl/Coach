@@ -1701,6 +1701,19 @@ export function gpSetBlock(match, team, b, pos, src = 'coach') {
   }
   gpSync(match, team);
 }
+// Terug naar hoe het blok ervoor eindigde: blok b wordt weer een 'meeloper' (en de onaangeraakte blokken erna ook).
+export function gpResetBlock(match, team, b) {
+  const gp = match.gameplan;
+  if (!gp || b <= 0) return false;
+  let k = b - 1;
+  while (k >= 0 && !gp.grid[k]) k--;
+  if (k < 0) return false;
+  gp.grid[b] = { ...gp.grid[k] };
+  gp.src[b] = 'base';
+  for (let j = b + 1; j < gp.grid.length && gp.src[j] === 'base'; j++) gp.grid[j] = { ...gp.grid[k] };
+  gpSync(match, team);
+  return true;
+}
 // Doortrekken: blok b geldt ook voor de volgende blokken (tot het eind van de periode of de wedstrijd).
 export function gpExtend(match, team, b, toEnd = false) {
   const gp = match.gameplan;
@@ -1960,7 +1973,7 @@ export function gpFromPlan(match, team) {
   const grid = blocks.map((bl) => { const mid = bl.t + bl.len / 2; const c = cards.filter((x) => x.t <= mid + 0.5 && Math.floor(x.t / L) === bl.p).pop() || cards.filter((x) => x.t <= bl.t + 0.5).pop(); return c ? { ...c.pos } : null; });
   match.ownStash = null;
   match.planMode = 'eigen';
-  match.ownSteps = { done: { opzet: true, start: true }, at: 'wissels' };
+  match.ownSteps = { ...(match.ownSteps || {}), done: { opzet: true }, at: 'start' };
   match.gameplan = { n, grid, src: blocks.map(() => 'ai'), base: true, lines: base };
   gpSync(match, team);
   // het standaardplan wisselt vaak vaker dan blokken toelaten: is een voorzet in blokken eerlijker, dan die

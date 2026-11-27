@@ -84,6 +84,20 @@ st = M.gpStats(match, team);
 assert.equal(st.blocks[2].swaps + st.blocks[3].swaps, 0);
 assert.equal(st.kids[bench[0]].blocks, blocks.length - 1, 'speelt vanaf blok 2 tot het eind (loopt mee)');
 
+// ---------- blok terugzetten naar hoe het blok ervoor eindigde (v0.28) ----------
+{
+  const outM = Object.keys(b1).find((id) => b1[id] === 'M');
+  const b2 = { ...b1 }; delete b2[outM]; b2[bench[1]] = 'M';
+  M.gpSetBlock(match, team, 2, b2);
+  assert.ok(sameLines(match.gameplan.grid[2], b2));
+  assert.equal(M.gpResetBlock(match, team, 2), true);
+  assert.ok(sameLines(match.gameplan.grid[2], match.gameplan.grid[1]), 'blok 3 is weer zoals blok 2 eindigde');
+  assert.equal(match.gameplan.src[2], 'base', 'loopt weer mee');
+  assert.equal(M.gpResetBlock(match, team, 0), false, 'het eerste blok heeft geen blok ervoor');
+  assert.equal(M.gpStats(match, team).blocks[2].swaps, 0, 'geen wissel meer in blok 3');
+}
+console.log('gameplan blok terugzetten ok');
+
 // ---------- onvolledig blok telt als ongewijzigd ----------
 const inc = { ...b1 }; delete inc[bench[0]];
 M.gpSetBlock(match, team, 2, inc);
