@@ -236,7 +236,10 @@ function PrepView({ state, match, team }) {
     <${Affiche} match=${match} team=${team} todo=${!setup.opponent} onClick=${() => setSheet('opp')}>
       <button type="button" class="iconbtn" aria-label="Menu" onClick=${() => setSheet('menu')}><${Icon} name="more" size=${22} /></button>
     </${Affiche}>
-    <${SquadBar} match=${match} team=${team} onOpen=${setSheet} />
+    <div class=${'setuprow' + (think && !M.isOwn(match, team) ? ' pt-open' : '')}>
+      <${SquadBar} match=${match} team=${team} onOpen=${setSheet} />
+      ${!tooFew && (plan || gpSt) && html`<${PlayBtn} match=${match} team=${team} think=${think} st=${gpSt} own=${M.isOwn(match, team)} onOpen=${() => setSheet('speeltijd')} />`}
+    </div>
     ${tooFew
       ? html`<div class="card" style="flex:1 1 auto;justify-content:center;text-align:center"><span class="h2">Te weinig spelers</span><span class="sub">Je hebt ${F} veldspelers nodig${team.keeper ? ' plus een keeper' : ''}. Tik op "spelers".</span></div>`
       : html`
@@ -1145,7 +1148,7 @@ function SquadBar({ match, team, onOpen }) {
       <b class="num">${title}</b>
       <small>${sub}</small>
     </span>
-    <span class="sq-go">${ok ? 'Wijzig' : 'Aanmelden'}<${Icon} name="chev" size=${16} /></span>
+    <span class="sq-go" aria-hidden="true"><${Icon} name="chev" size=${16} /></span>
   </button>`;
 }
 
@@ -1162,6 +1165,54 @@ function PlayBars({ team, secs, thinking }) {
     const c = p.main && p.main !== 'K' && POS_COLORS[p.main] ? POS_COLORS[p.main] : NO_ROLE;
     return html`<i key=${id} style=${`--h:${Math.max(0.18, secs[id] / max).toFixed(3)};--c:${c};--k:${k}`}></i>`;
   })}</span>`;
+}
+
+// Speeltijd naast de spelers: staafjes per speler en het bereik in minuten. Rekent Autopilot door, dan veert de knop
+// open (±75% van de rij) en verschuiven drie pillen (aanval, midden, verdediging) tot ze op het aandeel van de
+// kracht per linie in dit plan landen; daarna veert alles terug.
+const LINE_PILLS = [['V', 'aanval'], ['M', 'midden'], ['A', 'verdediging']];
+function strengthShares(match, team) {
+  const cards = M.timeline(match, team).cards;
+  const END = M.matchEnd(team);
+  const kr = Object.fromEntries(team.players.map((p) => [p.id, (p.kracht == null ? 50 : p.kracht) + 12.5]));
+  const sum = { V: 0, M: 0, A: 0 };
+  cards.forEach((c, i) => { const t1 = i + 1 < cards.length ? cards[i + 1].t : END; for (const id in c.pos) if (sum[c.pos[id]] != null) sum[c.pos[id]] += (kr[id] || 50) * Math.max(0, t1 - c.t); });
+  const tot = sum.V + sum.M + sum.A || 1;
+  const v = Math.round((sum.V / tot) * 100), mm = Math.round((sum.M / tot) * 100);
+  return { V: v, M: mm, A: 100 - v - mm };
+}
+function PlayBtn({ match, team, think, st, own, onOpen }) {
+  const plan = match.plan;
+  const open = !own && !!think;
+  const secs = own ? (st ? Object.fromEntries(Object.keys(st.kids).map((id) => [id, st.kids[id].sec])) : null)
+    : plan && plan.finalPlayed ? Object.fromEntries(match.present.filter((id) => id !== match.keeperId && id in plan.finalPlayed).map((id) => [id, plan.finalPlayed[id]])) : null;
+  const vals = secs ? Object.values(secs) : [];
+  const lo = vals.length ? M.mins(Math.min(...vals)) : null, hi = vals.length ? M.mins(Math.max(...vals)) : null;
+  const range = lo == null ? '—' : lo === hi ? `${lo}′` : `${lo}–${hi}′`;
+  const real = useMemo(() => (open ? strengthShares(match, team) : null), [open, plan]);
+  const [shares, setShares] = useState(null);
+  // tijdens het rekenen: de pillen verspringen met een veer; daarna landen ze op het echte aandeel
+  useEffect(() => {
+    if (!open) { setShares(null); return undefined; }
+    if (think.phase !== 'run') { setShares(real); return undefined; }
+    const rnd = () => { const a = 18 + Math.random() * 40, b = 12 + Math.random() * 30, c = 18 + Math.random() * 40, t = a + b + c; const v = Math.round((a / t) * 100), m = Math.round((b / t) * 100); return { V: v, M: m, A: 100 - v - m }; };
+    setShares(rnd());
+    const iv = setInterval(() => setShares(rnd()), 280);
+    return () => clearInterval(iv);
+  }, [open, think && think.phase, think && think.k]);
+  const sh = shares || { V: 34, M: 33, A: 33 };
+  return html`<button type="button" class=${'ptbtn' + (open ? ' open ' + think.phase : '')} onClick=${() => { haptic('select'); onOpen(); }}
+    aria-label=${secs ? `Speeltijd per speler: ${range.replace('′', '')} minuten. Tik voor details` : 'Speeltijd per speler'}>
+    <span class="ptb-sum">
+      <span class="ptb-lab">Speeltijd</span>
+      ${secs && vals.length ? html`<${PlayBars} team=${team} secs=${secs} />` : html`<span class="ptv empty" aria-hidden="true"><${Icon} name="chart" size=${16} /></span>`}
+      <b class="num">${range}</b>
+    </span>
+    ${open && html`<span class="ptb-lines" aria-hidden="true">
+      <span class="ptb-t">${think.phase === 'run' ? html`<span class="ai-grad">✦ Wissels doorrekenen…</span>` : 'Kracht per linie'}</span>
+      <span class="ptb-ps">${LINE_PILLS.map(([l, w]) => html`<span key=${l} class="ptb-c" style=${'flex-grow:' + Math.max(8, sh[l])}><small>${w}</small><span class=${'ptb-p l' + l}><b class="num">${sh[l]}%</b></span></span>`)}</span>
+    </span>`}
+  </button>`;
 }
 
 function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet, think = null }) {
@@ -1257,25 +1308,10 @@ function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet, think 
       </div>
       <button type="button" class="msw-i" aria-label="Uitleg: Autopilot en Zelf plannen" onClick=${() => { haptic('select'); onTour(); }}><${Icon} name="info" size=${19} /></button>
     </div>
-    <div class="msum" key=${own ? 'z' : 'a'}>
-      ${own
-        ? html`<button type="button" class="ptcard" onClick=${() => { haptic('select'); onSheet('speeltijd'); }} aria-label=${st ? `Speeltijd per speler: ${M.mins(st.min)} tot ${M.mins(st.max)} minuten. Tik voor details` : 'Speeltijd'}>
-            ${st ? html`<${PlayBars} team=${team} secs=${Object.fromEntries(Object.keys(st.kids).map((id) => [id, st.kids[id].sec]))} />` : html`<span class="ptv empty" aria-hidden="true"><${Icon} name="chart" size=${18} /></span>`}
-            <span class="pt-t"><small>Speeltijd per speler</small><b class="num">${st ? html`${M.mins(st.min)}–${M.mins(st.max)}′<span> · ${full}/${st.blocks.length} blokken</span>` : 'Je plan is nog leeg'}</b></span>
-          </button>
-          <button type="button" class="msum-go" onClick=${() => go('/plan')}>${st ? 'Game plan' : 'Maak je plan'}<${Icon} name="chev" size=${14} /></button>`
-        : html`<button type="button" class=${'ptcard wide' + (think && think.phase === 'run' ? ' busy' : '')} onClick=${() => { haptic('select'); onSheet('speeltijd'); }}
-            aria-label=${plan && plan.finalPlayed ? `Speeltijd per speler: ${range} minuten, ${swaps} wissels. Tik voor details` : 'Speeltijd'}>
-            ${plan && plan.finalPlayed ? html`<${PlayBars} team=${team} secs=${Object.fromEntries(match.present.filter((id) => id !== match.keeperId && id in plan.finalPlayed).map((id) => [id, plan.finalPlayed[id]]))} thinking=${think && think.phase === 'run'} />` : html`<span class="ptv empty" aria-hidden="true"><${Icon} name="chart" size=${18} /></span>`}
-            <span class="pt-t" key=${think && think.phase === 'run' ? 'busy' : 'ok'}>
-              <small>${think && think.phase === 'run' ? html`<span class="ai-grad">✦ Wissels doorrekenen…</span>` : 'Speeltijd per speler'}</small>
-              ${think && think.phase === 'run'
-                ? html`<b class="pt-skel" aria-hidden="true"><i></i><i></i></b>`
-                : html`<b class="num">${swaps ? html`${range}′<span> · ${swaps} ${perMoment > 1 ? 'momenten' : 'wissels'}</span>` : 'Geen wissels nodig'}${plan && !plan.ok && html` <span class="warnicon" title=${(plan.why || []).map((w) => WHY_TEXT[w]).join(', ')}>!</span>`}</b>`}
-            </span>
-            <span class="pt-go">Bekijk<${Icon} name="chev" size=${14} /></span>
-          </button>`}
-    </div>
+    ${own && html`<div class="msum" key="z">
+      <button type="button" class="msum-t" onClick=${() => onSheet('speeltijd')}>${st ? html`<${Icon} name="chart" size=${14} />${full}/${st.blocks.length} blokken vol` : 'Je plan is nog leeg'}</button>
+      <button type="button" class="msum-go" onClick=${() => go('/plan')}>${st ? 'Open game plan' : 'Maak je plan'}<${Icon} name="chev" size=${14} /></button>
+    </div>`}
     ${ask === 'compare' && html`<${Sheet} onClose=${() => { seen(); done(); }} label="Zelf plannen of Autopilot">
       <span class="h2" style="font-size:22px">Zelf plannen?</span>
       <span class="sub">Zo verschillen de twee manieren. Je kunt altijd terug.</span>

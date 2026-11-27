@@ -2477,7 +2477,7 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 .sq-t b { font-size: 17px; font-weight: 900; line-height: 1.15; }
 .sq-t small { display: inline-flex; align-items: center; gap: 5px; min-width: 0; font-size: 13px; font-weight: 700; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sq-t small .kbadge { flex: none; }
-.sq-go { flex: none; display: inline-flex; align-items: center; gap: 2px; min-height: 34px; padding: 0 8px 0 12px; border-radius: 99px; font-size: 13px; font-weight: 900; color: var(--blue); background: var(--blue-tint); }
+.sq-go { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; color: var(--blue); background: var(--blue-tint); }
 .sqbar.todo .sq-go { color: #fff; background: var(--orange); color: var(--ink); box-shadow: 0 6px 14px -8px rgba(245,165,36,.9); }
 .reduce .sqbar.todo::after, .reduce .sq-dot { animation: none !important; }
 @media (prefers-reduced-motion: reduce) { .sqbar.todo::after, .sq-dot { animation: none !important; } }
@@ -2585,7 +2585,6 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 .reduce .gv-ill.fld i, .reduce .gv-opt, .reduce .bfv.inline { animation: none !important; }
 
 /* ---------- v0.26.1: speeltijd als staafjes, Autopilot rekent zichtbaar door ---------- */
-.msum { min-height: 0; padding: 0; gap: 8px; }
 .ptcard { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 7px 12px 7px 12px; border: none; border-radius: 18px; text-align: left; color: var(--ink); background: #fff; box-shadow: 0 0 0 1px var(--line), 0 6px 16px -12px rgba(31,60,136,.45); }
 .ptcard:active { scale: .985; }
 .ptv { flex: none; display: flex; align-items: flex-end; gap: 3px; height: 30px; padding: 0 1px; }
@@ -2599,7 +2598,6 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 .pt-t b span { font-size: 13.5px; font-weight: 800; color: var(--muted); }
 .pt-go { flex: none; display: inline-flex; align-items: center; gap: 2px; min-height: 32px; padding: 0 6px 0 12px; border-radius: 99px; font-size: 13px; font-weight: 900; color: var(--blue); background: var(--blue-tint); }
 .ptcard.busy { box-shadow: 0 0 0 1.5px rgba(124,92,255,.35), 0 8px 20px -14px rgba(124,92,255,.8); }
-.msum > .msum-go { flex: none; min-height: 52px; padding: 0 14px; border-radius: 18px; background: var(--blue-tint); }
 
 /* de knop loopt vol terwijl de app doorrekent, en glanst als het klaar is */
 .msw-fill { position: absolute; inset: 0; z-index: 0; border-radius: inherit; pointer-events: none; background: linear-gradient(90deg, rgba(124,92,255,.42), rgba(59,130,246,.40) 70%, rgba(20,184,166,.5)); transform-origin: left; scale: 0 1; }
@@ -2636,3 +2634,35 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 .pt-skel i:first-child { width: 38px; } .pt-skel i:last-child { width: 84px; }
 @keyframes ptSkel { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 .reduce .pt-skel i { animation: none; }
+
+/* ---------- v0.26.2: speeltijd naast de spelers; veert open als Autopilot doorrekent ---------- */
+.setuprow { display: flex; gap: 8px; flex: 0 0 auto; }
+.setuprow > .sqbar { flex: 7 1 0; min-width: 0; gap: 10px; padding-right: 10px; transition: flex-grow .6s var(--spring-play), background .5s ease, box-shadow .5s ease, scale .25s var(--spring-play); }
+.setuprow .sq-t, .setuprow .sq-go { transition: opacity .25s ease; }
+.setuprow.pt-open > .sqbar { flex-grow: 2.5; }
+.setuprow.pt-open .sq-t, .setuprow.pt-open .sq-go { opacity: 0; animation: none; }
+.ptbtn { position: relative; flex: 3 1 0; min-width: 0; display: flex; align-items: stretch; min-height: 66px; padding: 7px 10px; border: none; border-radius: 20px; text-align: left; color: var(--ink); background: #fff; box-shadow: var(--shadow); overflow: hidden;
+  transition: flex-grow .6s var(--spring-play), box-shadow .4s ease, scale .25s var(--spring-play); }
+.ptbtn:active { scale: .97; }
+.setuprow.pt-open > .ptbtn { flex-grow: 7.5; }
+.ptbtn.open { box-shadow: 0 0 0 1.5px rgba(124,92,255,.4), 0 12px 26px -16px rgba(124,92,255,.8); }
+.ptbtn.open.done { box-shadow: 0 0 0 1.5px rgba(22,163,74,.45), 0 12px 26px -16px rgba(22,101,52,.6); }
+.ptb-sum { flex: 1 0 auto; display: flex; flex-direction: column; justify-content: center; gap: 3px; min-width: 0; transition: opacity .2s ease; }
+.ptbtn.open .ptb-sum { position: absolute; opacity: 0; pointer-events: none; }
+.ptb-lab { font-size: 10.5px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.ptb-sum .ptv { height: 18px; gap: 2px; }
+.ptb-sum .ptv i { width: 5px; border-radius: 2.5px; }
+.ptb-sum b { font-size: 15px; font-weight: 900; white-space: nowrap; line-height: 1.1; }
+.ptb-lines { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 4px; animation: sqText .35s .12s var(--ease-out) both; }
+.ptb-t { font-size: 12px; font-weight: 900; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ptbtn.done .ptb-t { color: #15803D; }
+.ptb-ps { display: flex; gap: 4px; min-width: 0; }
+.ptb-c { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; transition: flex-grow .45s var(--spring-play); }
+.ptb-c small { font-size: 10.5px; font-weight: 800; line-height: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 4px; }
+.ptb-p { display: flex; align-items: center; justify-content: center; height: 22px; border-radius: 99px; color: #fff; font-size: 11.5px; font-weight: 900; white-space: nowrap; overflow: hidden; }
+.ptb-p.lV { background: var(--pos-V); } .ptb-p.lM { background: var(--pos-M); } .ptb-p.lA { background: var(--pos-A); }
+.ptbtn.done .ptb-p { animation: ptLand .6s var(--spring-play) both; }
+.ptbtn.done .ptb-c:nth-child(2) .ptb-p { animation-delay: .06s; } .ptbtn.done .ptb-c:nth-child(3) .ptb-p { animation-delay: .12s; }
+@keyframes ptLand { 0% { scale: 1 .7; } 60% { scale: 1 1.12; } 100% { scale: 1; } }
+.reduce .setuprow > *, .reduce .ptb-c, .reduce .ptb-p, .reduce .ptb-lines { transition-duration: .01s !important; animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .setuprow > *, .ptb-c { transition-duration: .01s !important; } .ptb-lines, .ptbtn.done .ptb-p { animation: none !important; } }
