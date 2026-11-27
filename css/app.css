@@ -2647,12 +2647,30 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 .setuprow.pt-open > .ptbtn { flex-grow: 7.5; }
 .ptbtn.open { box-shadow: 0 0 0 1.5px rgba(124,92,255,.4), 0 12px 26px -16px rgba(124,92,255,.8); }
 .ptbtn.open.done { box-shadow: 0 0 0 1.5px rgba(22,163,74,.45), 0 12px 26px -16px rgba(22,101,52,.6); }
-.ptb-sum { flex: 1 0 auto; display: flex; flex-direction: column; justify-content: center; gap: 3px; min-width: 0; transition: opacity .2s ease; }
+/* in rust: staafjes over de hele knop als zachte achtergrond (kort links, lang rechts), die rustig ademen; af en toe
+   trekt er een lichtstreep overheen. Ervoor het profiel, het bereik en 'speeltijd'. */
+.ptbtn { container-type: inline-size; isolation: isolate; }
+.ptb-bg { position: absolute; inset: 0; z-index: -1; display: flex; align-items: flex-end; gap: 2px; padding: 0 6px; transition: opacity .3s ease; }
+.ptb-bg i { flex: 1 1 0; height: calc(var(--h) * 64%); border-radius: 5px 5px 2px 2px; transform-origin: bottom;
+  background: linear-gradient(to top, color-mix(in srgb, var(--c) 46%, transparent), color-mix(in srgb, var(--c) 10%, transparent));
+  animation: ptBreath 3.6s ease-in-out infinite; animation-delay: calc(var(--k) * -0.45s); transition: height .7s var(--spring-soft); }
+@keyframes ptBreath { 0%, 100% { scale: 1 1; } 50% { scale: 1 .9; } }
+.ptb-bg::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 0%, rgba(255,255,255,.75) 50%, transparent 100%); background-size: 40% 100%; background-repeat: no-repeat; background-position: -60% 0; animation: ptSweep 5.5s ease-in-out 1.5s infinite; }
+@keyframes ptSweep { 0%, 55% { background-position: -60% 0; } 85%, 100% { background-position: 160% 0; } }
+.ptbtn.open .ptb-bg { opacity: 0; }
+.ptb-sum { position: relative; flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 0; min-width: 0; transition: opacity .2s ease; }
 .ptbtn.open .ptb-sum { position: absolute; opacity: 0; pointer-events: none; }
-.ptb-lab { font-size: 10.5px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.ptb-sum .ptv { height: 18px; gap: 2px; }
-.ptb-sum .ptv i { width: 5px; border-radius: 2.5px; }
-.ptb-sum b { font-size: 15px; font-weight: 900; white-space: nowrap; line-height: 1.1; }
+.ptb-prof { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 11px; font-weight: 900; line-height: 14px; color: var(--ai-ink, #4C2FD6); white-space: nowrap; }
+.ptbtn.own .ptb-prof { color: var(--blue); }
+.ptb-prof .pl-full { display: none; } .ptb-prof .pl-short { overflow: hidden; text-overflow: ellipsis; }
+@container (min-width: 128px) { .ptb-prof .pl-full { display: inline; overflow: hidden; text-overflow: ellipsis; } .ptb-prof .pl-short { display: none; } }
+.ptb-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: linear-gradient(135deg, #7C5CFF, #14B8A6); animation: ptDot 2.4s ease-in-out infinite; }
+.ptbtn.own .ptb-dot { background: var(--blue); }
+@keyframes ptDot { 0%, 100% { box-shadow: 0 0 0 0 rgba(124,92,255,.5); } 50% { box-shadow: 0 0 0 4px rgba(124,92,255,0); } }
+.ptb-sum b { font-size: 18px; font-weight: 900; line-height: 22px; white-space: nowrap; text-shadow: 0 0 6px #fff, 0 0 2px #fff; }
+.ptb-sum small { font-size: 11px; font-weight: 800; line-height: 13px; color: var(--muted); text-shadow: 0 0 4px #fff; }
+.reduce .ptb-bg i, .reduce .ptb-bg::after, .reduce .ptb-dot { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .ptb-bg i, .ptb-bg::after, .ptb-dot { animation: none !important; } }
 .ptb-lines { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 4px; animation: sqText .35s .12s var(--ease-out) both; }
 .ptb-t { font-size: 12px; font-weight: 900; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ptbtn.done .ptb-t { color: #15803D; }
@@ -2666,3 +2684,7 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 @keyframes ptLand { 0% { scale: 1 .7; } 60% { scale: 1 1.12; } 100% { scale: 1; } }
 .reduce .setuprow > *, .reduce .ptb-c, .reduce .ptb-p, .reduce .ptb-lines { transition-duration: .01s !important; animation: none !important; }
 @media (prefers-reduced-motion: reduce) { .setuprow > *, .ptb-c { transition-duration: .01s !important; } .ptb-lines, .ptbtn.done .ptb-p { animation: none !important; } }
+/* bij het openveren blijft de rij even hoog: de tekst van de spelersbalk breekt niet af */
+.setuprow .sq-t { overflow: hidden; }
+.setuprow .sq-t b, .setuprow .sq-lab { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.setuprow { align-items: stretch; }

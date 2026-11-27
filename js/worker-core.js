@@ -1,7 +1,7 @@
 // Het zware rekenwerk (wedstrijdplannen, wisselprofielen). Draait in een Web Worker (js/worker.js),
 // of als dat niet kan gewoon op de hoofdthread.
 import { tune, statsOf, enough } from './profiles.js';
-import { createMatch, applyBase, isOwn } from './match.js';
+import { createMatch, applyBase, isOwn, replan } from './match.js';
 
 export function run(type, a) {
   if (type === 'tune') return tune(a.team, a.key, a.present, a.keeperId);
@@ -18,5 +18,8 @@ export function run(type, a) {
     if (b && !isOwn(match, a.team)) applyBase(match, a.team, b);
     return { rules, tuned: t, match };
   }
+  // het plan van een klaargezette wedstrijd opnieuw doorrekenen, met alles wat de coach vastzette (speldjes,
+  // gesleepte startopstelling, rust-opstelling, basis); alleen het plan komt terug
+  if (type === 'replan') { replan(a.match, a.team); return a.match.plan; }
   throw new Error('Onbekende opdracht: ' + type);
 }

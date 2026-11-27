@@ -1,11 +1,12 @@
 // Eén Wedstrijd-scherm: voorbereiden → live → afgelopen. Past op één scherm, zonder scrollen.
 import { html, useEffect, useLayoutEffect, useMemo, useRef, useState } from '../../vendor/preact-htm.js';
-import { update, activeTeam, currentMatch } from '../store.js';
+import { update, activeTeam, currentMatch, getState } from '../store.js';
 import * as M from '../match.js';
 import { PlanView } from '../planview.js';
 import { keeperCounts, suggestKeeper, WHY_TEXT } from './home.js';
 import { nextScheduled, todayISO } from './seizoen.js';
-import { matchRules } from '../profiles.js';
+import { matchRules, PROFILES, profileOf } from '../profiles.js';
+import { compute } from '../compute.js';
 import { PlayTimeSheet } from '../playtime.js';
 import { scheduleRefresh } from '../refresh.js';
 import { viewTransition, haptic, reduced, T as TEMPO, devicePrefs, setDevicePref } from '../motion.js';
@@ -213,14 +214,33 @@ function PrepView({ state, match, team }) {
   // werk zien. Na eigen sleepwerk op het veld alleen de knop, niet de spelers.
   const sig = plan && !M.isOwn(match, team) && !match.started ? JSON.stringify([(match.events[0] || {}).pos, plan.steps.map((s) => (s.type === 'swap' ? [s.t, s.out, s.in] : [s.t, Object.keys(s.pos || {}).sort().join()]))]) : null;
   const [think, setThink] = useState(null);
+  const thinkRef = useRef(null);
+  thinkRef.current = think;
   const manual = useRef(0);
   useEffect(() => {
     if (!sig) return;
     const prev = seenPlan.id === match.id ? seenPlan.sig : null;
     seenPlan = { id: match.id, sig };
-    if (!prev || prev === sig) return;
+    // rekent hij al (bijv. na een tik op Autopilot), dan loopt die animatie gewoon door
+    if (!prev || prev === sig || (thinkRef.current && thinkRef.current.phase === 'run')) return;
     setThink({ k: Date.now(), phase: 'run', shuffle: Date.now() - manual.current > 1200 });
   }, [sig]);
+  // tik op Autopilot (ook als hij al aan staat): de app rekent het plan opnieuw door in de rekendraad. Alles wat je
+  // vastzette blijft staan (speldjes, gesleepte startopstelling, rust-opstelling, basis); bij dezelfde invoer is de
+  // uitkomst hetzelfde, maar het is een frisse controle.
+  const replay = () => {
+    setThink({ k: Date.now(), phase: 'run', shuffle: true });
+    const st = getState();
+    const m0 = st.matches.find((x) => x.id === st.currentMatchId);
+    const t0 = m0 && st.teams.find((x) => x.id === m0.teamId);
+    if (!m0 || !t0 || m0.started || M.isOwn(m0, t0)) return;
+    const strip = (m) => JSON.stringify({ ...m, plan: null });
+    const before = strip(m0);
+    compute('replan', { match: JSON.parse(JSON.stringify(m0)), team: t0 }).then((plan) => {
+      if (!plan) return;
+      update((d) => { const m = d.matches.find((x) => x.id === m0.id); if (m && !m.started && strip(m) === before) m.plan = plan; });
+    }).catch(() => {});
+  };
   useEffect(() => {
     if (!think) return undefined;
     const tm = setTimeout(() => setThink(think.phase === 'run' ? { ...think, phase: 'done' } : null), think.phase === 'run' ? 1500 : 1400);
@@ -243,7 +263,7 @@ function PrepView({ state, match, team }) {
     ${tooFew
       ? html`<div class="card" style="flex:1 1 auto;justify-content:center;text-align:center"><span class="h2">Te weinig spelers</span><span class="sub">Je hebt ${F} veldspelers nodig${team.keeper ? ' plus een keeper' : ''}. Tik op "spelers".</span></div>`
       : html`
-        <${ModeSwitch} match=${match} team=${team} swaps=${swaps} perMoment=${perMoment} st=${gpSt} onTour=${() => setTour(1)} onSheet=${setSheet} think=${think} />
+        <${ModeSwitch} match=${match} team=${team} swaps=${swaps} perMoment=${perMoment} st=${gpSt} onTour=${() => setTour(1)} onSheet=${setSheet} think=${think} onReplay=${replay} />
         <div class="grow-field"><${PlanView} match=${match} team=${team} compact editable=${!M.isOwn(match, team)} thinking=${think && (think.phase === 'done' || think.shuffle) ? think.phase : null}
           onLocked=${M.isOwn(match, team) ? () => toast('Je plant zelf: spelers verplaats je in je game plan.', { label: 'Open', run: () => go('/plan') }) : null}
           onTour=${() => { haptic('select'); setTour(1); }}
@@ -1171,6 +1191,7 @@ function PlayBars({ team, secs, thinking }) {
 // open (±75% van de rij) en verschuiven drie pillen (aanval, midden, verdediging) tot ze op het aandeel van de
 // kracht per linie in dit plan landen; daarna veert alles terug.
 const LINE_PILLS = [['V', 'aanval'], ['M', 'midden'], ['A', 'verdediging']];
+const PROF_SHORT = { gelijk: 'Even lang', balans: 'In balans', rustig: 'Rustig', sterk: 'Sterkste ploeg', eigen: 'Eigen regels' };
 function strengthShares(match, team) {
   const cards = M.timeline(match, team).cards;
   const END = M.matchEnd(team);
@@ -1201,21 +1222,33 @@ function PlayBtn({ match, team, think, st, own, onOpen }) {
     return () => clearInterval(iv);
   }, [open, think && think.phase, think && think.k]);
   const sh = shares || { V: 34, M: 33, A: 33 };
-  return html`<button type="button" class=${'ptbtn' + (open ? ' open ' + think.phase : '')} onClick=${() => { haptic('select'); onOpen(); }}
-    aria-label=${secs ? `Speeltijd per speler: ${range.replace('′', '')} minuten. Tik voor details` : 'Speeltijd per speler'}>
+  // de instelling: het wisselprofiel (Autopilot) of de speelstijl (Zelf plannen); kort als de knop smal is
+  const pk = profileOf(team.rules);
+  const prof = own ? (M.planStyle(match, team) === 'sterk' ? ['Sterkste opstelling', 'Sterkst'] : ['Gebalanceerd', 'Gebalanceerd'])
+    : [PROFILES[pk] ? PROFILES[pk].label : 'Eigen instellingen', PROF_SHORT[pk] || 'Eigen regels'];
+  const byId = Object.fromEntries(team.players.map((p) => [p.id, p]));
+  const ids = secs ? Object.keys(secs).sort((a, b) => secs[a] - secs[b]) : [];
+  const max = Math.max(1, ...vals);
+  return html`<button type="button" class=${'ptbtn' + (own ? ' own' : '') + (open ? ' open ' + think.phase : '')} onClick=${() => { haptic('select'); onOpen(); }}
+    aria-label=${(secs ? `Speeltijd per speler: ${range.replace('′', '')} minuten` : 'Speeltijd per speler') + `, ${prof[0]}. Tik voor details`}>
+    <span class="ptb-bg" aria-hidden="true">${ids.map((id, k) => {
+      const p = byId[id] || {};
+      const c = p.main && p.main !== 'K' && POS_COLORS[p.main] ? POS_COLORS[p.main] : NO_ROLE;
+      return html`<i key=${id} style=${`--h:${Math.max(0.2, secs[id] / max).toFixed(3)};--c:${c};--k:${k}`}></i>`;
+    })}</span>
     <span class="ptb-sum">
-      <span class="ptb-lab">Speeltijd</span>
-      ${secs && vals.length ? html`<${PlayBars} team=${team} secs=${secs} />` : html`<span class="ptv empty" aria-hidden="true"><${Icon} name="chart" size=${16} /></span>`}
+      <span class="ptb-prof"><i class="ptb-dot"></i><span class="pl-full">${prof[0]}</span><span class="pl-short">${prof[1]}</span></span>
       <b class="num">${range}</b>
+      <small>speeltijd</small>
     </span>
     ${open && html`<span class="ptb-lines" aria-hidden="true">
-      <span class="ptb-t">${think.phase === 'run' ? html`<span class="ai-grad">✦ Wissels doorrekenen…</span>` : 'Kracht per linie'}</span>
+      <span class="ptb-t">${think.phase === 'run' ? html`<span class="ai-grad">✦ ${prof[0]} · doorrekenen…</span>` : `Kracht per linie · ${prof[0]}`}</span>
       <span class="ptb-ps">${LINE_PILLS.map(([l, w]) => html`<span key=${l} class="ptb-c" style=${'flex-grow:' + Math.max(8, sh[l])}><small>${w}</small><span class=${'ptb-p l' + l}><b class="num">${sh[l]}%</b></span></span>`)}</span>
     </span>`}
   </button>`;
 }
 
-function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet, think = null }) {
+function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet, think = null, onReplay = null }) {
   const own = M.isOwn(match, team);
   const [pend, setPend] = useState(null);
   const [ask, setAsk] = useState(null);
@@ -1237,8 +1270,9 @@ function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet, think 
     goZelf();
   };
   const toAuto = () => {
-    if (!own) return;
     haptic('select');
+    if (onReplay) onReplay();
+    if (!own) return;
     switchPlanMode('app', true);
     toast('Autopilot staat aan · je game plan blijft bewaard.', { label: 'Ongedaan', run: () => switchPlanMode('eigen', true) });
   };
