@@ -187,6 +187,8 @@ function Affiche({ match, team, onClick, children, todo = false }) {
 const LNAME_LIVE = { V: 'voor', M: 'het midden', A: 'achter' };
 
 // ================= voorbereiden =================
+// het laatst getoonde plan (per wedstrijd), zodat de rekenanimatie ook komt als je terugkomt na een andere instelling
+let seenPlan = { id: null, sig: null };
 function PrepView({ state, match, team }) {
   const [sheet, setSheet] = useState(null);
   // uitleg over de twee manieren van wisselen: eerst de modus die nu aan staat, dan (tik) de andere
@@ -206,6 +208,25 @@ function PrepView({ state, match, team }) {
   // klaar voor de aftrap: spelers, keeper en tegenstander bevestigd; bij Zelf plannen ook een vol en eerlijk game plan
   const ready = !tooFew && !todo.length &&
     (!M.isOwn(match, team) || (gpSt && gp.base && gpSt.blocks.every((b) => b.ok) && gpSt.max - gpSt.min <= (M.effRules(match, team).marge || 5) * 60 + 30));
+  // Autopilot rekent door: verandert het plan (spelers aangemeld, keeper, profiel, focus), dan loopt de knop vol,
+  // schuiven de spelers even heen en weer en glanst het resultaat. Mensen vertrouwen een uitkomst meer als ze het
+  // werk zien. Na eigen sleepwerk op het veld alleen de knop, niet de spelers.
+  const sig = plan && !M.isOwn(match, team) && !match.started ? JSON.stringify([(match.events[0] || {}).pos, plan.steps.map((s) => (s.type === 'swap' ? [s.t, s.out, s.in] : [s.t, Object.keys(s.pos || {}).sort().join()]))]) : null;
+  const [think, setThink] = useState(null);
+  const manual = useRef(0);
+  useEffect(() => {
+    if (!sig) return;
+    const prev = seenPlan.id === match.id ? seenPlan.sig : null;
+    seenPlan = { id: match.id, sig };
+    if (!prev || prev === sig) return;
+    setThink({ k: Date.now(), phase: 'run', shuffle: Date.now() - manual.current > 1200 });
+  }, [sig]);
+  useEffect(() => {
+    if (!think) return undefined;
+    const tm = setTimeout(() => setThink(think.phase === 'run' ? { ...think, phase: 'done' } : null), think.phase === 'run' ? 1500 : 1400);
+    return () => clearTimeout(tm);
+  }, [think && think.k, think && think.phase]);
+  const byHand = () => { manual.current = Date.now(); };
   // aftrap: het veld en het affiche gaan vloeiend over in het live-scherm, het scorebord valt erin
   const start = () => {
     unlockAudio();
@@ -219,16 +240,18 @@ function PrepView({ state, match, team }) {
     ${tooFew
       ? html`<div class="card" style="flex:1 1 auto;justify-content:center;text-align:center"><span class="h2">Te weinig spelers</span><span class="sub">Je hebt ${F} veldspelers nodig${team.keeper ? ' plus een keeper' : ''}. Tik op "spelers".</span></div>`
       : html`
-        <${ModeSwitch} match=${match} team=${team} swaps=${swaps} perMoment=${perMoment} st=${gpSt} onTour=${() => setTour(1)} onSheet=${setSheet} />
-        <div class="grow-field"><${PlanView} match=${match} team=${team} compact editable=${!M.isOwn(match, team)}
+        <${ModeSwitch} match=${match} team=${team} swaps=${swaps} perMoment=${perMoment} st=${gpSt} onTour=${() => setTour(1)} onSheet=${setSheet} think=${think} />
+        <div class="grow-field"><${PlanView} match=${match} team=${team} compact editable=${!M.isOwn(match, team)} thinking=${think && (think.phase === 'done' || think.shuffle) ? think.phase : null}
           onLocked=${M.isOwn(match, team) ? () => toast('Je plant zelf: spelers verplaats je in je game plan.', { label: 'Open', run: () => go('/plan') }) : null}
           onTour=${() => { haptic('select'); setTour(1); }}
-          onSwap=${(a, b) => { conceptDrop(mutateConcept, team, a, b); mutateConcept((m) => { m.setup = { ...(m.setup || {}), base: true }; }); }}
+          onSwap=${(a, b) => { byHand(); conceptDrop(mutateConcept, team, a, b); mutateConcept((m) => { m.setup = { ...(m.setup || {}), base: true }; }); }}
           onPinHere=${(t, pairs, no, moves, kind) => {
+            byHand();
             mutateConcept((m, d) => M.pinMoment(m, d.teams.find((x) => x.id === m.teamId), t, pairs, 'terug', moves));
             toast(kind === 'form' ? `Andere opstelling vanaf wissel ${no}. Tik het speldje om los te maken.` : kind ? `Plekwissel bij wissel ${no} vastgezet. Tik het speldje om los te maken.` : `Wissel ${no} vastgezet. Tik het speldje om los te maken.`);
           }}
           onUnpin=${M.isOwn(match, team) ? null : (t, no) => {
+            byHand();
             const prev = JSON.parse(JSON.stringify(match.pins || []));
             const prevB = match.breakLineups ? JSON.parse(JSON.stringify(match.breakLineups)) : null;
             const teamOf = (m, d) => d.teams.find((x) => x.id === m.teamId);
@@ -237,6 +260,7 @@ function PrepView({ state, match, team }) {
             toast(no ? `Speldje bij wissel ${no} weg · de app rekent opnieuw` : `Opstelling ${M.periodLabel(team, Math.round(t / L))} weer van de app`, { label: 'Ongedaan', run: () => mutateConcept((m, d) => { m.pins = prev; m.breakLineups = prevB; M.replan(m, teamOf(m, d)); }) });
           }}
           onBreakSwap=${M.isOwn(match, team) ? null : (p, t, lu) => {
+            byHand();
             mutateConcept((m, d) => M.setBreakLineup(m, d.teams.find((x) => x.id === m.teamId), p, lu));
             toast(`Opstelling ${M.periodLabel(team, p)} vastgezet. Tik het speldje om los te maken.`);
           }} /></div>`}
@@ -1126,7 +1150,21 @@ function SquadBar({ match, team, onOpen }) {
 }
 
 // ---------- Autopilot of Zelf plannen: één schakelaar, het een of het ander ----------
-function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet }) {
+// Speeltijd in één oogopslag: per speler een staafje (lang = veel minuten), van meest naar minst, in de kleur van
+// zijn vaste rol (zonder vaste rol: leisteen). Tijdens het doorrekenen dansen de staafjes even.
+const NO_ROLE = '#9AA5BA';
+function PlayBars({ team, secs, thinking }) {
+  const byId = Object.fromEntries(team.players.map((p) => [p.id, p]));
+  const ids = Object.keys(secs).sort((a, b) => secs[b] - secs[a]);
+  const max = Math.max(1, ...ids.map((id) => secs[id]));
+  return html`<span class=${'ptv' + (thinking ? ' wob' : '')} aria-hidden="true">${ids.map((id, k) => {
+    const p = byId[id] || {};
+    const c = p.main && p.main !== 'K' && POS_COLORS[p.main] ? POS_COLORS[p.main] : NO_ROLE;
+    return html`<i key=${id} style=${`--h:${Math.max(0.18, secs[id] / max).toFixed(3)};--c:${c};--k:${k}`}></i>`;
+  })}</span>`;
+}
+
+function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet, think = null }) {
   const own = M.isOwn(match, team);
   const [pend, setPend] = useState(null);
   const [ask, setAsk] = useState(null);
@@ -1211,9 +1249,9 @@ function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet }) {
   const full = st ? st.blocks.filter((b) => b.ok).length : 0;
   return html`<section class="modesw">
     <div class="msw-row">
-      <div class=${'msw' + (z ? ' z' : '')} role="radiogroup" aria-label="Hoe wissel je?" ref=${swRef}>
+      <div class=${'msw' + (z ? ' z' : '') + (!z && think ? ' ' + (think.phase === 'run' ? 'thinking' : 'done') : '')} role="radiogroup" aria-label="Hoe wissel je?" ref=${swRef} aria-busy=${!z && think && think.phase === 'run' ? 'true' : 'false'}>
         <span class="msw-tag" aria-hidden="true">✦ aanbevolen</span>
-        <span class="msw-th" aria-hidden="true"><span class="ai-sparks"><i></i><i></i><i></i><i></i></span></span>
+        <span class="msw-th" aria-hidden="true"><span class="ai-sparks"><i></i><i></i><i></i><i></i></span>${!z && think && html`<span class="msw-fill" key=${'f' + think.k}></span>`}</span>
         <button type="button" role="radio" aria-checked=${z ? 'false' : 'true'} class="msw-a" onClick=${toAuto}><${Icon} name="spark" size=${16} />Autopilot</button>
         <button type="button" role="radio" aria-checked=${z ? 'true' : 'false'} class="msw-b" onClick=${toZelf}><${Icon} name="edit" size=${15} />Zelf plannen</button>
       </div>
@@ -1221,11 +1259,22 @@ function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet }) {
     </div>
     <div class="msum" key=${own ? 'z' : 'a'}>
       ${own
-        ? html`<button type="button" class="msum-t" onClick=${() => onSheet('speeltijd')}>${st ? html`<${Icon} name="chart" size=${14} />${full}/${st.blocks.length} blokken · ${M.mins(st.min)}–${M.mins(st.max)}′` : 'Je plan is nog leeg'}</button>
-            <button type="button" class="msum-go" onClick=${() => go('/plan')}>${st ? 'Open game plan' : 'Maak je plan'}<${Icon} name="chev" size=${14} /></button>`
-        : html`<button type="button" class="msum-t wide" onClick=${() => onSheet('speeltijd')}>
-            <span>${swaps ? `${swaps} ${perMoment > 1 ? 'momenten' : 'wissels'} · ${range}′ p.p.` : 'Geen wissels nodig'}${plan && !plan.ok && html` <span class="warnicon" title=${(plan.why || []).map((w) => WHY_TEXT[w]).join(', ')}>!</span>`}</span>
-            <span class="msum-go">Speeltijd<${Icon} name="chev" size=${14} /></span></button>`}
+        ? html`<button type="button" class="ptcard" onClick=${() => { haptic('select'); onSheet('speeltijd'); }} aria-label=${st ? `Speeltijd per speler: ${M.mins(st.min)} tot ${M.mins(st.max)} minuten. Tik voor details` : 'Speeltijd'}>
+            ${st ? html`<${PlayBars} team=${team} secs=${Object.fromEntries(Object.keys(st.kids).map((id) => [id, st.kids[id].sec]))} />` : html`<span class="ptv empty" aria-hidden="true"><${Icon} name="chart" size=${18} /></span>`}
+            <span class="pt-t"><small>Speeltijd per speler</small><b class="num">${st ? html`${M.mins(st.min)}–${M.mins(st.max)}′<span> · ${full}/${st.blocks.length} blokken</span>` : 'Je plan is nog leeg'}</b></span>
+          </button>
+          <button type="button" class="msum-go" onClick=${() => go('/plan')}>${st ? 'Game plan' : 'Maak je plan'}<${Icon} name="chev" size=${14} /></button>`
+        : html`<button type="button" class=${'ptcard wide' + (think && think.phase === 'run' ? ' busy' : '')} onClick=${() => { haptic('select'); onSheet('speeltijd'); }}
+            aria-label=${plan && plan.finalPlayed ? `Speeltijd per speler: ${range} minuten, ${swaps} wissels. Tik voor details` : 'Speeltijd'}>
+            ${plan && plan.finalPlayed ? html`<${PlayBars} team=${team} secs=${Object.fromEntries(match.present.filter((id) => id !== match.keeperId && id in plan.finalPlayed).map((id) => [id, plan.finalPlayed[id]]))} thinking=${think && think.phase === 'run'} />` : html`<span class="ptv empty" aria-hidden="true"><${Icon} name="chart" size=${18} /></span>`}
+            <span class="pt-t" key=${think && think.phase === 'run' ? 'busy' : 'ok'}>
+              <small>${think && think.phase === 'run' ? html`<span class="ai-grad">✦ Wissels doorrekenen…</span>` : 'Speeltijd per speler'}</small>
+              ${think && think.phase === 'run'
+                ? html`<b class="pt-skel" aria-hidden="true"><i></i><i></i></b>`
+                : html`<b class="num">${swaps ? html`${range}′<span> · ${swaps} ${perMoment > 1 ? 'momenten' : 'wissels'}</span>` : 'Geen wissels nodig'}${plan && !plan.ok && html` <span class="warnicon" title=${(plan.why || []).map((w) => WHY_TEXT[w]).join(', ')}>!</span>`}</b>`}
+            </span>
+            <span class="pt-go">Bekijk<${Icon} name="chev" size=${14} /></span>
+          </button>`}
     </div>
     ${ask === 'compare' && html`<${Sheet} onClose=${() => { seen(); done(); }} label="Zelf plannen of Autopilot">
       <span class="h2" style="font-size:22px">Zelf plannen?</span>
@@ -1320,7 +1369,8 @@ function SquadSheet({ match, team, counts, onClose }) {
     <span class="sub" style="margin-top:-6px">Tik om aan of af te melden.</span>
     <div class="sq-grid" ref=${grid}>${active.map((p, k) => {
       const on = present.indexOf(p.id) !== -1;
-      const c = p.main && POS_COLORS[p.main] ? POS_COLORS[p.main] : 'var(--blue-2)';
+      // kleur van de vaste rol; zonder vaste rol leisteen (niet het blauw van achter)
+      const c = p.main && POS_COLORS[p.main] ? POS_COLORS[p.main] : NO_ROLE;
       return html`<button type="button" key=${p.id} class=${'sq-p' + (on ? ' on' : '') + (team.keeper && keeper === p.id && on ? ' keeps' : '')} style=${`--c:${c};--k:${k}`}
         aria-pressed=${on ? 'true' : 'false'} onClick=${() => toggle(p.id)}>
         <span class="sq-n">${nick(p)}</span>
@@ -1339,7 +1389,7 @@ function SquadSheet({ match, team, counts, onClose }) {
       </button>
       <${Reveal} open=${pickK}><div class="sq-kpick">${pool.map((p) => html`<button type="button" key=${'k' + p.id} class=${'sq-kc' + (keeper === p.id ? ' on' : '')}
         aria-pressed=${keeper === p.id ? 'true' : 'false'} onClick=${() => chooseKeeper(p.id)}>
-        ${nick(p)}<small>${(counts[p.id] || 0) + '×'}</small>${p.id === sugg && html`<i class="sq-sugg" title="Voorstel">✦</i>`}
+        <span class="sq-kn">${nick(p)}</span><small>${(counts[p.id] || 0) + '×'}</small>${p.id === sugg && html`<i class="sq-sugg" title="Voorstel van de app">✦</i>`}
       </button>`)}</div></${Reveal}>
     </div>`}
     <button type="button" class="btn primary block" onClick=${done}>Klaar</button>

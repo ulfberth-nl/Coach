@@ -120,7 +120,7 @@ export function pairsAfterDrag(next, out, inn, perMoment) {
   return list;
 }
 
-export function PlanView({ match, team, editable = false, onSwap, initialIndex = 0, nowIndex = -1, compact = false, liveT = null, onSwapNow = null, planner = false, onPin = null, onUnpin = null, onIndex = null, children = null, onPinHere = null, onLocked = null, onTour = null, onBreakSwap = null }) {
+export function PlanView({ match, team, editable = false, onSwap, initialIndex = 0, nowIndex = -1, compact = false, liveT = null, onSwapNow = null, planner = false, onPin = null, onUnpin = null, onIndex = null, children = null, onPinHere = null, onLocked = null, onTour = null, onBreakSwap = null, thinking = null }) {
   const nick = (id) => M.nickOf(team, id);
   const END = M.matchEnd(team);
   const L = M.periodLen(team);
@@ -333,7 +333,8 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   const multi = c.kind === 'swap' && c.ins && c.ins.length > 1;
   const swapText = c.kind === 'swap' ? (multi ? `${c.ins.map(nick).join(', ')} erin` : `${nick(c.in)} erin voor ${nick(c.out)}`) : '';
 
-  return html`<div class=${'planview col' + (compact ? ' compact' : '')} style="gap:8px">
+  // thinking: de app rekent het plan door (spelers schuiven even heen en weer), daarna 'settled'
+  return html`<div class=${'planview col' + (compact ? ' compact' : '') + (thinking === 'run' ? ' thinking' : thinking === 'done' ? ' settled' : '')} style="gap:8px">
     <div class="tl" ref=${track} aria-label="Tijdlijn">
       <span class="tl-line"></span>
       ${cards.map((cc, k) => (k > 0 && cc.kind === 'lineup' ? html`<span class="tl-break" style=${`left:${dotPct(k - 0.5)}%`}><b>${team.periods === 2 ? 'rust' : 'pauze'}</b></span>` : null))}
