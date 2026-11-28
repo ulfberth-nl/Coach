@@ -190,6 +190,45 @@ export function viewTransition(kind, fn, after) {
   }
 }
 
+// ---------- uitgroeien tot het volgende scherm (container transform / iOS-zoom) ----------
+// Het getikte element groeit uit tot het nieuwe scherm: van zijn eigen vorm en kleur naar de achtergrond van de
+// app, daarna verschijnt de inhoud. Zo blijft zichtbaar waar je vandaan komt. Minder beweging: meteen het scherm.
+let skipVT = false;
+export const takeSkipVT = () => { const s = skipVT; skipVT = false; return s; };
+export function zoomTo(el, path, { from = '#13265E', to = '#F5F7FC' } = {}) {
+  const nav = () => { location.hash = path; };
+  if (!el || reduced() || typeof el.animate !== 'function') { nav(); return; }
+  const r = el.getBoundingClientRect();
+  const W = window.innerWidth, H = window.innerHeight;
+  const ov = document.createElement('div');
+  ov.className = 'zoomov';
+  ov.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(ov);
+  const rad = Math.round(Math.min(r.height / 2, 40));
+  const a = ov.animate([
+    { clipPath: `inset(${r.top}px ${W - r.right}px ${H - r.bottom}px ${r.left}px round ${rad}px)`, backgroundColor: from },
+    { offset: 0.62, backgroundColor: to },
+    { clipPath: 'inset(0px 0px 0px 0px round 0px)', backgroundColor: to },
+  ], { duration: 400, easing: 'cubic-bezier(.32,.72,0,1)', fill: 'forwards' });
+  // halverwege (het vlak dekt dan bijna alles) wisselt het scherm eronder al, zodat er geen leeg moment is
+  const root = document.documentElement;
+  let navd = false;
+  const swap = () => { if (navd) return; navd = true; skipVT = true; root.dataset.zoomin = '1'; nav(); };
+  setTimeout(swap, 280);
+  let doneOnce = false;
+  const finish = () => {
+    if (doneOnce) return; doneOnce = true;
+    swap();
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const b = ov.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: 'ease-out', fill: 'forwards' });
+      b.onfinish = () => ov.remove();
+      setTimeout(() => { ov.remove(); delete root.dataset.zoomin; }, 900);
+    }));
+  };
+  a.onfinish = finish;
+  setTimeout(finish, 700); // vangnet als de animatie niet afloopt (tab op de achtergrond)
+}
+
 // ---------- één indruk-gedrag voor alle knoppen ----------
 // Kleiner (kleine knoppen iets meer dan grote kaarten) en iets donkerder; bij loslaten veert hij terug.
 // Werkt met de losse 'scale'-eigenschap, zodat bestaande animaties op 'transform' gewoon doorlopen.

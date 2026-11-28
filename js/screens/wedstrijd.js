@@ -9,7 +9,7 @@ import { matchRules, PROFILES, PROFILE_ORDER, profileOf, profileRules, setProfil
 import { compute } from '../compute.js';
 import { PlayTimeSheet } from '../playtime.js';
 import { scheduleRefresh } from '../refresh.js';
-import { viewTransition, haptic, reduced, T as TEMPO, devicePrefs, setDevicePref } from '../motion.js';
+import { viewTransition, haptic, reduced, T as TEMPO, devicePrefs, setDevicePref, zoomTo } from '../motion.js';
 import { switchPlanMode } from './plan.js';
 import { APP_VERSION } from './team.js';
 import { Rooster } from './gameplan.js';
@@ -1272,20 +1272,22 @@ function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet, think 
   const stash = !!(gp && gp.base) || !!(match.ownStash && ((match.ownStash.pins || []).length || match.ownStash.periodLineups));
   const bases = (team.bases || []).filter((b) => M.baseFits(team, b));
   const done = () => { setAsk(null); setPend(null); };
-  // één tik op Zelf plannen = meteen naar je game plan (stap 1, Opzet). Daar kies je hoe je begint.
-  const goZelf = () => {
+  // één tik op Zelf plannen = naar je game plan (stap 1, Opzet). Eerst glijdt het blokje helemaal naar Zelf plannen,
+  // dan groeit het uit tot het game plan (container transform), zodat je ziet waar je heen gaat.
+  const enter = (wait) => setTimeout(() => zoomTo(document.querySelector('.msw-th'), '/plan'), reduced() ? 0 : wait);
+  const goZelf = (wait = 400) => {
     done();
     switchPlanMode('eigen', true);
     if (stash) toast('Zelf plannen staat aan · je game plan is terug.', { label: 'Ongedaan', run: () => switchPlanMode('app', true) });
-    go('/plan');
+    enter(wait);
   };
-  const toZelf = () => {
+  const toZelf = (fromDrag = false) => {
     // staat Zelf plannen al aan: dan is een tik 'naar mijn game plan'
-    if (own) { haptic('select'); go('/plan'); return; }
+    if (own) { haptic('select'); enter(60); return; }
     haptic('select');
     setPend('z');
     if (!devicePrefs().seenZelf) { setAsk('compare'); return; }
-    goZelf();
+    goZelf(fromDrag ? 160 : 400);
   };
   const toAuto = () => {
     haptic('select');
@@ -1337,7 +1339,7 @@ function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet, think 
       eat = true; setTimeout(() => { eat = false; }, 350);
       const to = p > 0.5 ? 1 : 0;
       if (to === was.from) { haptic('tap'); return; }
-      if (to) live.current.toZelf(); else live.current.toAuto();
+      if (to) live.current.toZelf(true); else live.current.toAuto();
     };
     const cancel = () => { if (!st) return; st = null; el.classList.remove('drag', 'past'); el.style.removeProperty('--p'); };
     const click = (e) => { if (eat) { e.stopPropagation(); e.preventDefault(); eat = false; } };
@@ -1362,7 +1364,7 @@ function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet, think 
         <span class="msw-tag" aria-hidden="true">✦ aanbevolen</span>
         <span class="msw-th" aria-hidden="true"><span class="ai-sparks"><i></i><i></i><i></i><i></i></span>${!z && think && html`<span class="msw-fill" key=${'f' + think.k}></span>`}</span>
         <button type="button" role="radio" aria-checked=${z ? 'false' : 'true'} class="msw-a" onClick=${toAuto}><${Icon} name="spark" size=${16} />Autopilot</button>
-        <button type="button" role="radio" aria-checked=${z ? 'true' : 'false'} class="msw-b" onClick=${toZelf}
+        <button type="button" role="radio" aria-checked=${z ? 'true' : 'false'} class="msw-b" onClick=${() => toZelf(false)}
           aria-label=${'Zelf plannen' + (own ? (gpState.ok ? ', plan klaar' : ', ' + gpState.say) + '. Tik om je game plan te openen' : '')}>
           <${Icon} name="edit" size=${15} />Zelf plannen${own && html`<span class=${'msw-st ' + (gpState.ok ? 'ok' : 'todo')} key=${gpState.key} aria-hidden="true">${gpState.ok ? html`<${Icon} name="check" size=${11} />` : gpState.short}</span>`}
         </button>

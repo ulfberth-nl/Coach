@@ -1,6 +1,6 @@
 import { html, render, useEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { useStore } from './store.js';
-import { installPress, viewTransition, canTransition } from './motion.js';
+import { installPress, viewTransition, canTransition, takeSkipVT } from './motion.js';
 import { ToastHost, FlashHost, Icon, toast, appInfo } from './ui.js';
 import { Wedstrijd } from './screens/wedstrijd.js';
 import { Plan } from './screens/plan.js';
@@ -36,7 +36,8 @@ function useRoute() {
       const prev = cur.current;
       cur.current = next;
       const kind = kindOf(prev, next);
-      const vt = !!kind && canTransition();
+      const skip = takeSkipVT(); // de overgang is al gedaan (element groeide uit tot dit scherm)
+      const vt = !!kind && !skip && canTransition();
       const apply = () => { setRoute(next); setViaVT(vt); window.scrollTo(0, 0); };
       if (!vt) { apply(); return; }
       const from = prev[0] === 'afloop' ? prev[1] : null;

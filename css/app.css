@@ -2977,3 +2977,10 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 .bfv-field.crowdA .spot[data-line="A"] .pill { font-size: 13px; padding-right: 9px; max-width: 78px; }
 .bfv-field.crowdA5 .spot[data-line="A"] .pill { max-width: 62px; padding-left: 9px; padding-right: 7px; }
 .bfv-field.crowdA5 .spot[data-line="A"] .pill.acc { padding-left: 12px; }
+/* v0.30.1: Zelf plannen groeit uit tot het game plan (zoomTo in motion.js) */
+.zoomov { position: fixed; inset: 0; z-index: 9000; pointer-events: none; will-change: clip-path; }
+html[data-zoomin] .gplan > * { animation: zoomRise .46s var(--spring-soft) both; }
+html[data-zoomin] .gplan > *:nth-child(2) { animation-delay: .04s; }
+html[data-zoomin] .gplan > *:nth-child(3) { animation-delay: .08s; }
+html[data-zoomin] .gplan > *:nth-child(n+4) { animation-delay: .12s; }
+@keyframes zoomRise { from { opacity: 0; translate: 0 16px; } }
