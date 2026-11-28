@@ -2985,3 +2985,6 @@ html[data-zoomin] .gplan > *:nth-child(n+4) { animation-delay: .12s; }
 /* v0.31.1: rooster per speler ook in het Speeltijd-venster */
 .pt-sec { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; padding-top: 14px; border-top: 1px solid var(--line); }
 .pt-sec .h3 { font-size: 18px; font-weight: 900; }
+.pt-view { animation: ptView .32s var(--ease-out) both; }
+@keyframes ptView { from { opacity: 0; translate: 0 8px; } }
+.reduce .pt-view { animation: none; }

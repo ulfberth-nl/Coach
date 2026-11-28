@@ -3,7 +3,7 @@
 // linie en wanneer aan de kant. Gebruikt op het Wedstrijd-scherm (Autopilot en game plan) en in Controle.
 import { html, useState, useMemo } from '../vendor/preact-htm.js';
 import * as M from './match.js';
-import { Icon, Sheet } from './ui.js';
+import { Icon, Sheet, Seg } from './ui.js';
 
 const ORDER = ['V', 'M', 'A'];
 const LNAME = { V: 'voor', M: 'midden', A: 'achter' };
@@ -89,17 +89,22 @@ export function PlayTimeSheet({ match, team, onClose, onOpenPlan = null }) {
   const d = useMemo(() => (empty ? null : playData(match, team, cards)), [cards]);
   const swaps = cards.filter((c) => c.kind === 'swap').reduce((a, c) => a + (c.ins ? c.ins.length : 1), 0);
   const keeper = match.keeperId ? M.nickOf(team, match.keeperId) : null;
-  return html`<${Sheet} onClose=${onClose} label="Speeltijd per speler">
+  // schakelaar bovenin: speeltijd of rooster, zodat je niet hoeft te scrollen
+  const [view, setView] = useState('tijd');
+  const ros = view === 'rooster';
+  return html`<${Sheet} onClose=${onClose} label=${ros ? 'Rooster per speler' : 'Speeltijd per speler'}>
     <span class="pt-kicker">${own ? html`<${Icon} name="edit" size=${13} />Volgens je game plan` : html`<span class="ai-grad">✦ Volgens Autopilot</span>`}</span>
-    <span class="h2" style="font-size:22px">Speeltijd per speler</span>
+    <span class="h2" style="font-size:22px">${ros ? 'Rooster per speler' : 'Speeltijd per speler'}</span>
+    ${!empty && html`<${Seg} label="Weergave" value=${view} onChange=${setView} options=${[['tijd', 'Speeltijd'], ['rooster', 'Rooster']]} />`}
     ${empty
       ? html`<span class="sub">Je game plan is nog leeg. Zodra er een startopstelling staat, zie je hier wie hoe lang speelt en waar.</span>
           ${onOpenPlan && html`<button type="button" class="btn primary block" onClick=${onOpenPlan}>Open game plan</button>`}`
-      : html`<span class="sub">${swaps} ${swaps === 1 ? 'wissel' : 'wissels'} · doel ${halfMin(d.avg)} min, marge ${mins(d.marge)} min. Tik een speler voor zijn wedstrijd.</span>
-          <${PlayTime} match=${match} team=${team} cards=${cards} />
-          ${keeper && html`<span class="small pt-keep"><span class="kbadge">K</span>${keeper} keept${team.rules && team.rules.keeperCounts ? '' : ' (telt niet mee)'}</span>`}
-          <div class="pt-sec"><span class="h3">Rooster per speler</span><span class="small">Wie waar speelt, de hele wedstrijd.</span></div>
-          <${Rooster} match=${match} team=${team} cards=${cards} />`}
+      : ros
+        ? html`<span class="sub">Wie waar speelt, de hele wedstrijd. ${swaps} ${swaps === 1 ? 'wissel' : 'wissels'}.</span>
+          <div class="pt-view" key="rooster"><${Rooster} match=${match} team=${team} cards=${cards} /></div>`
+        : html`<span class="sub">${swaps} ${swaps === 1 ? 'wissel' : 'wissels'} · doel ${halfMin(d.avg)} min, marge ${mins(d.marge)} min. Tik een speler voor zijn wedstrijd.</span>
+          <div class="pt-view" key="tijd"><${PlayTime} match=${match} team=${team} cards=${cards} /></div>`}
+    ${!empty && keeper && html`<span class="small pt-keep"><span class="kbadge">K</span>${keeper} keept${team.rules && team.rules.keeperCounts ? '' : ' (telt niet mee)'}</span>`}
   </${Sheet}>`;
 }
 
