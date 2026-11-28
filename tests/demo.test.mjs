@@ -22,6 +22,7 @@ const ids = team.players.map((p) => p.id);
   assert.equal(by('K'), 1);
   assert.ok(by('A') >= team.lines.A && by('M') >= team.lines.M && by('V') >= team.lines.V, 'genoeg spelers per linie');
   assert.ok(team.players.every((p) => p.kracht >= 60), 'geen lage cijfers voor internationals');
+  assert.ok(team.players.every((p) => p.kracht % 12.5 === 0), 'kracht altijd op een van de 9 niveaus (label en groene kleur kloppen)');
   if (suggestKeeper) assert.equal(suggestKeeper(team, ids, {}), 'nl-pirmin', 'Pirmin wordt als keeper voorgesteld');
   const m = M.createMatch(team, { opponent: 'België', present: ids, keeperId: 'nl-pirmin' });
   assert.ok(m.plan && m.plan.steps.length, 'Autopilot maakt een plan');

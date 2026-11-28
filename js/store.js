@@ -62,17 +62,30 @@ export function newTeam(name = 'Mijn team', withSamples = true) {
 
 // Demoteam om de app mee uit te proberen: voornamen uit de Oranje-selecties, met hun plek op het veld.
 // De kracht verschilt alleen zodat Autopilot iets te verdelen heeft; het zegt niets over de echte spelers.
+// Altijd een van de 9 niveaus (stappen van 12,5), net als met de schuif: 62,5 Vaste Waarde, 75 Bepalende Speler,
+// 87,5 Motor van het Team, 100 Draagt Het Hele Team.
 const DEMO_PLAYERS = [
-  ['pirmin', 'Pirmin', 70, 'K', ['K', 'A']],
+  ['pirmin', 'Pirmin', 75, 'K', ['K', 'A']],
   ['lisa', 'Lisa', 75, 'A', ['A', 'M']],
-  ['jip', 'Jip', 85, 'A', ['A', 'M']],
-  ['pien', 'Pien', 60, 'M', ['M', 'A']],
-  ['yibbi', 'Yibbi', 80, 'M', ['M', 'A']],
-  ['jorrit', 'Jorrit', 90, 'M', ['M', 'V']],
-  ['guusje', 'Guusje', 65, 'V', ['V', 'M']],
-  ['duco', 'Duco', 80, 'V', ['V']],
-  ['thierry', 'Thierry', 70, 'V', ['V', 'M']]
+  ['jip', 'Jip', 87.5, 'A', ['A', 'M']],
+  ['pien', 'Pien', 62.5, 'M', ['M', 'A']],
+  ['yibbi', 'Yibbi', 87.5, 'M', ['M', 'A']],
+  ['jorrit', 'Jorrit', 100, 'M', ['M', 'V']],
+  ['guusje', 'Guusje', 62.5, 'V', ['V', 'M']],
+  ['duco', 'Duco', 87.5, 'V', ['V']],
+  ['thierry', 'Thierry', 75, 'V', ['V', 'M']]
 ];
+// demoteams uit v0.33.0 hadden krachtwaarden tussen de niveaus in: rechtzetten
+function fixDemo(s) {
+  for (const t of s.teams) {
+    if (!t.demo) continue;
+    for (const p of t.players) {
+      const d = DEMO_PLAYERS.find((x) => 'nl-' + x[0] === p.id);
+      if (d && p.kracht % 12.5 !== 0) p.kracht = d[2];
+    }
+  }
+  return s;
+}
 export const DEMO_NAME = 'Demoteam Oranje';
 
 export function demoTeam(id) {
@@ -119,7 +132,7 @@ function load() {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const s = JSON.parse(raw);
-      if (s && s.version === 1 && Array.isArray(s.teams) && s.teams.length) return s;
+      if (s && s.version === 1 && Array.isArray(s.teams) && s.teams.length) return fixDemo(s);
     }
   } catch (e) { /* lege of kapotte opslag: begin opnieuw */ }
   return freshState();
