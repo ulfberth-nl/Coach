@@ -3004,3 +3004,16 @@ html[data-zoomin] .gplan > *:nth-child(n+4) { animation-delay: .12s; }
 .pt-legend i.off { background: #E8ECF4; box-shadow: inset 0 0 0 1px rgba(17,24,39,.06); }
 .reduce .ro-row, .reduce .ro-s { animation: none; }
 @media (prefers-reduced-motion: reduce) { .ro-row, .ro-s { animation: none; } }
+/* v0.31.5: rust en pauzes in het rooster, subtiel: een stippellijntje door alle rijen met een klein label erboven.
+   De balk bestaat uit even brede periodes, zodat de lijn bij iedere speler op dezelfde plek valt. */
+.ro-rows { position: relative; }
+.ro-rows.has-br { padding-top: 20px; }
+.ro-bar { gap: 9px; }
+.ro-per { flex: 1 1 0; display: flex; gap: 3px; min-width: 0; }
+.ro-s.cut { margin-left: 0; }
+.ro-breaks { position: absolute; top: 0; bottom: 0; left: calc(var(--nw) + 8px); right: calc(var(--mw) + 8px); display: flex; gap: 9px; pointer-events: none; animation: roBr .5s ease-out .55s both; }
+.ro-breaks > span { position: relative; flex: 1 1 0; }
+.ro-breaks > span:not(:last-child)::after { content: ''; position: absolute; top: 18px; bottom: -2px; right: -5.5px; border-left: 1.5px dashed rgba(31,60,136,.22); }
+.ro-breaks b { position: absolute; top: 0; right: -5px; translate: 50% 0; padding: 0 6px; border-radius: 99px; font-size: 10.5px; font-weight: 800; line-height: 15px; color: var(--muted); background: var(--bg); white-space: nowrap; }
+@keyframes roBr { from { opacity: 0; } }
+.reduce .ro-breaks { animation: none; }

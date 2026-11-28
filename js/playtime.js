@@ -121,23 +121,32 @@ export function Rooster({ match, team, cards: given, onKid = null }) {
   cards.forEach((c, i) => { const t1 = i + 1 < cards.length ? cards[i + 1].t : END; for (const id in c.pos) if (id in played) played[id] += Math.max(0, t1 - c.t); });
   const order = ids.slice().sort((a, b) => played[b] - played[a]);
   // aaneengesloten stukken op dezelfde plek samenvoegen (de rust blijft een naad)
+  // aaneengesloten stukken op dezelfde plek samenvoegen, maar altijd knippen bij een rust of pauze
+  const P = team.periods;
   const segsOf = (id) => {
     const out = [];
     cards.forEach((c, i) => {
-      const s = { t: c.t, t1: i + 1 < cards.length ? cards[i + 1].t : END, line: c.pos[id] || null };
-      if (s.t1 <= s.t) return;
-      const last = out[out.length - 1];
-      if (last && last.line === s.line && s.t % L !== 0) last.t1 = s.t1; else out.push(s);
+      const t1 = i + 1 < cards.length ? cards[i + 1].t : END;
+      const line = c.pos[id] || null;
+      for (let a = c.t; a < t1;) {
+        const b = Math.min(t1, (Math.floor(a / L) + 1) * L);
+        const last = out[out.length - 1];
+        if (last && last.line === line && a % L !== 0 && last.t1 === a) last.t1 = b; else out.push({ t: a, t1: b, line });
+        a = b;
+      }
     });
     return out;
   };
+  const breakName = (q) => (P === 4 ? (q === 1 ? 'rust' : 'pauze') : P === 2 ? 'rust' : 'pauze');
   // zelfde opbouw als de speeltijd: naam, een balk van pillen (per stuk op dezelfde plek), minuten rechts.
   // De pillen groeien van links naar rechts in beeld, rij voor rij. Lange stukken in het veld tonen hun minuten.
   return html`<div class="rooster ro2">
-    <div class="ro-rows">
+    <div class=${'ro-rows' + (P > 1 ? ' has-br' : '')} style=${'--np:' + P}>
+      ${P > 1 && html`<span class="ro-breaks" aria-hidden="true">${Array.from({ length: P }, (_, q) => html`<span key=${q}>${q < P - 1 && html`<b>${breakName(q)}</b>`}</span>`)}</span>`}
       ${order.map((id, k) => html`<button type="button" class="ro-row" key=${id} style=${'--i:' + k} onClick=${onKid ? () => onKid(id) : null} disabled=${!onKid}>
         <span class="ro-n">${nick(id)}</span>
-        <span class="ro-bar">${segsOf(id).map((s, j) => html`<i class=${'ro-s ' + (s.line ? 'l' + s.line : 'off') + (s.t > 0 && s.t % L === 0 ? ' cut' : '')} key=${j} style=${`flex:${s.t1 - s.t} 1 0;--j:${j}`}>${s.line && s.t1 - s.t >= END * 0.13 ? mins(s.t1 - s.t) + '′' : ''}</i>`)}</span>
+        <span class="ro-bar">${(() => { const segs = segsOf(id); return Array.from({ length: P }, (_, q) => html`<span class="ro-per" key=${q}>${segs.map((s, j) => (Math.floor(s.t / L) !== q ? null
+          : html`<i class=${'ro-s ' + (s.line ? 'l' + s.line : 'off')} key=${j} style=${`flex:${s.t1 - s.t} 1 0;--j:${j}`}>${s.line && s.t1 - s.t >= END * 0.13 ? mins(s.t1 - s.t) + '′' : ''}</i>`))}</span>`); })()}</span>
         <span class="ro-m num">${mins(played[id])}′</span>
       </button>`)}
     </div>
