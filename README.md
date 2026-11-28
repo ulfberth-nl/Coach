@@ -202,6 +202,8 @@ Wie zelf wil sleutelen, opent **Eigen instellingen**: spelers tegelijk, hoe vaak
 
 ## Spelers en beoordeling
 
+**Ingang (v0.33.2):** op de Team-pagina staat *Spelers en beoordeling* als eigen tegel boven de teamkaart, in dezelfde stijl als *Wie zijn er?* op het homescherm: poppetjes-icoon, rondjes met de eerste letter in de kleur van de dominante rol, het aantal spelers (en wie niet meedoet) en de stand van het slot (*kies eerst een pincode*, *achter pincode* of groen *open, nog x min*). Niets over de beoordeling zelf. Zonder spelers is de tegel oranje met *Nog geen spelers*.
+
 Onder **Team → Spelers en beoordeling** (achter een pincode van 4 cijfers): naam, bijnaam (max. 8 tekens, die staat in het veld), speelkracht (schuif met 9 niveaus zonder cijfers: van *Beginner* tot *Draagt Het Hele Team*; het label staat boven de balk en eronder de omschrijving, die tijdens het schuiven meebeweegt; vanaf *Bepalende Speler* kleurt hij groen), voorkeursposities en sterke kanten. Buiten dit deel zie je nergens niveaus; de wisselberekening gebruikt ze alleen intern.
 
 Het pincodescherm is donker met ronde glazen toetsen; bij een fout schudden de bolletjes rood, bij de goede code gaat het slot open. Je kunt ook een toetsenbord gebruiken.

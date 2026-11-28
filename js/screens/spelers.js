@@ -6,6 +6,8 @@ import { KEY_KRACHT } from '../planner.js';
 
 const STRENGTHS = ['Snel', 'Overzicht', 'Techniek', 'Inzet', 'Verdedigen', 'Passen', 'Scoren', 'Samenspel', 'Leiderschap', 'Vrolijk'];
 let unlockedUntil = 0;
+// tot wanneer het spelersdeel open staat (voor de status op de Team-pagina)
+export const pinOpenUntil = () => unlockedUntil;
 
 // ---------- pincode: donker glas, ronde toetsen, slot dat opengaat ----------
 function LockIcon() {

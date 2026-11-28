@@ -2,13 +2,14 @@ import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { update, activeTeam, currentMatch, newTeam, exportData, importData, addDemo, resetDemo, dropTeam } from '../store.js';
 import { periodWord } from '../match.js';
 import { suggestKeeper } from './home.js';
-import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, Reveal, Sheet, toast, STANDS, appInfo, Terms } from '../ui.js';
+import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, Reveal, Sheet, toast, STANDS, appInfo, Terms, POS_COLORS } from '../ui.js';
 import { devicePrefs, setDevicePref, onDevicePrefs, osReduced, haptic } from '../motion.js';
 import { PROFILES, PROFILE_ORDER, profileOf, cachedTune, rememberTune, consequences, setProfile } from '../profiles.js';
 import { compute } from '../compute.js';
 import { scheduleRefresh } from '../refresh.js';
+import { pinOpenUntil } from './spelers.js';
 
-export const APP_VERSION = '0.33.1';
+export const APP_VERSION = '0.33.2';
 
 // regels die het wisselprofiel bepaalt; zet je er zelf een, dan wordt het profiel 'Eigen'
 const TUNED = ['marge', 'equalTime', 'evenOften', 'maxBenchOn', 'maxBench', 'minInterval', 'turnsPerPeriod', 'priority', 'strongBias'];
@@ -143,6 +144,31 @@ function readLogo(file) {
     img.onerror = reject;
     img.src = URL.createObjectURL(file);
   });
+}
+
+// Ingang naar Spelers en beoordeling: een echte tegel, net als 'Wie zijn er?' op het homescherm. De status zegt
+// hoeveel spelers en of het slot open is, nooit iets over de beoordeling zelf.
+function PlayersTile({ team, state }) {
+  const act = team.players.filter((p) => p.active !== false);
+  const off = team.players.length - act.length;
+  const empty = !team.players.length;
+  const left = Math.ceil((pinOpenUntil() - Date.now()) / 60000);
+  const open = !!state.pinHash && left > 0;
+  const lock = !state.pinHash ? 'kies eerst een pincode' : open ? `open, nog ${left} min` : 'achter pincode';
+  const show = act.slice(0, 6);
+  return html`<a class=${'pltile' + (empty ? ' todo' : '')} href="#/spelers" onClick=${() => haptic('select')}
+    aria-label=${empty ? 'Spelers toevoegen' : `Spelers en beoordeling: ${act.length} spelers, ${lock}`}>
+    <span class="pl-ico" aria-hidden="true"><${Icon} name="team" size=${20} /></span>
+    <span class="pl-t">
+      <b>Spelers en beoordeling</b>
+      ${empty
+        ? html`<small>Nog geen spelers</small>`
+        : html`<span class="pl-row"><span class="avs" aria-hidden="true">${show.map((p, k) => html`<i key=${p.id} style=${`--c:${p.main && POS_COLORS[p.main] ? POS_COLORS[p.main] : 'var(--blue-2)'};--k:${k}`}>${((p.nick || p.name || '?').trim()[0] || '?').toUpperCase()}</i>`)}${act.length > show.length && html`<i class="more" style=${'--k:' + show.length}>+${act.length - show.length}</i>`}</span>
+            <small class="num">${act.length} ${act.length === 1 ? 'speler' : 'spelers'}${off ? ` · ${off} doet niet mee` : ''}</small></span>`}
+      ${!empty && html`<small class=${'pl-lock' + (open ? ' open' : '')}><${Icon} name=${open ? 'unlock' : 'lock'} size=${13} />${lock}</small>`}
+    </span>
+    <span class="pl-go" aria-hidden="true"><${Icon} name="chev" size=${16} /></span>
+  </a>`;
 }
 
 // Eerste keer op het demoteam: wat het is en hoe je je eigen team begint
@@ -306,12 +332,12 @@ export function Team({ state }) {
     ${fresh && html`<section class="card start-card">
       <span class="h2">Zo begin je</span>
       <ol class="st-steps">
-        <li class=${named ? 'done' : ''}><i>${named ? html`<${Icon} name="check" size=${14} />` : '1'}</i><span><b>Geef je team een naam</b>hieronder bij Team</span></li>
-        <li><i>2</i><span><b>Voeg je spelers toe</b>met hun rol en kracht, achter een pincode</span></li>
+        <li class=${named ? 'done' : ''}><i>${named ? html`<${Icon} name="check" size=${14} />` : '1'}</i><span><b>Geef je team een naam</b>verderop bij Team</span></li>
+        <li><i>2</i><span><b>Voeg je spelers toe</b>met de tegel hieronder, achter een pincode</span></li>
         <li><i>3</i><span><b>Spelvorm en wissels</b>verderop op deze pagina</span></li>
       </ol>
-      <a class="btn primary block" href="#/spelers" style="text-decoration:none">Spelers toevoegen</a>
     </section>`}
+    <${PlayersTile} team=${team} state=${state} />
 
     <section class="card">
       <span class="h2">Team</span>
@@ -329,10 +355,6 @@ export function Team({ state }) {
           : html`<input class="input" style="width:96px" maxLength="4" aria-label="Afkorting op het logo" placeholder="SB" value=${team.short || ''} onChange=${(e) => set((t) => { t.short = e.target.value.trim(); })} />`}
       </div>
       <span class="small">Het logo zie je als je een doelpunt invoert. Het blijft op deze telefoon.</span>
-      <a class="setting" href="#/spelers" style="text-decoration:none;color:inherit">
-        <div class="col" style="gap:1px"><span class="t">Spelers en beoordeling</span><span class="small">${team.players.filter((p) => p.active !== false).length} spelers · dominante rol, kracht · achter pincode</span></div>
-        <span class="row"><${Icon} name="lock" size=${18} /><${Icon} name="chev" size=${18} /></span>
-      </a>
     </section>
 
     <section class="card">

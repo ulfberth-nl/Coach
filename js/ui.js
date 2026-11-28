@@ -563,6 +563,7 @@ export function Icon({ name, size = 22 }) {
     chart: 'M5 20V10M12 20V4M19 20v-7',
     team: 'M9 11a3 3 0 100-6 3 3 0 000 6zM17 11a3 3 0 100-6M3 20a6 6 0 0112 0M15 14a6 6 0 016 6',
     lock: 'M6 11h12v9H6zM9 11V8a3 3 0 016 0v3',
+    unlock: 'M6 11h12v9H6zM9 11V8a3 3 0 015.8-1',
     x: 'M6 6l12 12M18 6L6 18',
     chev: 'M9 6l6 6-6 6',
     more: 'M5 12h.01M12 12h.01M19 12h.01',
