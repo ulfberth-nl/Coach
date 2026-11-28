@@ -11,6 +11,8 @@ Dit is **stap 1**: alles werkt op één telefoon en wordt alleen op die telefoon
 3. Kies de branch **main** en de map **/ (root)**, en klik op **Save**.
 4. Na een minuut staat de app op `https://<jouw-account>.github.io/<repository>/`.
 
+- **Bijwerken naar een nieuwe versie (v0.31.4):** de app zoekt naar een nieuwe versie bij het opstarten, elke keer dat hij weer in beeld komt (een iPhone houdt een web-app vaak in het geheugen) en elk half uur. Een nieuwe versie haalt zijn bestanden altijd vers van de server binnen (`cache: 'reload'` in sw.js, `updateViaCache: 'none'` bij het registreren); eerder kon een update in de eerste minuten na publicatie nog oude bestanden uit de browsercache meenemen. Onderaan de Team-pagina staat *Zoek nu*; is er een nieuwe versie, dan verschijnt *Nieuwe versie klaar · Vernieuwen*.
+
 ## Op je iPhone zetten
 
 1. Open de link in **Safari**.

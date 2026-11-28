@@ -8,7 +8,7 @@ import { PROFILES, PROFILE_ORDER, profileOf, cachedTune, rememberTune, consequen
 import { compute } from '../compute.js';
 import { scheduleRefresh } from '../refresh.js';
 
-export const APP_VERSION = '0.31.3';
+export const APP_VERSION = '0.31.4';
 
 // regels die het wisselprofiel bepaalt; zet je er zelf een, dan wordt het profiel 'Eigen'
 const TUNED = ['marge', 'equalTime', 'evenOften', 'maxBenchOn', 'maxBench', 'minInterval', 'turnsPerPeriod', 'priority', 'strongBias'];
@@ -66,6 +66,25 @@ function useProfiles(team, present, keeper, current, onResult) {
     return () => { alive = false; clearTimeout(t); };
   }, [sig]);
   return [res, busy];
+}
+
+// Zelf zoeken naar een nieuwe versie (komt normaal vanzelf binnen als je de app opent).
+function UpdateCheck() {
+  const [st, setSt] = useState(null);
+  const run = async () => {
+    haptic('select');
+    setSt('busy');
+    try {
+      const reg = appInfo.reg || (navigator.serviceWorker && await navigator.serviceWorker.getRegistration());
+      if (!reg) { setSt('none'); return; }
+      await reg.update();
+      // even wachten: een nieuwe versie wordt eerst binnengehaald, daarna meldt de app 'Nieuwe versie klaar'
+      setTimeout(() => setSt(appInfo.updateReady || reg.installing || reg.waiting ? 'found' : 'latest'), 2500);
+    } catch (e) { setSt('fail'); }
+  };
+  if (st === 'found' || appInfo.updateReady) return html`<button type="button" class="link" onClick=${() => location.reload()}>Nieuwe versie klaar · Vernieuwen</button>`;
+  return html`<span class="small">${st === 'busy' ? 'Zoeken naar een nieuwe versie…' : st === 'latest' ? 'Je hebt de nieuwste versie.' : st === 'fail' ? 'Zoeken lukte niet. Heb je internet?' : st === 'none' ? 'Open de app via het beginscherm om bij te werken.' : 'Nieuwe versies komen vanzelf binnen.'}
+    ${st !== 'busy' && html` <button type="button" class="link" onClick=${run}>Zoek nu</button>`}</span>`;
 }
 
 function ProfileCard({ k, on, r, ref0, n, onPick, stale, pinned = false, onPin }) {
@@ -401,7 +420,7 @@ export function Team({ state }) {
       <span class="appver-n"><b>SpaBo Coach</b> · versie ${APP_VERSION}</span>
       ${appInfo.updateReady
         ? html`<button type="button" class="link" onClick=${() => location.reload()}>Nieuwe versie klaar · Vernieuwen</button>`
-        : html`<span class="small">Nieuwe versies komen vanzelf binnen.</span>`}
+        : html`<${UpdateCheck} />`}
     </footer>
 
     ${confirm && html`<${Confirm} title=${confirm.title} text=${confirm.text} yes=${confirm.yes} danger=${confirm.danger} onYes=${confirm.run} onClose=${() => setConfirm(null)} />`}

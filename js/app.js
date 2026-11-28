@@ -93,7 +93,16 @@ render(html`<${App} />`, document.getElementById('app'));
 // offline werken + nieuwe versie melden
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   const hadController = !!navigator.serviceWorker.controller;
-  navigator.serviceWorker.register('./sw.js').catch(() => {});
+  // Zoek naar een nieuwe versie bij het opstarten, elke keer dat de app weer in beeld komt (een iPhone houdt een
+  // web-app vaak in het geheugen) en elk half uur. updateViaCache 'none': sw.js nooit uit de browsercache.
+  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then((reg) => {
+    appInfo.reg = reg;
+    let lastCheck = Date.now();
+    const check = (force) => { if (!force && Date.now() - lastCheck < 60000) return; lastCheck = Date.now(); reg.update().catch(() => {}); };
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(false); });
+    window.addEventListener('focus', () => check(false));
+    setInterval(() => check(true), 30 * 60 * 1000);
+  }).catch(() => {});
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (hadController) { appInfo.updateReady = true; toast('Nieuwe versie klaar', { label: 'Vernieuwen', run: () => location.reload() }); }
   });

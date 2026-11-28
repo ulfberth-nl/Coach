@@ -1,6 +1,6 @@
 // Service worker: de app werkt ook zonder bereik langs het veld.
 // Verhoog VERSION bij elke nieuwe versie, dan halen telefoons de nieuwe bestanden op.
-const VERSION = 'coach-v0.31.3';
+const VERSION = 'coach-v0.31.4';
 const FILES = [
   './',
   'index.html',
@@ -45,7 +45,8 @@ const FILES = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+  // cache: 'reload' = altijd vers van de server, nooit uit de browsercache (anders kan een nieuwe versie oude bestanden meenemen)
+  event.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
