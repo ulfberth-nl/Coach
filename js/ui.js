@@ -483,7 +483,25 @@ export function Sheet({ onClose, children, label, x = false, footer = null, onDi
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
     window.addEventListener('pointercancel', up);
+    // Wordt de inhoud groter of kleiner (andere weergave, speler openklappen), dan verloopt de hoogte vloeiend
+    // in plaats van in één keer. ResizeObserver meldt vóór het tekenen, dus het oude formaat blijft eerst staan.
+    let lastH = null, hAnim = null;
+    const ro = typeof ResizeObserver === 'function' && typeof sh.animate === 'function' ? new ResizeObserver(() => {
+      if (hAnim) return;
+      const h1 = sh.getBoundingClientRect().height;
+      const h0 = lastH;
+      lastH = h1;
+      if (h0 == null || Math.abs(h1 - h0) < 3 || reduced() || done.current || sh.classList.contains('dragging')) return;
+      const keepOv = sh.style.overflowY;
+      sh.style.overflowY = 'hidden';
+      hAnim = sh.animate([{ height: h0 + 'px' }, { height: h1 + 'px' }], { duration: 440, easing: 'cubic-bezier(.32,.72,0,1)' });
+      const end = () => { hAnim = null; sh.style.overflowY = keepOv; lastH = sh.getBoundingClientRect().height; };
+      hAnim.onfinish = end; hAnim.oncancel = end;
+    }) : null;
+    if (ro) ro.observe(sh);
     return () => {
+      if (ro) ro.disconnect();
+      if (hAnim) hAnim.cancel();
       sh.removeEventListener('pointerdown', down);
       sh.removeEventListener('touchmove', block);
       window.removeEventListener('pointermove', move);

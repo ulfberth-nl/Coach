@@ -131,11 +131,17 @@ export function Rooster({ match, team, cards: given, onKid = null }) {
     });
     return out;
   };
-  return html`<div class="rooster">
-    ${order.map((id, k) => html`<button type="button" class="rt-row" key=${id} style=${'--i:' + k} onClick=${onKid ? () => onKid(id) : null} disabled=${!onKid}><span class="rr-n">${nick(id)}</span><span class="rr-bar">
-      ${segsOf(id).map((s) => html`<i class=${s.line ? 'l' + s.line : 'off'} style=${`flex:${s.t1 - s.t}` + (s.t > 0 && s.t % L === 0 ? ';margin-left:3px' : '')}></i>`)}
-    </span><span class="rr-m num">${mins(played[id])}′</span></button>`)}
-    <div class="rt-legend2"><span><i class="lV"></i>voor</span><span><i class="lM"></i>midden</span><span><i class="lA"></i>achter</span><span><i class="off"></i>aan de kant</span></div>
+  // zelfde opbouw als de speeltijd: naam, een balk van pillen (per stuk op dezelfde plek), minuten rechts.
+  // De pillen groeien van links naar rechts in beeld, rij voor rij. Lange stukken in het veld tonen hun minuten.
+  return html`<div class="rooster ro2">
+    <div class="ro-rows">
+      ${order.map((id, k) => html`<button type="button" class="ro-row" key=${id} style=${'--i:' + k} onClick=${onKid ? () => onKid(id) : null} disabled=${!onKid}>
+        <span class="ro-n">${nick(id)}</span>
+        <span class="ro-bar">${segsOf(id).map((s, j) => html`<i class=${'ro-s ' + (s.line ? 'l' + s.line : 'off') + (s.t > 0 && s.t % L === 0 ? ' cut' : '')} key=${j} style=${`flex:${s.t1 - s.t} 1 0;--j:${j}`}>${s.line && s.t1 - s.t >= END * 0.13 ? mins(s.t1 - s.t) + '′' : ''}</i>`)}</span>
+        <span class="ro-m num">${mins(played[id])}′</span>
+      </button>`)}
+    </div>
+    <div class="pt-legend"><span><i class="lV"></i>voor</span><span><i class="lM"></i>midden</span><span><i class="lA"></i>achter</span><span><i class="off"></i>aan de kant</span></div>
   </div>`;
 }
 

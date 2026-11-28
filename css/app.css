@@ -2988,3 +2988,19 @@ html[data-zoomin] .gplan > *:nth-child(n+4) { animation-delay: .12s; }
 .pt-view { animation: ptView .32s var(--ease-out) both; }
 @keyframes ptView { from { opacity: 0; translate: 0 8px; } }
 .reduce .pt-view { animation: none; }
+/* v0.31.3: rooster in dezelfde stijl als de speeltijd (ruimer, pillen, opbouw-animatie) */
+.ro2 { display: flex; flex-direction: column; gap: 12px; }
+.ro-rows { --nw: 74px; --mw: 34px; display: flex; flex-direction: column; gap: 5px; }
+.ro-row { display: grid; grid-template-columns: var(--nw) 1fr var(--mw); align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 0; border: none; background: none; text-align: left; color: inherit; animation: rtInF .4s var(--spring-soft) both; animation-delay: calc(var(--i) * 35ms); }
+.ro-row:disabled { opacity: 1; }
+.ro-n { font-size: 13px; font-weight: 800; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ro-m { font-size: 14px; font-weight: 900; text-align: right; color: var(--ink); }
+.ro-bar { display: flex; gap: 3px; height: 22px; min-width: 0; }
+.ro-s { display: grid; place-items: center; min-width: 5px; height: 100%; border-radius: 999px; overflow: hidden; font-style: normal; font-size: 11px; font-weight: 900; color: #fff; white-space: nowrap; transform-origin: left center;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.28), inset 0 -1px 0 rgba(0,0,0,.1); animation: ptGrow .6s var(--spring-soft) both; animation-delay: calc(var(--i) * 40ms + var(--j) * 60ms + 90ms); }
+.ro-s.lV { background: #d64545; } .ro-s.lM { background: #c8962d; } .ro-s.lA { background: #2a78d6; }
+.ro-s.off { background: #E8ECF4; box-shadow: inset 0 0 0 1px rgba(17,24,39,.04); }
+.ro-s.cut { margin-left: 4px; }
+.pt-legend i.off { background: #E8ECF4; box-shadow: inset 0 0 0 1px rgba(17,24,39,.06); }
+.reduce .ro-row, .reduce .ro-s { animation: none; }
+@media (prefers-reduced-motion: reduce) { .ro-row, .ro-s { animation: none; } }
