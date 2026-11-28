@@ -183,7 +183,7 @@ function Affiche({ match, team, onClick, children, todo = false }) {
       <${TeamBadge} team=${team} size=${32} />
       <span class="col grow" style="gap:0;min-width:0">
         <span class="aff-title">${match.opponent ? 'tegen ' + match.opponent : todo ? 'Tegen wie speel je?' : 'Tegenstander?'}</span>
-        <span class="aff-sub">${dateLabel(match.date)}${match.time ? ' · ' + match.time : ''}${match.field ? ' · ' + match.field : ''}${match.home === false ? ' · uit' : ''}</span>
+        <span class="aff-sub">${team.demo && html`<span class="demo-tag">Demo</span>`}${dateLabel(match.date)}${match.time ? ' · ' + match.time : ''}${match.field ? ' · ' + match.field : ''}${match.home === false ? ' · uit' : ''}</span>
       </span>
       <${OppBadge} name=${match.opponent} size=${32} />
     </button>
@@ -949,7 +949,7 @@ function LiveView({ match, team }) {
       <span class="i-t2">Volgende wissel: ${FOCUS_TXT[focusNote.stand].toLowerCase()}</span></span>
     <span class="fn-icon"><${Icon} name=${fIcon[focusNote.stand]} size=${26} /></span>
   </button>` : goal === 'scorer' ? html`<div class="island goalask" role="status">
-    <span class="i-txt"><span class="i-k">Goal voor ${short(team.name, 18)}</span><span class="i-t1">Wie scoorde?</span><span class="i-t2">Tik de speler in het veld <span class="ga-arrow" aria-hidden="true">↓</span></span></span>
+    <span class="i-txt"><span class="i-k">Goal voor ${short(team.demo ? 'Oranje' : team.name, 18)}</span><span class="i-t1">Wie scoorde?</span><span class="i-t2">Tik de speler in het veld <span class="ga-arrow" aria-hidden="true">↓</span></span></span>
     <button type="button" class="ga-btn jelly" onClick=${() => scoreFor(null)}>Weet ik <br />niet</button>
     <button type="button" class="ga-x jelly" aria-label="Annuleren" onClick=${() => setGoal(null)}><${Icon} name="x" size=${18} /></button>
   </div>` : html`<div class=${'islandwrap ' + isl.st + (spinning ? ' spinning' : '') + (peek && canPeek ? ' drawer-open' : '')}>
@@ -1002,7 +1002,7 @@ function LiveView({ match, team }) {
   const board = html`<section class=${'board' + (running ? '' : ' paused') + (timeUp ? ' over' : '') + (goal === 'who' ? ' goalwho' : '') + (cele ? ' cele ' + (cele.us ? 'us' : 'them') : '')} key="board">
     ${cele && html`<span class="b-shine" key=${'sh' + cele.key} aria-hidden="true"></span>`}
     ${goal === 'who' ? html`<div class="b-goal" role="group" aria-label="Doelpunt voor wie?">
-      <button type="button" class="bg-side jelly" onClick=${() => setGoal('scorer')}><${TeamBadge} team=${team} size=${34} /><span class="bg-n">${short(team.name)}</span><span class="bg-plus">+1</span></button>
+      <button type="button" class="bg-side jelly" onClick=${() => setGoal('scorer')}><${TeamBadge} team=${team} size=${34} /><span class="bg-n">${short(team.demo ? 'Oranje' : team.name)}</span><span class="bg-plus">+1</span></button>
       <button type="button" class="bg-side them jelly" onClick=${oppScores}><${OppBadge} name=${match.opponent} size=${36} /><span class="bg-n">${short(match.opponent || 'Tegenstander')}</span><span class="bg-plus">+1</span></button>
     </div>` : html`<div class="b-top">
       <button type="button" class="b-clock jelly" onClick=${toggleClock} aria-label=${running ? 'Klok loopt, tik om te pauzeren' : 'Klok staat stil, tik om te starten'}>

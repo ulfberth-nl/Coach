@@ -3027,3 +3027,28 @@ html[data-zoomin] .gplan > *:nth-child(n+4) { animation-delay: .12s; }
 .terms li > span:last-child { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .terms b { font-size: 15px; font-weight: 900; color: var(--ink); }
 .terms li > span:last-child > span { font-size: 14px; line-height: 1.4; color: var(--muted); }
+
+/* ===== v0.33: demoteam ===== */
+.demo-tag { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 6px; background: #F2701F; color: #fff; font-size: 10.5px; font-weight: 900; letter-spacing: .03em; text-transform: uppercase; vertical-align: 1px; }
+.demo-card { gap: 10px; border: 1.5px solid #F7B98C; background: linear-gradient(180deg, #FFF4EA, #fff 70%); }
+.dm-top { display: flex; align-items: center; gap: 12px; }
+.dm-top > svg { flex: none; }
+.dm-top b { font-size: 17px; font-weight: 900; }
+.dm-top span { font-size: 13.5px; font-weight: 700; color: var(--muted); line-height: 1.35; }
+.dm-links { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; }
+.dm-links .link { min-height: 36px; }
+.dm-drop { color: #B42318 !important; }
+.dm-steps { margin: 4px 0 2px; padding: 0; list-style: none; counter-reset: dm; display: flex; flex-direction: column; gap: 10px; }
+.dm-steps li { position: relative; padding-left: 40px; counter-increment: dm; display: flex; flex-direction: column; gap: 1px; min-height: 28px; }
+.dm-steps li::before { content: counter(dm); position: absolute; left: 0; top: 0; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #F2701F; color: #fff; font-size: 14px; font-weight: 900; }
+.dm-steps b { font-size: 15.5px; font-weight: 900; }
+.dm-steps span { font-size: 13.5px; color: var(--muted); font-weight: 700; line-height: 1.35; }
+.dm-add { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+.start-card { gap: 10px; }
+.st-steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.st-steps li { display: flex; align-items: flex-start; gap: 12px; }
+.st-steps li i { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--blue-tint); color: var(--blue); font-style: normal; font-size: 13px; font-weight: 900; }
+.st-steps li.done i { background: #1f8a3a; color: #fff; }
+.st-steps li span { display: flex; flex-direction: column; font-size: 13.5px; font-weight: 700; color: var(--muted); line-height: 1.3; }
+.st-steps li b { font-size: 15px; font-weight: 900; color: var(--ink); }
+.st-steps li.done b { color: var(--muted); }

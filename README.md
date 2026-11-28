@@ -12,7 +12,17 @@ Dit is **stap 1**: alles werkt op één telefoon en wordt alleen op die telefoon
 - **Gegevens blijven op de telefoon.** Er is geen server; spelers, beoordelingen en wedstrijden staan alleen in de opslag van de browser op de eigen telefoon.
 - **Zorgvuldig met kinderen.** Gebruik voornamen, houd de beoordelingen voor de staf en volg de privacyregels van de club.
 
-In de app staat dit de eerste keer op een telefoon (*Goed om te weten*, met *Begrepen*; apparaatvoorkeur `seenTerms`), onderaan de Team-pagina (*Over deze app*) en op de uitlegpagina. Een nieuw team heet standaard *Mijn team*.
+In de app staat dit de eerste keer op een telefoon (*Goed om te weten*, met *Begrepen*; apparaatvoorkeur `seenTerms`), onderaan de Team-pagina (*Over deze app*) en op de uitlegpagina. Een eigen team heet standaard *Mijn team*.
+
+## Demoteam (v0.33)
+
+Een nieuwe installatie opent met het **Demoteam Oranje**: negen voornamen uit de Oranje-selecties met hun plek als dominante rol. Keeper Pirmin; achter Lisa en Jip; midden Pien, Yibbi en Jorrit; voor Guusje, Duco en Thierry. Pien en Yibbi hebben achter als tweede plek, zodat 2-1-2 goed uitkomt. De kracht (60–90) verschilt alleen zodat Autopilot iets te verdelen heeft. Het team heeft een oranje badge met *NL* en een *Demo*-label in de wedstrijdkop; bij een goal heet het *Oranje*.
+
+- **Eerste keer op de Team-pagina:** een uitleg in drie stappen (eigen team starten, spelers toevoegen, spelvorm en wissels), met *Start mijn eigen team* of *Eerst rondkijken* (apparaatvoorkeur `seenDemo`). Daarna staat bovenaan een balk met dezelfde knop (of *Naar [eigen team]* als dat er al is), *Hoe begin ik?*, *Herstellen* en *Weghalen*.
+- **Eigen team:** begint leeg, met een kaart *Zo begin je* (naam, spelers, spelvorm) tot er spelers in staan. Het demoteam blijft los ervan bestaan.
+- **Herstellen** zet spelers en instellingen terug en haalt de oefenwedstrijden weg. **Weghalen** kan als er een ander team is. Onder *De app delen* staat dan *Demoteam toevoegen*; zo kunnen ook bestaande installaties het demoteam krijgen. Bestaande teams en spelers veranderen nooit.
+- **Deellink:** de tekst bij *Link naar de uitleg delen* noemt het demoteam (*Eerst even bondscoach spelen?*), en de uitlegpagina ook.
+- Het testteam voor de rekentests (`newTeam()` met *Speler 1* …) is ongewijzigd. Test: tests/demo.test.mjs.
 
 © 2026 SpaBo Coach. Alle rechten voorbehouden. De code staat openbaar zodat de app via GitHub Pages kan draaien; dat geeft geen toestemming om hem over te nemen, aan te passen of te verkopen.
 

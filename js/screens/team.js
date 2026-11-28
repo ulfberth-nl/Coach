@@ -1,14 +1,14 @@
 import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
-import { update, activeTeam, currentMatch, newTeam, exportData, importData } from '../store.js';
+import { update, activeTeam, currentMatch, newTeam, exportData, importData, addDemo, resetDemo, dropTeam } from '../store.js';
 import { periodWord } from '../match.js';
 import { suggestKeeper } from './home.js';
-import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, Reveal, toast, STANDS, appInfo, Terms } from '../ui.js';
+import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, Reveal, Sheet, toast, STANDS, appInfo, Terms } from '../ui.js';
 import { devicePrefs, setDevicePref, onDevicePrefs, osReduced, haptic } from '../motion.js';
 import { PROFILES, PROFILE_ORDER, profileOf, cachedTune, rememberTune, consequences, setProfile } from '../profiles.js';
 import { compute } from '../compute.js';
 import { scheduleRefresh } from '../refresh.js';
 
-export const APP_VERSION = '0.32.0';
+export const APP_VERSION = '0.33.0';
 
 // regels die het wisselprofiel bepaalt; zet je er zelf een, dan wordt het profiel 'Eigen'
 const TUNED = ['marge', 'equalTime', 'evenOften', 'maxBenchOn', 'maxBench', 'minInterval', 'turnsPerPeriod', 'priority', 'strongBias'];
@@ -145,6 +145,22 @@ function readLogo(file) {
   });
 }
 
+// Eerste keer op het demoteam: wat het is en hoe je je eigen team begint
+function DemoSheet({ onStart, onClose, own }) {
+  return html`<${Sheet} onClose=${onClose} label="Het demoteam">
+    <span class="h2" style="font-size:22px">Welkom bij het demoteam</span>
+    <span class="sub">Pirmin, Yibbi, Duco en de rest van Oranje staan klaar om mee te oefenen. Probeer gerust alles uit, ze klagen niet over speeltijd.</span>
+    <ol class="dm-steps">
+      <li><b>Start je eigen team</b><span>Met de knop hieronder. Geef het daarna een naam.</span></li>
+      <li><b>Voeg je spelers toe</b><span>Met hun rol en kracht, achter een pincode die je zelf kiest.</span></li>
+      <li><b>Stel spelvorm en wissels in</b><span>Veld of zaal, opstelling, periodes en hoe je wilt wisselen.</span></li>
+    </ol>
+    <span class="small">Het demoteam blijft staan. Je kunt altijd terug om iets uit te proberen.</span>
+    <button type="button" class="btn primary block" onClick=${onStart}>${own ? 'Naar ' + own.name : 'Start mijn eigen team'}</button>
+    <button type="button" class="btn plain block" onClick=${onClose}>Eerst rondkijken</button>
+  </${Sheet}>`;
+}
+
 export function Team({ state }) {
   const team = activeTeam(state);
   const r = team.rules;
@@ -214,6 +230,24 @@ export function Team({ state }) {
   const fKey = (f) => `${f.A}-${f.M}-${f.V}`;
   if (!forms.some((f) => fKey(f) === fKey(team.lines))) forms.unshift({ ...team.lines });
   const [ownForm, setOwnForm] = useState(false);
+  // demoteam: de eerste keer uitleg, daarna een balk bovenaan
+  const own = state.teams.find((t) => !t.demo && t.id !== team.id) || null;
+  const [demoInfo, setDemoInfo] = useState(false);
+  useEffect(() => { if (team.demo && !devicePrefs().seenDemo && !navigator.webdriver) setDemoInfo(true); }, [team.id]);
+  const closeDemo = () => { setDevicePref('seenDemo', true); setDemoInfo(false); };
+  const startOwn = () => {
+    haptic('success');
+    setDevicePref('seenDemo', true);
+    setDemoInfo(false);
+    if (own) { update((d) => { d.activeTeamId = own.id; }); toast('Terug naar ' + own.name); }
+    else { update((d) => { const t = newTeam('Mijn team', false); d.teams.push(t); d.activeTeamId = t.id; }); toast('Je eigen team staat klaar'); }
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
+  };
+  const askReset = () => setConfirm({ title: 'Demoteam herstellen?', text: 'Spelers, instellingen en oefenwedstrijden van het demoteam gaan terug naar het begin.', yes: 'Herstellen', run: () => { update((d) => resetDemo(d, team.id)); scheduleRefresh({ force: true }); toast('Demoteam hersteld'); } });
+  const askDrop = () => setConfirm({ title: 'Demoteam weghalen?', text: 'De oefenwedstrijden gaan ook weg. Terugzetten kan altijd bij De app delen.', yes: 'Weghalen', danger: true, run: () => { update((d) => dropTeam(d, team.id)); toast('Demoteam weggehaald'); } });
+  const showDemo = () => { haptic('select'); update((d) => addDemo(d)); try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); } };
+  const fresh = !team.demo && team.players.length === 0;
+  const named = team.name !== 'Mijn team' && team.name !== 'Nieuw team';
 
   const download = () => {
     const blob = new Blob([exportData()], { type: 'application/json' });
@@ -249,7 +283,7 @@ export function Team({ state }) {
   // uitlegpagina (installeren en tips) delen met een nieuwe coach
   const shareGuide = async () => {
     const url = new URL('installeren.html', location.href.split('#')[0]).href;
-    const text = 'SpaBo Coach: zo zet je de app op je telefoon en zo begin je.';
+    const text = 'SpaBo Coach: zo zet je de app op je telefoon en zo begin je. Eerst even bondscoach spelen? Het demoteam staat klaar: Pirmin op doel, Yibbi op het middenveld en Duco in de spits. Jij bepaalt wie er naar de bank gaat.';
     try { if (navigator.share) { await navigator.share({ title: 'SpaBo Coach installeren', text, url }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
     try { await navigator.clipboard.writeText(text + ' ' + url); toast('Link gekopieerd · plak hem in een bericht'); } catch (e) { toast(url); }
   };
@@ -263,6 +297,21 @@ export function Team({ state }) {
       <button type="button" class="link" onClick=${() => update((d) => { const t = newTeam('Nieuw team', false); d.teams.push(t); d.activeTeamId = t.id; })}><${Icon} name="plus" size=${16} /> Team</button>
     </div>
     <h1 class="h1">Team instellen</h1>
+
+    ${team.demo && html`<section class="card demo-card">
+      <div class="dm-top"><${TeamBadge} team=${team} size=${44} /><div class="col" style="gap:2px"><b>Dit is het demoteam</b><span>Oefen gerust: zet Duco op de bank of Yibbi voorin. Je eigen team blijft er los van.</span></div></div>
+      <button type="button" class="btn primary block" onClick=${startOwn}>${own ? 'Naar ' + own.name : 'Start mijn eigen team'}</button>
+      <div class="dm-links"><button type="button" class="link" onClick=${() => { haptic('select'); setDemoInfo(true); }}>Hoe begin ik?</button><button type="button" class="link" onClick=${askReset}>Herstellen</button>${state.teams.length > 1 && html`<button type="button" class="link dm-drop" onClick=${askDrop}>Weghalen</button>`}</div>
+    </section>`}
+    ${fresh && html`<section class="card start-card">
+      <span class="h2">Zo begin je</span>
+      <ol class="st-steps">
+        <li class=${named ? 'done' : ''}><i>${named ? html`<${Icon} name="check" size=${14} />` : '1'}</i><span><b>Geef je team een naam</b>hieronder bij Team</span></li>
+        <li><i>2</i><span><b>Voeg je spelers toe</b>met hun rol en kracht, achter een pincode</span></li>
+        <li><i>3</i><span><b>Spelvorm en wissels</b>verderop op deze pagina</span></li>
+      </ol>
+      <a class="btn primary block" href="#/spelers" style="text-decoration:none">Spelers toevoegen</a>
+    </section>`}
 
     <section class="card">
       <span class="h2">Team</span>
@@ -401,12 +450,7 @@ export function Team({ state }) {
       <span class=${'bk-when' + (bkWarn ? ' warn' : '')}>${bkText}</span>
       <button type="button" class="btn plain block" onClick=${download}>Back-up maken</button>
       <label class="btn plain block" style="cursor:pointer">Back-up terugzetten<input type="file" accept="application/json,.json" class="sr" onChange=${upload} /></label>
-      ${state.teams.length > 1 && html`<button type="button" class="btn danger block" onClick=${() => setConfirm({ title: 'Team ' + team.name + ' verwijderen?', text: 'De spelers en wedstrijden van dit team worden ook verwijderd.', yes: 'Verwijderen', danger: true, run: () => update((d) => {
-        d.matches = d.matches.filter((m) => m.teamId !== team.id);
-        d.teams = d.teams.filter((t) => t.id !== team.id);
-        d.activeTeamId = d.teams[0].id;
-        if (d.currentMatchId && !d.matches.some((m) => m.id === d.currentMatchId)) d.currentMatchId = null;
-      }) })}>Team verwijderen</button>`}
+      ${state.teams.length > 1 && html`<button type="button" class="btn danger block" onClick=${() => setConfirm({ title: 'Team ' + team.name + ' verwijderen?', text: 'De spelers en wedstrijden van dit team worden ook verwijderd.', yes: 'Verwijderen', danger: true, run: () => update((d) => dropTeam(d, team.id)) })}>Team verwijderen</button>`}
     </section>
 
     <section class="card">
@@ -414,6 +458,10 @@ export function Team({ state }) {
       <span class="small">Geef je een andere coach de app? Stuur deze link mee: daar staat hoe je hem op je beginscherm zet en hoe je begint.</span>
       <button type="button" class="btn plain block" onClick=${shareGuide}><${Icon} name="copy" size=${18} /> Link naar de uitleg delen</button>
       <a class="link" style="align-self:center" href="installeren.html" target="_blank" rel="noopener">Uitleg bekijken</a>
+      ${!state.teams.some((t) => t.demo) && html`<div class="dm-add">
+        <span class="small">De app laten zien zonder aan je eigen team te komen? Speel even bondscoach met het demoteam: Pirmin, Yibbi, Duco en de rest van Oranje.</span>
+        <button type="button" class="btn plain block" onClick=${showDemo}><${Icon} name="plus" size=${18} /> Demoteam toevoegen</button>
+      </div>`}
     </section>
 
     <section class="card">
@@ -429,6 +477,7 @@ export function Team({ state }) {
         : html`<${UpdateCheck} />`}
     </footer>
 
+    ${demoInfo && html`<${DemoSheet} own=${own} onStart=${startOwn} onClose=${closeDemo} />`}
     ${confirm && html`<${Confirm} title=${confirm.title} text=${confirm.text} yes=${confirm.yes} danger=${confirm.danger} onYes=${confirm.run} onClose=${() => setConfirm(null)} />`}
   </main>`;
 }

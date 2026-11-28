@@ -60,8 +60,57 @@ export function newTeam(name = 'Mijn team', withSamples = true) {
   };
 }
 
+// Demoteam om de app mee uit te proberen: voornamen uit de Oranje-selecties, met hun plek op het veld.
+// De kracht verschilt alleen zodat Autopilot iets te verdelen heeft; het zegt niets over de echte spelers.
+const DEMO_PLAYERS = [
+  ['pirmin', 'Pirmin', 70, 'K', ['K', 'A']],
+  ['lisa', 'Lisa', 75, 'A', ['A', 'M']],
+  ['jip', 'Jip', 85, 'A', ['A', 'M']],
+  ['pien', 'Pien', 60, 'M', ['M', 'A']],
+  ['yibbi', 'Yibbi', 80, 'M', ['M', 'A']],
+  ['jorrit', 'Jorrit', 90, 'M', ['M', 'V']],
+  ['guusje', 'Guusje', 65, 'V', ['V', 'M']],
+  ['duco', 'Duco', 80, 'V', ['V']],
+  ['thierry', 'Thierry', 70, 'V', ['V', 'M']]
+];
+export const DEMO_NAME = 'Demoteam Oranje';
+
+export function demoTeam(id) {
+  const t = newTeam(DEMO_NAME, false);
+  if (id) t.id = id;
+  t.demo = true;
+  t.short = 'NL';
+  t.players = DEMO_PLAYERS.map(([k, name, kracht, main, prefs]) => ({ id: 'nl-' + k, name, nick: name, kracht, main, flex: true, prefs, strengths: [], active: true }));
+  return t;
+}
+
+// team weghalen met zijn wedstrijden (in een update-draft)
+export function dropTeam(d, id) {
+  d.matches = d.matches.filter((m) => m.teamId !== id);
+  d.teams = d.teams.filter((t) => t.id !== id);
+  if (!d.teams.some((t) => t.id === d.activeTeamId)) d.activeTeamId = (d.teams.find((t) => !t.demo) || d.teams[0]).id;
+  if (d.currentMatchId && !d.matches.some((m) => m.id === d.currentMatchId)) d.currentMatchId = null;
+}
+
+// demoteam terug naar het begin: zelfde team, verse spelers en instellingen, oefenwedstrijden weg
+export function resetDemo(d, id) {
+  const i = d.teams.findIndex((t) => t.id === id);
+  if (i === -1) return;
+  d.matches = d.matches.filter((m) => m.teamId !== id);
+  if (d.currentMatchId && !d.matches.some((m) => m.id === d.currentMatchId)) d.currentMatchId = null;
+  d.teams[i] = demoTeam(id);
+}
+
+export function addDemo(d) {
+  const have = d.teams.find((t) => t.demo);
+  if (have) { d.activeTeamId = have.id; return; }
+  const t = demoTeam();
+  d.teams.push(t);
+  d.activeTeamId = t.id;
+}
+
 function freshState() {
-  const team = newTeam();
+  const team = demoTeam();
   return { version: 1, teams: [team], activeTeamId: team.id, matches: [], currentMatchId: null, pinHash: null, unlockedUntil: 0 };
 }
 

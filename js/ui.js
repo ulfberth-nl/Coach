@@ -1024,8 +1024,8 @@ export function TeamBadge({ team, size = 64 }) {
   if (team.logo) return html`<img src=${team.logo} alt=${team.name} width=${size} height=${size} style=${`width:${size}px;height:${size}px;border-radius:999px;object-fit:cover;background:#fff`} />`;
   const short = (team.short || team.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 2)).slice(0, 4).toUpperCase();
   return html`<svg width=${size} height=${size} viewBox="0 0 64 64" role="img" aria-label=${team.name}>
-    <circle cx="32" cy="32" r="31" fill="#1F3C88" />
-    <circle cx="32" cy="32" r="25" fill="none" stroke="#F5A524" stroke-width="5" />
+    <circle cx="32" cy="32" r="31" fill=${team.demo ? '#F2701F' : '#1F3C88'} />
+    <circle cx="32" cy="32" r="25" fill="none" stroke=${team.demo ? '#fff' : '#F5A524'} stroke-opacity=${team.demo ? 0.55 : 1} stroke-width="5" />
     <text x="32" y="38" text-anchor="middle" font-family="Nunito, sans-serif" font-weight="900" font-size=${short.length > 2 ? 15 : 19} fill="#fff">${short}</text>
   </svg>`;
 }
