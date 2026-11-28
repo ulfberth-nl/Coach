@@ -617,7 +617,7 @@ export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, onEmpty =
     const acc = accStyle(id);
     // lege plek die je kunt aantikken (game plan: eerst een speler kiezen, dan hier neerzetten)
     if (!id && onEmpty) {
-      return html`<button type="button" class=${'spot empty' + (emptyHot ? ' hot' : '')} key=${'em' + key} data-pid=${'empty:' + key} data-line=${key[0]}
+      return html`<button type="button" class=${'spot empty' + (emptyHot ? ' hot' : '')} key=${'em' + key} data-pid=${'empty:' + key} data-line=${key[0]} data-ci=${key.slice(1)}
         style=${`left:${left};top:${top};--ci:${key.slice(1)}`} onClick=${() => onEmpty(key)} aria-label=${'Lege plek ' + LANE_NAMES[key[0]]}>
         <span class="sp-in"><span class="pill empty" style=${pillStyle}>+</span></span></button>`;
     }
@@ -625,7 +625,7 @@ export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, onEmpty =
     const ghost = g ? html`<span class=${'ghost ' + g.kind + (g.hot ? ' hot' : '') + (right ? ' right' : '')} aria-hidden="true"><b>${g.name}${g.dir ? html`<small>${g.dir}</small>` : ''}</b></span>` : null;
     // 'e' blijft staan zodat de binnenkom-animatie niet terugvalt op de pop-animatie
     const cls = 'spot' + (hot && hot === id ? ' scored' : '') + (id && mem.current.ever[id] ? ' e' : '') + (right ? ' from-left' : '') + (g ? ' has-ghost' : '') + (id && landing[id] && now - landing[id] < 900 ? ' landing' : '');
-    return html`<button type="button" class=${cls} key=${(id || key) + (hot === id ? ':' + hotKey : '')} data-pid=${id || ''} data-line=${key[0]}
+    return html`<button type="button" class=${cls} key=${(id || key) + (hot === id ? ':' + hotKey : '')} data-pid=${id || ''} data-line=${key[0]} data-ci=${key.slice(1)}
       style=${`left:${left};top:${top};--ci:${key.slice(1)}` + (en ? `;--d:${(0.3 + en.i * 0.18).toFixed(2)}s` : '')} disabled=${!onTap || !id} onClick=${() => onTap && id && onTap(id)} aria-label=${name}>
       ${goalMark(id)}
       ${ghost}

@@ -249,7 +249,7 @@ function PrepView({ state, match, team }) {
   };
   useEffect(() => {
     if (!think) return undefined;
-    const tm = setTimeout(() => setThink(think.phase === 'run' ? { ...think, phase: 'done' } : null), think.phase === 'run' ? 2300 : 1500);
+    const tm = setTimeout(() => setThink(think.phase === 'run' ? { ...think, phase: 'done' } : null), think.phase === 'run' ? 2300 : 1750);
     return () => clearTimeout(tm);
   }, [think && think.k, think && think.phase]);
   const byHand = () => { manual.current = Date.now(); };
@@ -1272,9 +1272,12 @@ function ModeSwitch({ match, team, swaps, perMoment, st, onTour, onSheet, think 
   const stash = !!(gp && gp.base) || !!(match.ownStash && ((match.ownStash.pins || []).length || match.ownStash.periodLineups));
   const bases = (team.bases || []).filter((b) => M.baseFits(team, b));
   const done = () => { setAsk(null); setPend(null); };
+  // één tik op Zelf plannen = meteen naar je game plan (stap 1, Opzet). Daar kies je hoe je begint.
   const goZelf = () => {
-    if (stash) { done(); switchPlanMode('eigen', true); toast('Zelf plannen staat aan · je game plan is terug.', { label: 'Ongedaan', run: () => switchPlanMode('app', true) }); return; }
-    setAsk('start');
+    done();
+    switchPlanMode('eigen', true);
+    if (stash) toast('Zelf plannen staat aan · je game plan is terug.', { label: 'Ongedaan', run: () => switchPlanMode('app', true) });
+    go('/plan');
   };
   const toZelf = () => {
     // staat Zelf plannen al aan: dan is een tik 'naar mijn game plan'

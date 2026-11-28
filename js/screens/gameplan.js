@@ -56,8 +56,8 @@ function Num({ v, dur = 700 }) {
 export function GamePlan({ match, team }) {
   const live = match.started && !match.finished;
   const gp = match.gameplan;
-  const saved = match.ownSteps && match.ownSteps.at;
-  const [at, setAt] = useState(live ? 'wissels' : KEYS.indexOf(saved) !== -1 ? saved : gp && gp.base ? 'start' : 'opzet');
+  // vanaf het wedstrijdscherm begin je altijd bij de eerste stap; via de stappen ga je waar je heen wilt
+  const [at, setAt] = useState(live ? 'wissels' : 'opzet');
   const [dir, setDir] = useState(1);
   const [focus, setFocus] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -164,7 +164,8 @@ export function GamePlan({ match, team }) {
     ${live && gp && html`<p class="gp-livenote">Dit is je plan. Wisselen doe je in het live-scherm; daar volgt <b>Wissel nu</b> dit plan precies.</p>`}
     <div class=${'gp-step ' + (dir > 0 ? 'fwd' : 'back')} key=${at}>${body}</div>
     ${!live && !(wide && board) && html`<div class="rt-foot">
-      ${idx > 0 ? html`<button type="button" class="btn plain" onClick=${prev}>Vorige</button>` : html`<a class="btn plain" href="#/">Later</a>`}
+      ${idx > 0 ? html`<button type="button" class="btn gp-back" onClick=${prev}><${Icon} name="chev" size=${18} /><span class="rn-txt"><small>Vorige</small><span>${STEPS[idx - 1][1]}</span></span></button>`
+        : html`<a class="btn gp-back" href="#/"><${Icon} name="chev" size=${18} /><span class="rn-txt"><small>Terug</small><span>Homescherm</span></span></a>`}
       ${nextBtn(false)}
     </div>`}
     ${live && html`<${NextBar} match=${match} team=${team} cards=${cards} />`}
@@ -286,7 +287,7 @@ function Opzet({ match, team, begin, setBegin, pickN, setPickN, recN }) {
     <header class="oz-qh"><span class="oz-n">2</span><span>${gp && gp.base ? 'Je bord' : 'Hoe begin je?'}</span></header>
     ${gp && gp.base
       ? html`<div class="oz-have"><span><b class="num">${full}</b> van ${st.blocks.length} blokken vol · speeltijd <b class="num">${mins(st.min)}–${mins(st.max)} min</b></span>
-          <button type="button" class="linkbtn" onClick=${startOver}>Opnieuw, leeg</button></div>`
+          <button type="button" class="btn oz-reset" onClick=${startOver}><${Icon} name="reset" size=${17} /><span>Opnieuw, leeg bord</span></button></div>`
       : html`<div class="oz-three" role="radiogroup" aria-label="Hoe begin je">
           ${['balans', 'sterk'].map((sk) => { const on = begin === 'voorzet' && style === sk; return html`<button type="button" key=${sk} role="radio" aria-checked=${on ? 'true' : 'false'}
             class=${'oz-row ai-tile' + (on ? ' on' : '')} onClick=${() => { pickBegin('voorzet'); if (style !== sk) mutate((m) => { m.planStyle = sk; }); }}>
@@ -1095,12 +1096,25 @@ function BlockField({ match, team, b, setB, combine, apply, undo, canUndo, pushH
   // hoe lang zit een bankspeler in dit blok al aaneen aan de kant
   const benchRun = (id) => { let run = 0; for (let k = b; k >= 0; k--) { const g = gp.grid[k]; if (!g) continue; if (id in g) break; run += blocks[k].len; } return run; };
   // vier of meer naast elkaar: alleen wat telt, anders lopen de labels in elkaar
-  const crowd = Math.max(view.lines.V || 0, view.lines.M || 0, view.lines.A || 0) >= 4;
+  // vier of meer naast elkaar: geen labels onder de pil (die lopen in elkaar), maar hoekjes óp de pil,
+  // zoals opstellingen in sport-apps: minuten rechtsboven, erin of van plek als gekleurde rand, buiten zijn kracht rechtsonder.
+  // De buren staan om en om iets lager, zodat de hoekjes elkaar niet raken. Alles uitgebreid: tik de speler.
+  const crowdOf = (id) => (view.lines[pos[id]] || 0) >= 4;
+  const crowdCls = ['V', 'M', 'A'].filter((l) => (view.lines[l] || 0) >= 4).map((l) => ' crowd' + l + ((view.lines[l] || 0) >= 5 ? ' crowd' + l + '5' : '')).join('');
   const below = (id) => {
-    const c = chg(id), f0 = fitOf(players[id], pos[id]), f = crowd && f0 !== 'buiten' ? null : f0;
-    const mt = inline && !start ? html`<i class=${'mn ' + minLvl(id)}>${mins(stats.kids[id].sec)}′</i>${attnOf(id) && html`<i class="at" title=${attnOf(id)}>!</i>`}` : null;
+    const c = chg(id), f = fitOf(players[id], pos[id]);
+    const showMin = inline && !start;
+    if (crowdOf(id)) {
+      const at = showMin && attnOf(id);
+      const mn = showMin ? html`<i class=${'cb-mn ' + minLvl(id) + (at ? ' attn' : '')} title=${at || ''}>${mins(stats.kids[id].sec)}</i>` : null;
+      const fx = f === 'buiten' ? html`<i class="cb-fx" title="buiten zijn kracht">✕</i>` : null;
+      if (!mn && !c && !fx) return null;
+      // erin = groene rand om de pil, van plek = paarse rand (net als live); minuten als hoekje
+      return html`<span class=${'bf-corner' + (c === 'in' ? ' in' : c === 'mv' ? ' mv' : '')} aria-hidden="true">${mn}${fx}</span>`;
+    }
+    const mt = showMin ? html`<i class=${'mn ' + minLvl(id)}>${mins(stats.kids[id].sec)}′</i>${attnOf(id) && html`<i class="at" title=${attnOf(id)}>!</i>`}` : null;
     if (!c && (f === 'neutraal' || !f) && !mt) return null;
-    return html`<span class="bf-tag">${c === 'in' ? html`<i class="in">${crowd ? 'in' : 'erin'}</i>` : c === 'mv' ? html`<i class="mv">${crowd ? '' : 'was '}${wasAt(id)}</i>` : ''}${f && f !== 'neutraal' && html`<i class=${'fit ' + f}>${fitGlyph(f)}</i>`}${mt}</span>`;
+    return html`<span class="bf-tag">${c === 'in' ? html`<i class="in">erin</i>` : c === 'mv' ? html`<i class="mv">was ${wasAt(id)}</i>` : ''}${f && f !== 'neutraal' && html`<i class=${'fit ' + f}>${fitGlyph(f)}</i>`}${mt}</span>`;
   };
   const [drawer, setDrawer] = useState(false);
 
@@ -1180,7 +1194,7 @@ function BlockField({ match, team, b, setB, combine, apply, undo, canUndo, pushH
     ${(() => { const list = startPts || (inline ? (!ok ? pts.slice(0, 1) : []) : pts.slice(0, 2)); return list.length ? html`<div class="bfv-pts" key=${'p' + b}>${list.map((x, k) => html`<span key=${k} class=${'bfp ' + x.cls}>${x.t}</span>`)}</div>` : null; })()}
     ${!inline && selEl}
     <div class="bfv-zone" ref=${zone}>
-      <div class="bfv-field">
+      <div class=${'bfv-field' + crowdCls}>
         <${Field} slots=${view.slots} lines=${view.lines} keeperId=${match.keeperId} nick=${nick} height="100%"
           onTap=${tapField} onKeeper=${() => toast('De keeper kies je bij Spelers op het wedstrijdscherm.')}
           onEmpty=${readOnly ? null : tapEmpty} emptyHot=${!!sel && !(sel in pos)}
@@ -1368,6 +1382,16 @@ function Controle({ match, team, goTo }) {
     </div>`)}
   </section>
 
+  <section class="gd-card">
+    <header class="gd-h"><b>Speeltijd per speler</b><span class="gd-hs">tik om te volgen</span></header>
+    <${PlayTime} match=${match} team=${team} cards=${cards} onKid=${(id) => goTo(0, id)} />
+  </section>
+
+  <section class="gd-card">
+    <header class="gd-h"><b>Rooster per speler</b><span class="gd-hs">wie waar speelt, de hele wedstrijd</span></header>
+    <${Rooster} match=${match} team=${team} cards=${cards} onKid=${(id) => goTo(0, id)} />
+  </section>
+
   ${(open0.length > 0 || rep.insights.length > 0) && html`<section class="gd-card gd-ins">
     <header class="gd-h"><${AiMark} size=${16} /><b class="ai-grad">Om naar te kijken</b><span class="gd-hs">met oplossingen</span></header>
     ${open0.length > 0 && html`<div class="gd-issue">
@@ -1387,16 +1411,6 @@ function Controle({ match, team, goTo }) {
       </div>`;
     })}
   </section>`}
-
-  <section class="gd-card">
-    <header class="gd-h"><b>Speeltijd per speler</b><span class="gd-hs">tik om te volgen</span></header>
-    <${PlayTime} match=${match} team=${team} cards=${cards} onKid=${(id) => goTo(0, id)} />
-  </section>
-
-  <section class="gd-card">
-    <header class="gd-h"><b>Rooster per speler</b><span class="gd-hs">wie waar speelt, de hele wedstrijd</span></header>
-    <${Rooster} match=${match} team=${team} cards=${cards} onKid=${(id) => goTo(0, id)} />
-  </section>
 
   <section class="gd-card">
     <header class="gd-h"><b>Wisselschema</b><span class="gd-hs">${k.swaps.n} wissels · ${k.swaps.moments} momenten</span></header>

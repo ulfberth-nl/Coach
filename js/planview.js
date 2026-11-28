@@ -335,9 +335,26 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   const multi = c.kind === 'swap' && c.ins && c.ins.length > 1;
   const swapText = c.kind === 'swap' ? (multi ? `${c.ins.map(nick).join(', ')} erin` : `${nick(c.in)} erin voor ${nick(c.out)}`) : '';
 
-  // thinking: de app rekent het plan door ('run': veld loopt vol), daarna 'done' (spelers ploppen, veld wordt weer gewoon)
-  const flood = compact && !reduced() ? thinking : null;
-  return html`<div class=${'planview col' + (compact ? ' compact' : '') + (flood === 'run' ? ' flood' : flood === 'done' ? ' flooded' : '')} style="gap:8px">
+  // thinking: de app rekent het plan door. 'run': elke veldspeler wordt een staafje dat op en neer veert (als een
+  // geluidsgolf); 'done': de staafjes springen naar zijn echte speeltijd (kleur: op koers, te weinig, te veel),
+  // daarna veren de spelers terug op hun plek. Niet na eigen sleepwerk (dan is thinking null) en niet bij Minder beweging.
+  const eq = compact && !reduced() ? thinking : null;
+  const eqBelow = useMemo(() => {
+    if (!eq) return null;
+    const fp = (match.plan && match.plan.finalPlayed) || {};
+    const ids = Object.keys(fp).filter((id) => id !== match.keeperId);
+    const L = Math.max(1, M.matchEnd(team));
+    const mean = ids.length ? ids.reduce((a, id) => a + fp[id], 0) / ids.length : 0;
+    const half = Math.max(60, ((M.effRules(match, team).marge || 5) * 60) / 2);
+    const hash = (id) => { let h = 7; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) % 997; return (h % 100) / 100; };
+    return (id) => {
+      const sec = fp[id];
+      const f = sec != null ? Math.max(0.14, Math.min(1, sec / L)) : 0.5;
+      const lvl = sec == null ? '' : sec < mean - half ? ' low' : sec > mean + half ? ' high' : ' ok';
+      return html`<span class=${'eqb' + lvl} style=${`--f:${f.toFixed(3)};--r:${hash(id).toFixed(2)}`} aria-hidden="true"><i></i>${sec != null && html`<b class="num">${M.mins(sec)}′</b>`}</span>`;
+    };
+  }, [eq, match.plan, match.keeperId, team]);
+  return html`<div class=${'planview col' + (compact ? ' compact' : '') + (eq === 'run' ? ' eqrun' : eq === 'done' ? ' eqdone' : '')} style="gap:8px">
     <div class="tl" ref=${track} aria-label="Tijdlijn">
       <span class="tl-line"></span>
       ${cards.map((cc, k) => (k > 0 && cc.kind === 'lineup' ? html`<span class="tl-break" style=${`left:${dotPct(k - 0.5)}%`}><b>${team.periods === 2 ? 'rust' : 'pauze'}</b></span>` : null))}
@@ -376,7 +393,7 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
           ? html`<${Field} slots=${nx.slots} lines=${nx.lines || lines} keeperId=${nx.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
               onTap=${() => {}} neon=${changes(cards, i + 1).in} accent=${accentFor(team)} />`
           : html`<${Field} slots=${c.slots} lines=${lines} animate=${false} formable=${canEdit || canPinHere} keeperDrag=${canEdit && !!match.keeperId} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
-              onTap=${() => {}} neon=${planner ? nxOuts : []} marked=${planner ? [] : ch.in} dashed=${!planner && ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} ghosts=${planner && !peek && !calm ? ghostsFor(nx, c.pos, nick) : null} />`}
+              onTap=${() => {}} neon=${planner ? nxOuts : []} marked=${planner ? [] : ch.in} dashed=${!planner && ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} ghosts=${planner && !peek && !calm ? ghostsFor(nx, c.pos, nick) : null} below=${eqBelow} />`}
         ${compact && !peek && cards.length > 1 && html`<button type="button" class=${'fstep prev' + (i === 0 ? ' off' : '')} key="fsp" aria-label="Moment ervoor" disabled=${i === 0}
             onClick=${() => { haptic('select'); setF(Math.round(getF()) - 1, true); }}><${Icon} name="chev" size=${18} /></button>
           <button type="button" class=${'fstep next' + (i === cards.length - 1 ? ' off' : '')} key="fsn" aria-label="Moment erna" disabled=${i === cards.length - 1}
