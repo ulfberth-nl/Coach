@@ -29,6 +29,27 @@ const emit = () => toastSubs.forEach((f) => f(toastState));
 // app-informatie: staat er een nieuwe versie klaar (de service worker is al bijgewerkt)?
 export const appInfo = { updateReady: false };
 
+// ---------- over deze app: gebruiksvoorwaarden in gewone taal (eerste start, Team-pagina, uitlegpagina) ----------
+export const TERMS = [
+  ['Van coaches, voor coaches', 'Gratis en geen commerciële app. Niet verkopen, doorverkopen of er geld voor vragen.'],
+  ['Gebruik op eigen risico', 'De app doet voorstellen; jij beslist langs het veld. Er is geen garantie dat alles foutloos werkt of dat de app blijft bestaan.'],
+  ['Je gegevens blijven op je telefoon', 'Niemand anders kan ze zien, ook de maker niet. Maak af en toe zelf een back-up.'],
+  ['Zorgvuldig met kinderen', 'Gebruik voornamen, houd de beoordelingen voor de staf en volg de privacyregels van je club.'],
+];
+const TERMS_ICONS = ['team', 'info', 'lock', 'check'];
+export function Terms() {
+  return html`<ul class="terms">${TERMS.map(([t, d], i) => html`<li key=${i}><span class="terms-i" aria-hidden="true"><${Icon} name=${TERMS_ICONS[i]} size=${17} /></span><span><b>${t}</b><span>${d}</span></span></li>`)}</ul>`;
+}
+// eerste keer op deze telefoon: één keer laten zien, met 'Begrepen'
+export function TermsSheet({ onDone }) {
+  return html`<${Sheet} onClose=${onDone} label="Goed om te weten">
+    <span class="h2" style="font-size:22px">Goed om te weten</span>
+    <span class="sub">SpaBo Coach helpt je eerlijk en slim wisselen. Vier dingen vooraf.</span>
+    <${Terms} />
+    <button type="button" class="btn primary block" onClick=${onDone}>Begrepen</button>
+  </${Sheet}>`;
+}
+
 export function toast(text, action) {
   toastState = { text, action, key: Date.now(), leaving: false };
   emit();

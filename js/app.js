@@ -1,7 +1,7 @@
 import { html, render, useEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { useStore } from './store.js';
-import { installPress, viewTransition, canTransition, takeSkipVT } from './motion.js';
-import { ToastHost, FlashHost, Icon, toast, appInfo } from './ui.js';
+import { installPress, viewTransition, canTransition, takeSkipVT, devicePrefs, setDevicePref } from './motion.js';
+import { ToastHost, FlashHost, Icon, toast, appInfo, TermsSheet } from './ui.js';
 import { Wedstrijd } from './screens/wedstrijd.js';
 import { Plan } from './screens/plan.js';
 import { Afloop } from './screens/afloop.js';
@@ -65,6 +65,8 @@ function TabBar({ current, live }) {
 
 function App() {
   const state = useStore();
+  // eerste keer op deze telefoon: 'Goed om te weten' (niet in automatische tests)
+  const [terms, setTerms] = useState(() => !devicePrefs().seenTerms && !navigator.webdriver);
   const [[r0, r1], viaVT] = useRoute();
   const cur = state.matches.find((x) => x.id === state.currentMatchId);
   const liveNow = !!(cur && cur.started && !cur.finished);
@@ -84,6 +86,7 @@ function App() {
     ${tab && html`<${TabBar} current=${tab} live=${liveNow} />`}
     <${ToastHost} />
     <${FlashHost} />
+    ${terms && html`<${TermsSheet} onDone=${() => { setDevicePref('seenTerms', true); setTerms(false); }} />`}
   `;
 }
 

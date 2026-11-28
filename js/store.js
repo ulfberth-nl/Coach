@@ -43,7 +43,7 @@ function samplePlayers() {
   }));
 }
 
-export function newTeam(name = 'JO9-Wit', withSamples = true) {
+export function newTeam(name = 'Mijn team', withSamples = true) {
   return {
     id: uid(),
     name,

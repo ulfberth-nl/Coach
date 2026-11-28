@@ -4,6 +4,18 @@ Webapp voor de telefoon langs het hockeyveld: eerlijk en slim wisselen, speeltij
 
 Dit is **stap 1**: alles werkt op één telefoon en wordt alleen op die telefoon bewaard. De app werkt ook zonder bereik.
 
+
+## Over deze app
+
+- **Van coaches, voor coaches.** Gratis en geen commerciële app. Niet verkopen, doorverkopen of er geld voor vragen.
+- **Gebruik op eigen risico.** De app doet voorstellen; de coach beslist langs het veld. Er is geen garantie dat alles foutloos werkt of dat de app blijft bestaan.
+- **Gegevens blijven op de telefoon.** Er is geen server; spelers, beoordelingen en wedstrijden staan alleen in de opslag van de browser op de eigen telefoon.
+- **Zorgvuldig met kinderen.** Gebruik voornamen, houd de beoordelingen voor de staf en volg de privacyregels van de club.
+
+In de app staat dit de eerste keer op een telefoon (*Goed om te weten*, met *Begrepen*; apparaatvoorkeur `seenTerms`), onderaan de Team-pagina (*Over deze app*) en op de uitlegpagina. Een nieuw team heet standaard *Mijn team*.
+
+© 2026 SpaBo Coach. Alle rechten voorbehouden. De code staat openbaar zodat de app via GitHub Pages kan draaien; dat geeft geen toestemming om hem over te nemen, aan te passen of te verkopen.
+
 ## Online zetten (GitHub Pages)
 
 1. Ga naar de repository op GitHub → **Settings** → **Pages**.

@@ -2,13 +2,13 @@ import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { update, activeTeam, currentMatch, newTeam, exportData, importData } from '../store.js';
 import { periodWord } from '../match.js';
 import { suggestKeeper } from './home.js';
-import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, Reveal, toast, STANDS, appInfo } from '../ui.js';
+import { Seg, Switch, Setting, Stepper, Icon, Confirm, TeamBadge, Reveal, toast, STANDS, appInfo, Terms } from '../ui.js';
 import { devicePrefs, setDevicePref, onDevicePrefs, osReduced, haptic } from '../motion.js';
 import { PROFILES, PROFILE_ORDER, profileOf, cachedTune, rememberTune, consequences, setProfile } from '../profiles.js';
 import { compute } from '../compute.js';
 import { scheduleRefresh } from '../refresh.js';
 
-export const APP_VERSION = '0.31.6';
+export const APP_VERSION = '0.32.0';
 
 // regels die het wisselprofiel bepaalt; zet je er zelf een, dan wordt het profiel 'Eigen'
 const TUNED = ['marge', 'equalTime', 'evenOften', 'maxBenchOn', 'maxBench', 'minInterval', 'turnsPerPeriod', 'priority', 'strongBias'];
@@ -414,6 +414,12 @@ export function Team({ state }) {
       <span class="small">Geef je een andere coach de app? Stuur deze link mee: daar staat hoe je hem op je beginscherm zet en hoe je begint.</span>
       <button type="button" class="btn plain block" onClick=${shareGuide}><${Icon} name="copy" size=${18} /> Link naar de uitleg delen</button>
       <a class="link" style="align-self:center" href="installeren.html" target="_blank" rel="noopener">Uitleg bekijken</a>
+    </section>
+
+    <section class="card">
+      <span class="h2">Over deze app</span>
+      <${Terms} />
+      <span class="small">© 2026 SpaBo Coach · alle rechten voorbehouden.</span>
     </section>
 
     <footer class="appver">

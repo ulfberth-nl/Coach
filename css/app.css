@@ -3020,3 +3020,10 @@ html[data-zoomin] .gplan > *:nth-child(n+4) { animation-delay: .12s; }
 .reduce .ro-breaks { animation: none; }
 
 .ro2 .pt-legend i { border-radius: 3px; }
+/* v0.32: over deze app (gebruiksvoorwaarden in gewone taal) */
+.terms { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.terms li { display: flex; gap: 12px; align-items: flex-start; }
+.terms-i { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; color: var(--blue); background: var(--blue-tint); }
+.terms li > span:last-child { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.terms b { font-size: 15px; font-weight: 900; color: var(--ink); }
+.terms li > span:last-child > span { font-size: 14px; line-height: 1.4; color: var(--muted); }
