@@ -120,6 +120,53 @@ export function pairsAfterDrag(next, out, inn, perMoment) {
   return list;
 }
 
+const SPARK = 'M12 3.5l1.9 5.2 5.6 1.8-5.6 1.8L12 17.5l-1.9-5.2-5.6-1.8 5.6-1.8zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z';
+// Netwerk tijdens het doorrekenen: licht dat over de belijning loopt, en lijntjes tussen spelers die naast elkaar staan.
+function runNet(svg) {
+  const f = svg.closest('.field');
+  const NS = 'http://www.w3.org/2000/svg';
+  const anims = [];
+  let iv = null;
+  const clear = () => { anims.forEach((a) => { try { a.cancel(); } catch (e) { /* al weg */ } }); while (svg.firstChild) svg.removeChild(svg.firstChild); };
+  const stop = () => { if (iv) clearInterval(iv); iv = null; };
+  if (!f || typeof svg.animate !== 'function') return { stop, clear };
+  const fr = f.getBoundingClientRect();
+  if (!fr.width) return { stop, clear };
+  svg.setAttribute('viewBox', `0 0 ${fr.width.toFixed(1)} ${fr.height.toFixed(1)}`);
+  const mk = (tag, at) => { const e = document.createElementNS(NS, tag); for (const k in at) e.setAttribute(k, at[k]); svg.appendChild(e); return e; };
+  const rel = (el) => { const r = el.getBoundingClientRect(); return { x: r.left - fr.left, y: r.top - fr.top, w: r.width, h: r.height }; };
+  const COL = ['#67E8F9', '#A78BFA', '#86EFAC'];
+  const runs = [];
+  const ln = f.querySelector('.lines');
+  if (ln) { const r = rel(ln); runs.push(mk('rect', { x: r.x + 1, y: r.y + 1, width: Math.max(0, r.w - 2), height: Math.max(0, r.h - 2), rx: 6 })); }
+  f.querySelectorAll('.arc').forEach((a) => {
+    const r = rel(a);
+    runs.push(mk('path', { d: a.classList.contains('top') ? `M${r.x + 1} ${r.y} A${r.w / 2 - 1} ${r.h - 1} 0 0 0 ${r.x + r.w - 1} ${r.y}` : `M${r.x + 1} ${r.y + r.h} A${r.w / 2 - 1} ${r.h - 1} 0 0 1 ${r.x + r.w - 1} ${r.y + r.h}` }));
+  });
+  runs.forEach((el, i) => {
+    el.setAttribute('class', 'nw-run'); el.setAttribute('pathLength', '100'); el.setAttribute('stroke', COL[i % 3]);
+    anims.push(el.animate([{ strokeDashoffset: 100 }, { strokeDashoffset: 0 }], { duration: 1400 + i * 260, iterations: Infinity }));
+  });
+  const pts = [...f.querySelectorAll('.spot:not(.keeperspot):not(.exitspot):not(.empty)')].map((s) => { const r = rel(s.querySelector('.sp-in') || s); return [r.x + r.w / 2, r.y + r.h / 2]; });
+  const pairs = [];
+  pts.forEach((a, i) => {
+    pts.map((b, j) => [j, Math.hypot(a[0] - b[0], a[1] - b[1])]).filter((x) => x[0] !== i).sort((x, y) => x[1] - y[1]).slice(0, 2)
+      .forEach(([j]) => { if (!pairs.some((p) => (p[0] === i && p[1] === j) || (p[0] === j && p[1] === i))) pairs.push([i, j]); });
+  });
+  const tick = () => {
+    pairs.slice().sort(() => Math.random() - 0.5).slice(0, 3).forEach(([i, j], q) => {
+      const a = pts[i], b = pts[j];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      const l = mk('line', { x1: a[0].toFixed(1), y1: a[1].toFixed(1), x2: b[0].toFixed(1), y2: b[1].toFixed(1), stroke: COL[q], class: 'nw-link' });
+      l.style.strokeDasharray = len;
+      const an = l.animate([{ strokeDashoffset: len, opacity: 1 }, { strokeDashoffset: 0, opacity: 1, offset: 0.5 }, { strokeDashoffset: -len, opacity: 0 }], { duration: 560, easing: 'ease-in-out' });
+      an.onfinish = () => l.remove();
+    });
+  };
+  if (pairs.length) { setTimeout(tick, 280); iv = setInterval(tick, 240); }
+  return { stop, clear };
+}
+
 export function PlanView({ match, team, editable = false, onSwap, initialIndex = 0, nowIndex = -1, compact = false, liveT = null, onSwapNow = null, planner = false, onPin = null, onUnpin = null, onIndex = null, children = null, onPinHere = null, onLocked = null, onTour = null, onBreakSwap = null, thinking = null }) {
   const nick = (id) => M.nickOf(team, id);
   const END = M.matchEnd(team);
@@ -335,25 +382,20 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
   const multi = c.kind === 'swap' && c.ins && c.ins.length > 1;
   const swapText = c.kind === 'swap' ? (multi ? `${c.ins.map(nick).join(', ')} erin` : `${nick(c.in)} erin voor ${nick(c.out)}`) : '';
 
-  // thinking: de app rekent het plan door. 'run': elke veldspeler wordt een staafje dat op en neer veert (als een
-  // geluidsgolf); 'done': de staafjes springen naar zijn echte speeltijd (kleur: op koers, te weinig, te veel),
-  // daarna veren de spelers terug op hun plek. Niet na eigen sleepwerk (dan is thinking null) en niet bij Minder beweging.
+  // thinking: de app rekent het plan door. 'run': de spelers worden Autopilot-icoontjes (✦), de belijning gloeit en er
+  // loopt licht overheen, en tussen buren flitsen een paar lijntjes (hooguit drie tegelijk, ook rustig met 11 spelers).
+  // 'done': de lijnen doven en de spelers ploppen van achter naar voor terug. Niet na eigen sleepwerk (dan is
+  // thinking null) en niet bij Minder beweging.
   const eq = compact && !reduced() ? thinking : null;
-  const eqBelow = useMemo(() => {
-    if (!eq) return null;
-    const fp = (match.plan && match.plan.finalPlayed) || {};
-    const ids = Object.keys(fp).filter((id) => id !== match.keeperId);
-    const L = Math.max(1, M.matchEnd(team));
-    const mean = ids.length ? ids.reduce((a, id) => a + fp[id], 0) / ids.length : 0;
-    const half = Math.max(60, ((M.effRules(match, team).marge || 5) * 60) / 2);
-    const hash = (id) => { let h = 7; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) % 997; return (h % 100) / 100; };
-    return (id) => {
-      const sec = fp[id];
-      const f = sec != null ? Math.max(0.14, Math.min(1, sec / L)) : 0.5;
-      const lvl = sec == null ? '' : sec < mean - half ? ' low' : sec > mean + half ? ' high' : ' ok';
-      return html`<span class=${'eqb' + lvl} style=${`--f:${f.toFixed(3)};--r:${hash(id).toFixed(2)}`} aria-hidden="true"><i></i>${sec != null && html`<b class="num">${M.mins(sec)}′</b>`}</span>`;
-    };
-  }, [eq, match.plan, match.keeperId, team]);
+  const eqBelow = useMemo(() => (eq ? () => html`<span class="apx" aria-hidden="true"><svg viewBox="0 0 24 24"><path d=${SPARK} /></svg></span>` : null), [eq]);
+  const netRef = useRef(null);
+  const netCtl = useRef(null);
+  useEffect(() => {
+    if (eq !== 'run' || !netRef.current) return;
+    const ctl = runNet(netRef.current);
+    netCtl.current = ctl;
+    return () => { if (netCtl.current === ctl) netCtl.current = null; ctl.stop(); setTimeout(ctl.clear, 500); };
+  }, [eq === 'run']);
   return html`<div class=${'planview col' + (compact ? ' compact' : '') + (eq === 'run' ? ' eqrun' : eq === 'done' ? ' eqdone' : '')} style="gap:8px">
     <div class="tl" ref=${track} aria-label="Tijdlijn">
       <span class="tl-line"></span>
@@ -393,7 +435,8 @@ export function PlanView({ match, team, editable = false, onSwap, initialIndex =
           ? html`<${Field} slots=${nx.slots} lines=${nx.lines || lines} keeperId=${nx.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
               onTap=${() => {}} neon=${changes(cards, i + 1).in} accent=${accentFor(team)} />`
           : html`<${Field} slots=${c.slots} lines=${lines} animate=${false} formable=${canEdit || canPinHere} keeperDrag=${canEdit && !!match.keeperId} keeperId=${c.keeper || match.keeperId} nick=${nick} height=${compact ? 'auto' : 'clamp(380px, 56dvh, 560px)'}
-              onTap=${() => {}} neon=${planner ? nxOuts : []} marked=${planner ? [] : ch.in} dashed=${!planner && ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} ghosts=${planner && !peek && !calm ? ghostsFor(nx, c.pos, nick) : null} below=${eqBelow} />`}
+              onTap=${() => {}} neon=${planner ? nxOuts : []} marked=${planner ? [] : ch.in} dashed=${!planner && ch.shift ? [ch.shift.id] : []} accent=${accentFor(team)} ghosts=${planner && !peek && !calm ? ghostsFor(nx, c.pos, nick) : null} below=${eqBelow}
+              deco=${eq ? html`<svg class=${'nwsvg' + (eq === 'done' ? ' off' : '')} ref=${netRef} aria-hidden="true"></svg>` : null} />`}
         ${compact && !peek && cards.length > 1 && html`<button type="button" class=${'fstep prev' + (i === 0 ? ' off' : '')} key="fsp" aria-label="Moment ervoor" disabled=${i === 0}
             onClick=${() => { haptic('select'); setF(Math.round(getF()) - 1, true); }}><${Icon} name="chev" size=${18} /></button>
           <button type="button" class=${'fstep next' + (i === cards.length - 1 ? ' off' : '')} key="fsn" aria-label="Moment erna" disabled=${i === cards.length - 1}

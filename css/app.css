@@ -2615,35 +2615,32 @@ html:has(.gp-imp.float) .gplan:not(.wide) { padding-bottom: calc(210px + var(--s
 .msw.done .msw-th::before { content: ''; position: absolute; inset: 0; z-index: 1; background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.9) 50%, transparent 65%); translate: -120% 0; animation: mswShine .9s .1s ease-out forwards; }
 @keyframes mswShine { to { translate: 120% 0; } }
 
-/* doorrekenen (Autopilot, v0.30): elke veldspeler wordt een staafje dat op en neer veert, als een geluidsgolf, in de
-   Autopilot-kleuren. Daarna springen de staafjes naar zijn echte speeltijd (groen op koers, oranje te weinig, blauw te
-   veel) met de minuten erboven, zakken weg, en de spelers veren terug op hun plek. De keeper blijft staan. */
+/* doorrekenen (Autopilot, v0.31): netwerk. De spelers worden Autopilot-icoontjes (✦), de belijning gloeit en er loopt
+   licht overheen, en tussen buren flitsen lijntjes (planview.js runNet). Daarna doven de lijnen en ploppen de spelers
+   van achter naar voor terug. De keeper blijft staan. */
 .planview .field .sp-in { position: relative; }
-.eqb { position: absolute; left: 50%; bottom: calc(50% - 14px); width: 18px; height: 76px; translate: -50% 0; pointer-events: none; z-index: 1; }
-.eqb i { position: absolute; inset: 0; border-radius: 8px 8px 5px 5px; transform-origin: 50% 100%; scale: 1 .2; background: linear-gradient(0deg, #14B8A6, #3B82F6 55%, #7C5CFF); box-shadow: 0 0 0 1.5px rgba(255,255,255,.9), 0 4px 14px -2px rgba(124,92,255,.65); }
-.eqb b { position: absolute; left: 50%; bottom: calc(var(--f) * 76px + 6px); translate: -50% 0; padding: 1px 6px; border-radius: 99px; font-size: 11.5px; font-weight: 900; line-height: 16px; color: #fff; background: rgba(17,24,39,.62); white-space: nowrap; opacity: 0; box-shadow: 0 0 0 1.5px #fff; }
-.planview.eqrun .eqb { animation: eqIn .3s .12s both; }
-@keyframes eqIn { from { opacity: 0; } }
-.planview.eqrun .eqb i { animation: eqWave calc(.32s + var(--r) * .34s) ease-in-out calc(var(--r) * -1.2s) infinite alternate; }
-@keyframes eqWave { 0% { scale: 1 .18; } 40% { scale: 1 .88; } 70% { scale: 1 .42; } 100% { scale: 1 .7; } }
-.planview.eqrun .field .spot:not(.keeperspot) .sp-in > .pill { animation: eqHide .28s cubic-bezier(.5,0,.75,0) calc(var(--ci, 0) * 40ms) forwards; }
+.planview .field .lines, .planview .field .arc { transition: border-color .45s ease, box-shadow .45s ease; }
+.planview.eqrun .field .lines, .planview.eqrun .field .arc { border-color: rgba(205,242,255,.92); box-shadow: 0 0 10px rgba(103,232,249,.55), inset 0 0 8px rgba(103,232,249,.25); }
+.nwsvg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; transition: opacity .45s ease; }
+.nwsvg.off { opacity: 0; }
+.nwsvg .nw-run { fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-dasharray: 14 86; filter: drop-shadow(0 0 3px rgba(103,232,249,.9)); }
+.nwsvg .nw-link { stroke-width: 2.2; stroke-linecap: round; filter: drop-shadow(0 0 3px rgba(103,232,249,.85)); }
+.apx { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; display: grid; place-items: center; border-radius: 50%; pointer-events: none; z-index: 1;
+  background: linear-gradient(135deg, #7C5CFF, #3B82F6 55%, #14B8A6); box-shadow: 0 0 0 2px rgba(255,255,255,.9), 0 0 14px 2px rgba(103,232,249,.75); scale: 0; opacity: 0; }
+.apx svg { width: 18px; height: 18px; fill: #fff; }
+.planview.eqrun .apx { animation: apxIn .42s var(--spring-play) calc(.12s + var(--ci, 0) * 40ms) both, apxTw 1.6s ease-in-out calc(.6s + var(--ci, 0) * 130ms) infinite; }
+@keyframes apxIn { from { scale: 0; opacity: 0; rotate: -60deg; } to { scale: 1; opacity: 1; rotate: 0deg; } }
+@keyframes apxTw { 0%, 100% { scale: 1; rotate: 0deg; } 50% { scale: 1.12; rotate: 18deg; } }
+.planview.eqrun .field .spot:not(.keeperspot) .sp-in > .pill { animation: eqHide .26s cubic-bezier(.5,0,.75,0) calc(var(--ci, 0) * 40ms) forwards; }
 @keyframes eqHide { to { scale: .3; opacity: 0; } }
 .planview.eqrun .field .exitspot, .planview.eqdone .field .exitspot { display: none; }
-.planview.eqdone .eqb.ok i { background: #16A34A; box-shadow: 0 0 0 1.5px #fff, 0 4px 14px -2px rgba(22,163,74,.6); }
-.planview.eqdone .eqb.low i { background: #EA580C; box-shadow: 0 0 0 1.5px #fff, 0 4px 14px -2px rgba(234,88,12,.6); }
-.planview.eqdone .eqb.high i { background: #2563EB; box-shadow: 0 0 0 1.5px #fff, 0 4px 14px -2px rgba(37,99,235,.6); }
-.planview.eqdone .eqb i { animation: eqSettle 1.5s both; }
-@keyframes eqSettle {
-  0% { scale: 1 .5; animation-timing-function: cubic-bezier(.3, 1.7, .5, 1); }
-  30% { scale: 1 var(--f); opacity: 1; }
-  60% { scale: 1 var(--f); opacity: 1; animation-timing-function: cubic-bezier(.5, 0, .75, 0); }
-  76%, 100% { scale: 1 0; opacity: 0; }
-}
-.planview.eqdone .eqb b { animation: eqLbl 1.5s both; }
-@keyframes eqLbl { 0%, 16% { opacity: 0; scale: .5; } 28% { opacity: 1; scale: 1.12; } 36% { opacity: 1; scale: 1; } 58% { opacity: 1; scale: 1; } 72%, 100% { opacity: 0; scale: .85; } }
-.planview.eqdone .field .spot:not(.keeperspot) .sp-in > .pill { animation: eqPop .62s var(--spring-play) calc(1.02s + var(--ci, 0) * 45ms) both; }
-.planview.eqdone .field .spot[data-line="M"] .sp-in > .pill { animation-delay: calc(1.08s + var(--ci, 0) * 45ms); }
-.planview.eqdone .field .spot[data-line="V"] .sp-in > .pill { animation-delay: calc(1.14s + var(--ci, 0) * 45ms); }
+.planview.eqdone .apx { scale: 1; opacity: 1; animation: apxOut .3s cubic-bezier(.5,0,.75,0) calc(.1s + var(--ci, 0) * 45ms) both; }
+.planview.eqdone .field .spot[data-line="M"] .apx { animation-delay: calc(.18s + var(--ci, 0) * 45ms); }
+.planview.eqdone .field .spot[data-line="V"] .apx { animation-delay: calc(.26s + var(--ci, 0) * 45ms); }
+@keyframes apxOut { from { scale: 1; opacity: 1; } to { scale: 1.6; opacity: 0; } }
+.planview.eqdone .field .spot:not(.keeperspot) .sp-in > .pill { animation: eqPop .5s var(--spring-play) calc(.16s + var(--ci, 0) * 45ms) both; }
+.planview.eqdone .field .spot[data-line="M"] .sp-in > .pill { animation-delay: calc(.24s + var(--ci, 0) * 45ms); }
+.planview.eqdone .field .spot[data-line="V"] .sp-in > .pill { animation-delay: calc(.32s + var(--ci, 0) * 45ms); }
 @keyframes eqPop { from { scale: .25; opacity: 0; } to { scale: 1; opacity: 1; } }
 .reduce .ptv.wob i, .reduce .msw.thinking .msw-a svg { animation: none !important; }
 .reduce .msw.thinking .msw-fill { animation-duration: .01s !important; }
@@ -2984,3 +2981,4 @@ html[data-zoomin] .gplan > *:nth-child(2) { animation-delay: .04s; }
 html[data-zoomin] .gplan > *:nth-child(3) { animation-delay: .08s; }
 html[data-zoomin] .gplan > *:nth-child(n+4) { animation-delay: .12s; }
 @keyframes zoomRise { from { opacity: 0; translate: 0 16px; } }
+.planview.eqdone .field .spot:not(.keeperspot) .sp-in > .pill { position: relative; z-index: 2; }

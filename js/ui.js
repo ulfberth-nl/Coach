@@ -556,7 +556,7 @@ export function Icon({ name, size = 22 }) {
 const landing = {};
 const LANE_NAMES = { V: 'voor', M: 'midden', A: 'achter' };
 
-export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, onEmpty = null, emptyHot = false, neon = [], marked = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false, picking = false, hot = null, hotKey = 0, ghosts = null, animate = false, accent = null, badges = null, cheer = null, formable = false, keeperDrag = false }) {
+export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, onEmpty = null, emptyHot = false, neon = [], marked = [], dashed = [], muted = [], selected = null, sub, below, height = 330, compact = false, picking = false, hot = null, hotKey = 0, ghosts = null, animate = false, accent = null, badges = null, cheer = null, formable = false, keeperDrag = false, deco = null }) {
   // bij slepen (formable) blijft ook een lege linie zichtbaar, zodat je er iemand naartoe kunt slepen
   lines = { V: lines.V || 0, M: lines.M || 0, A: lines.A || 0 };
   const rows = ['V', 'M', 'A'].filter((l) => lines[l] > 0 || formable);
@@ -643,6 +643,7 @@ export function Field({ slots, lines, keeperId, nick, onTap, onKeeper, onEmpty =
     <span class="lines"></span>
     <span class="arc top"></span>
     <span class="arc bottom"></span>
+    ${deco}
     ${formable && rows.map((l, r) => html`<span class="lane" key=${'ln' + l} data-l=${l} style=${`top:${(START + r * band).toFixed(2)}%;height:${band.toFixed(2)}%;--r:${r}`} aria-hidden="true"><b>${LANE_NAMES[l]}</b></span>`)}
     ${formable && rows.filter((l) => !lines[l]).map((l) => html`<span class="lane-empty" key=${'le' + l} style=${`top:${tops[rows.indexOf(l)]}`} aria-hidden="true">${LANE_NAMES[l][0].toUpperCase() + LANE_NAMES[l].slice(1)} leeg · sleep hierheen</span>`)}
     ${formable && rows.flatMap((l, r) => Array.from({ length: lines[l] + 1 }, (_, k) => html`<span class="addslot" key=${'ad' + l + k + ':' + lines[l]} data-pid=${'line:' + l + ':' + k} data-l=${l}

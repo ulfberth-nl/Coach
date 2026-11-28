@@ -249,7 +249,7 @@ function PrepView({ state, match, team }) {
   };
   useEffect(() => {
     if (!think) return undefined;
-    const tm = setTimeout(() => setThink(think.phase === 'run' ? { ...think, phase: 'done' } : null), think.phase === 'run' ? 2300 : 1750);
+    const tm = setTimeout(() => setThink(think.phase === 'run' ? { ...think, phase: 'done' } : null), think.phase === 'run' ? 2300 : 1250);
     return () => clearTimeout(tm);
   }, [think && think.k, think && think.phase]);
   const byHand = () => { manual.current = Date.now(); };
