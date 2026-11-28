@@ -97,6 +97,40 @@ export function PlayTimeSheet({ match, team, onClose, onOpenPlan = null }) {
           ${onOpenPlan && html`<button type="button" class="btn primary block" onClick=${onOpenPlan}>Open game plan</button>`}`
       : html`<span class="sub">${swaps} ${swaps === 1 ? 'wissel' : 'wissels'} · doel ${halfMin(d.avg)} min, marge ${mins(d.marge)} min. Tik een speler voor zijn wedstrijd.</span>
           <${PlayTime} match=${match} team=${team} cards=${cards} />
-          ${keeper && html`<span class="small pt-keep"><span class="kbadge">K</span>${keeper} keept${team.rules && team.rules.keeperCounts ? '' : ' (telt niet mee)'}</span>`}`}
+          ${keeper && html`<span class="small pt-keep"><span class="kbadge">K</span>${keeper} keept${team.rules && team.rules.keeperCounts ? '' : ' (telt niet mee)'}</span>`}
+          <div class="pt-sec"><span class="h3">Rooster per speler</span><span class="small">Wie waar speelt, de hele wedstrijd.</span></div>
+          <${Rooster} match=${match} team=${team} cards=${cards} />`}
   </${Sheet}>`;
 }
+
+// ---------- rooster per speler (voor het standaardplan én in de controle) ----------
+export function Rooster({ match, team, cards: given, onKid = null }) {
+  const nick = (id) => M.nickOf(team, id);
+  const cards = given || M.timeline(match, team).cards;
+  const L = M.periodLen(team);
+  const END = team.periods * L;
+  if (!cards.length) return null;
+  const ids = Object.keys(cards[0].pos).concat(cards[0].bench);
+  const played = {};
+  for (const id of ids) played[id] = 0;
+  cards.forEach((c, i) => { const t1 = i + 1 < cards.length ? cards[i + 1].t : END; for (const id in c.pos) if (id in played) played[id] += Math.max(0, t1 - c.t); });
+  const order = ids.slice().sort((a, b) => played[b] - played[a]);
+  // aaneengesloten stukken op dezelfde plek samenvoegen (de rust blijft een naad)
+  const segsOf = (id) => {
+    const out = [];
+    cards.forEach((c, i) => {
+      const s = { t: c.t, t1: i + 1 < cards.length ? cards[i + 1].t : END, line: c.pos[id] || null };
+      if (s.t1 <= s.t) return;
+      const last = out[out.length - 1];
+      if (last && last.line === s.line && s.t % L !== 0) last.t1 = s.t1; else out.push(s);
+    });
+    return out;
+  };
+  return html`<div class="rooster">
+    ${order.map((id, k) => html`<button type="button" class="rt-row" key=${id} style=${'--i:' + k} onClick=${onKid ? () => onKid(id) : null} disabled=${!onKid}><span class="rr-n">${nick(id)}</span><span class="rr-bar">
+      ${segsOf(id).map((s) => html`<i class=${s.line ? 'l' + s.line : 'off'} style=${`flex:${s.t1 - s.t}` + (s.t > 0 && s.t % L === 0 ? ';margin-left:3px' : '')}></i>`)}
+    </span><span class="rr-m num">${mins(played[id])}′</span></button>`)}
+    <div class="rt-legend2"><span><i class="lV"></i>voor</span><span><i class="lM"></i>midden</span><span><i class="lA"></i>achter</span><span><i class="off"></i>aan de kant</span></div>
+  </div>`;
+}
+
